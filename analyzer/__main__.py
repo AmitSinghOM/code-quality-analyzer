@@ -1,7 +1,6 @@
 """CLI entry point for the analyzer."""
 
 import json
-import sys
 from pathlib import Path
 
 import click
@@ -12,7 +11,7 @@ from rich.panel import Panel
 from .scanner import CodeScanner
 from .rater import QualityRater
 from .patterns import DSA_PATTERNS, SYSTEM_DESIGN_PATTERNS
-
+from .complexity import ProjectComplexityAnalyzer
 
 console = Console()
 
@@ -20,8 +19,11 @@ console = Console()
 @click.command()
 @click.argument('project_path', type=click.Path(exists=True))
 @click.option('--verbose', '-v', is_flag=True, help='Show detailed file matches')
-@click.option('--format', '-f', type=click.Choice(['text', 'json']), default='text', help='Output format')
-def main(project_path: str, verbose: bool, format: str):
+@click.option('--format', '-f', type=click.Choice(['text', 'json']), 
+              default='text', help='Output format')
+@click.option('--complexity', '-c', is_flag=True, 
+              help='Include time/space complexity analysis')
+def main(project_path: str, verbose: bool, format: str, complexity: bool):
     """Analyze a project for DSA and System Design patterns."""
     
     project_path = Path(project_path).resolve()
@@ -34,8 +36,16 @@ def main(project_path: str, verbose: bool, format: str):
     dsa_found, design_found = scanner.scan()
     
     # Calculate rating
-    rater = QualityRater(dsa_found, design_found, scanner.files_scanned, scanner.total_lines)
+    rater = QualityRater(dsa_found, design_found, 
+                         scanner.files_scanned, scanner.total_lines)
     rating, breakdown = rater.calculate_rating()
+    
+    # Complexity analysis
+    complexity_data = None
+    if complexity:
+        comp_analyzer = ProjectComplexityAnalyzer(project_path)
+        comp_analyzer.analyze()
+        complexity_data = comp_analyzer.get_summary()
     
     if format == 'json':
         output = {
@@ -43,11 +53,17 @@ def main(project_path: str, verbose: bool, format: str):
             "rating": rating,
             "label": rater.get_rating_label(rating),
             "breakdown": breakdown,
-            "dsa_patterns": {k: {"files": v, "description": DSA_PATTERNS[k]["description"]} 
-                           for k, v in dsa_found.items()},
-            "design_patterns": {k: {"files": v, "description": SYSTEM_DESIGN_PATTERNS[k]["description"]} 
-                               for k, v in design_found.items()}
+            "dsa_patterns": {
+                k: {"files": v, "description": DSA_PATTERNS[k]["description"]} 
+                for k, v in dsa_found.items()
+            },
+            "design_patterns": {
+                k: {"files": v, "description": SYSTEM_DESIGN_PATTERNS[k]["description"]} 
+                for k, v in design_found.items()
+            }
         }
+        if complexity_data:
+            output["complexity"] = complexity_data
         print(json.dumps(output, indent=2))
         return
     
@@ -98,6 +114,68 @@ def main(project_path: str, verbose: bool, format: str):
     
     if not dsa_found and not design_found:
         console.print("[yellow]No significant patterns detected.[/yellow]")
+    
+    # Complexity analysis output
+    if complexity and complexity_data:
+        console.print()
+        avg_conf = complexity_data.get('average_confidence', 0)
+        console.print(Panel(
+            f"[bold]Functions analyzed:[/bold] {complexity_data['total_functions']}\n"
+            f"[bold]Avg confidence:[/bold] {avg_conf * 100:.0f}%",
+            title="[bold]Complexity Analysis[/bold]",
+            expand=False
+        ))
+        
+        # Time complexity distribution
+        if complexity_data.get('time_complexity_distribution'):
+            table = Table(title="Time Complexity Distribution", show_header=True)
+            table.add_column("Complexity", style="cyan")
+            table.add_column("Count", justify="right")
+            
+            for comp, count in complexity_data['time_complexity_distribution'].items():
+                table.add_row(comp, str(count))
+            console.print(table)
+            console.print()
+        
+        # Space complexity distribution
+        if complexity_data.get('space_complexity_distribution'):
+            table = Table(title="Space Complexity Distribution", show_header=True)
+            table.add_column("Complexity", style="magenta")
+            table.add_column("Count", justify="right")
+            
+            for comp, count in complexity_data['space_complexity_distribution'].items():
+                table.add_row(comp, str(count))
+            console.print(table)
+        
+        # High complexity warnings
+        high_count = complexity_data.get('high_complexity_count', 0)
+        if high_count > 0:
+            console.print()
+            console.print(f"[bold yellow]⚠ {high_count} high-complexity function(s):[/bold yellow]")
+            
+            table = Table(show_header=True)
+            table.add_column("Function", style="red")
+            table.add_column("File")
+            table.add_column("Time")
+            table.add_column("Space")
+            table.add_column("Confidence")
+            
+            for func in complexity_data.get('high_complexity_functions', [])[:10]:
+                table.add_row(
+                    func['name'], 
+                    func['file'], 
+                    func['time'], 
+                    func['space'],
+                    f"{func['confidence']:.0%}"
+                )
+            console.print(table)
+            
+            if verbose:
+                console.print("\n[dim]Reasoning for high-complexity functions:[/dim]")
+                for func in complexity_data.get('high_complexity_functions', [])[:5]:
+                    console.print(f"\n[cyan]{func['name']}[/cyan] ({func['file']})")
+                    for reason in func.get('reasoning', []):
+                        console.print(f"  • {reason}")
 
 
 if __name__ == "__main__":
