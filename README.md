@@ -122,15 +122,36 @@ The confidence score indicates how reliable the complexity estimate is.
 
 ## What It Detects
 
-### DSA Patterns
+### DSA Patterns (25 patterns)
+
+**Data Structures:**
 - Hash maps, sets, dictionaries
-- Trees, graphs, linked lists
-- Sorting algorithms
-- Search algorithms (binary search, BFS, DFS)
-- Dynamic programming patterns
-- Caching/memoization
+- Trees (binary, general)
+- Linked lists
+- Queues and stacks
 - Heaps and priority queues
-- Queue and stack structures
+- Trie/prefix tree
+- Segment tree
+- Fenwick/Binary Indexed Tree
+- Bloom filter
+
+**Algorithms:**
+- Sorting algorithms
+- Binary search
+- Graph traversal (BFS/DFS)
+- Dynamic programming/memoization
+- Union-Find/Disjoint Set
+- Topological sort
+- Dijkstra/Bellman-Ford (shortest path)
+- Minimum spanning tree (Kruskal/Prim)
+- Backtracking
+
+**Techniques:**
+- Sliding window
+- Two pointers
+- Monotonic stack
+- Interval operations
+- Manual LRU cache
 
 ### System Design Patterns
 - Microservices architecture

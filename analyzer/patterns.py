@@ -61,6 +61,90 @@ DSA_PATTERNS = {
         "imports": ["heapq", "queue.PriorityQueue"],
         "weight": 2.0,
         "description": "Heap/priority queue for efficient min/max operations"
+    },
+    "trie": {
+        "keywords": ["TrieNode", "Trie", "prefix_tree", "children[", "is_end", "insert_word", "search_prefix"],
+        "imports": ["pygtrie", "marisa_trie"],
+        "weight": 2.5,
+        "description": "Trie/prefix tree for string operations"
+    },
+    "union_find": {
+        "keywords": ["UnionFind", "DisjointSet", "find_parent", "union(", "parent[", "rank[", "path_compression"],
+        "imports": [],
+        "weight": 2.5,
+        "description": "Union-Find/Disjoint Set for connectivity"
+    },
+    "topological_sort": {
+        "keywords": ["topological", "toposort", "in_degree", "indegree", "kahn", "dag"],
+        "imports": ["graphlib", "toposort"],
+        "weight": 2.5,
+        "description": "Topological sorting for DAG ordering"
+    },
+    "sliding_window": {
+        "keywords": ["window_start", "window_end", "left_ptr", "right_ptr", "window_size", "shrink_window", "expand_window"],
+        "imports": [],
+        "weight": 2.0,
+        "description": "Sliding window technique for subarray problems"
+    },
+    "two_pointers": {
+        "keywords": ["two_pointer", "left_pointer", "right_pointer", "slow_fast", "fast_slow", "tortoise_hare"],
+        "imports": [],
+        "weight": 1.5,
+        "description": "Two pointers technique for array traversal"
+    },
+    "backtracking": {
+        "keywords": ["backtrack", "backtracking", "choose", "unchoose", "explore", "is_valid_state"],
+        "imports": [],
+        "weight": 2.5,
+        "description": "Backtracking for constraint satisfaction"
+    },
+    "segment_tree": {
+        "keywords": ["SegmentTree", "segment_tree", "range_query", "range_update", "build_tree", "query_range"],
+        "imports": [],
+        "weight": 3.0,
+        "description": "Segment tree for range queries"
+    },
+    "fenwick_tree": {
+        "keywords": ["FenwickTree", "BinaryIndexedTree", "BIT", "prefix_sum", "update_bit", "query_bit"],
+        "imports": [],
+        "weight": 3.0,
+        "description": "Fenwick/Binary Indexed Tree for prefix operations"
+    },
+    "lru_cache_manual": {
+        "keywords": ["OrderedDict", "move_to_end", "popitem", "capacity", "cache_hit", "cache_miss", "evict"],
+        "imports": ["collections.OrderedDict"],
+        "weight": 2.0,
+        "description": "Manual LRU cache implementation"
+    },
+    "bloom_filter": {
+        "keywords": ["BloomFilter", "bloom_filter", "hash_functions", "bit_array", "false_positive"],
+        "imports": ["pybloom", "bloom_filter", "bitarray"],
+        "weight": 2.5,
+        "description": "Bloom filter for probabilistic membership"
+    },
+    "dijkstra": {
+        "keywords": ["dijkstra", "shortest_path", "distance[", "dist[", "relaxation", "bellman_ford"],
+        "imports": ["networkx.dijkstra", "networkx.shortest_path"],
+        "weight": 2.5,
+        "description": "Shortest path algorithms (Dijkstra/Bellman-Ford)"
+    },
+    "minimum_spanning_tree": {
+        "keywords": ["kruskal", "prim", "mst", "minimum_spanning", "spanning_tree"],
+        "imports": ["networkx.minimum_spanning_tree"],
+        "weight": 2.5,
+        "description": "Minimum spanning tree algorithms"
+    },
+    "monotonic_stack": {
+        "keywords": ["monotonic_stack", "mono_stack", "next_greater", "next_smaller", "previous_greater"],
+        "imports": [],
+        "weight": 2.0,
+        "description": "Monotonic stack for next greater/smaller element"
+    },
+    "interval_operations": {
+        "keywords": ["merge_intervals", "interval_overlap", "interval_intersection", "start_end", "intervals.sort"],
+        "imports": ["intervaltree"],
+        "weight": 2.0,
+        "description": "Interval merging and overlap detection"
     }
 }
 
