@@ -88,6 +88,38 @@ alias py3="/Library/Frameworks/Python.framework/Versions/3.14/bin/python3"
 py3 -m analyzer /path/to/project -v
 ```
 
+## Complexity Analysis
+
+Use the `-c` flag to include time/space complexity analysis:
+
+```bash
+python -m analyzer /path/to/project -c
+python -m analyzer /path/to/project -v -c  # verbose with reasoning
+```
+
+### Confidence Score
+
+The confidence score indicates how reliable the complexity estimate is.
+
+**Starting point:** 80%
+
+**Deductions:**
+
+| Condition | Deduction | Reason |
+|-----------|-----------|--------|
+| Recursion without memoization | -20% | Hard to determine if it's O(n), O(2^n), or O(n!) without runtime analysis |
+| Deep nesting (>2 loops) | -10% | Complex control flow makes static analysis less reliable |
+| No type hints on parameters | -10% | Can't infer if input is a collection or its size relationship |
+
+**Minimum:** 30% (never goes below this)
+
+**Interpreting confidence:**
+- 80%+ → High confidence, estimate is likely accurate
+- 60-80% → Medium confidence, estimate is reasonable but verify manually
+- 30-60% → Low confidence, treat as rough estimate only
+
+---
+
 ## What It Detects
 
 ### DSA Patterns
