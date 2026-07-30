@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "code-quality-analyzer"
+version = "2.0.0"
+description = "Detect DSA and system design patterns in a codebase and rate it 1-10"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "click==8.1.7",
+    "rich==13.9.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.4",
+    "pip-audit==2.7.3",
+    "ruff==0.8.4",
+]
+
+[project.scripts]
+code-quality-analyzer = "analyzer.__main__:main"
+
+[tool.setuptools]
+packages = ["analyzer"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "S", "UP"]
+# S101: asserts are the point in tests.
+per-file-ignores = { "tests/*" = ["S101"] }

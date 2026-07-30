@@ -1,96 +1,121 @@
 """File scanner and pattern detector."""
 
-import ast
-import os
+from __future__ import annotations
+
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Tuple
+
+from .discovery import (
+    DEFAULT_MAX_FILE_SIZE,
+    DEFAULT_MAX_FILES,
+    DiscoveryReport,
+    display_path,
+    iter_python_files,
+)
 from .patterns import DSA_PATTERNS, SYSTEM_DESIGN_PATTERNS
+from .signals import extract_signals, pattern_is_present
+
+
+@dataclass
+class PatternHit:
+    """One file's evidence for one pattern."""
+
+    file: str
+    signals: List[str] = field(default_factory=list)
 
 
 class CodeScanner:
-    """Scans Python files for DSA and System Design patterns."""
-    
-    SKIP_DIRS = {'.git', '__pycache__', '.venv', 'venv', 'node_modules', '.pytest_cache', 'dist', 'build'}
-    
-    def __init__(self, project_path: str):
-        self.project_path = Path(project_path)
+    """Scans Python files for DSA and System Design patterns.
+
+    Signals are collected per file. Nothing carries over between files, so a
+    single ``import heapq`` cannot make the rest of the project look like it
+    uses heaps.
+    """
+
+    def __init__(
+        self,
+        project_path: str | Path,
+        max_file_size: int = DEFAULT_MAX_FILE_SIZE,
+        max_files: int = DEFAULT_MAX_FILES,
+        redact_paths: bool = False,
+    ):
+        self.project_path = Path(project_path).resolve()
+        self.max_file_size = max_file_size
+        self.max_files = max_files
+        self.redact_paths = redact_paths
+
         self.files_scanned = 0
         self.total_lines = 0
-        self.imports: Set[str] = set()
+        self.unparsed_files = 0
+        self.discovery = DiscoveryReport()
+
+        # pattern -> [file, ...] (kept for backwards compatibility)
         self.dsa_found: Dict[str, List[str]] = {}
         self.design_found: Dict[str, List[str]] = {}
-    
-    def scan(self) -> Tuple[Dict, Dict]:
+        # pattern -> [PatternHit, ...] with the evidence behind each match
+        self.dsa_evidence: Dict[str, List[PatternHit]] = {}
+        self.design_evidence: Dict[str, List[PatternHit]] = {}
+
+    def scan(self) -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
         """Scan all Python files in the project."""
-        for py_file in self._get_python_files():
-            self._scan_file(py_file)
+        for path, source in iter_python_files(
+            self.project_path,
+            max_file_size=self.max_file_size,
+            max_files=self.max_files,
+            report=self.discovery,
+        ):
+            self._scan_file(path, source)
         return self.dsa_found, self.design_found
-    
-    def _get_python_files(self) -> List[Path]:
-        """Get all Python files, excluding common non-source directories."""
-        files = []
-        for root, dirs, filenames in os.walk(self.project_path):
-            dirs[:] = [d for d in dirs if d not in self.SKIP_DIRS]
-            for f in filenames:
-                if f.endswith('.py'):
-                    files.append(Path(root) / f)
-        return files
-    
-    def _scan_file(self, filepath: Path):
-        """Scan a single file for patterns."""
-        try:
-            content = filepath.read_text(encoding='utf-8')
-            self.files_scanned += 1
-            self.total_lines += len(content.splitlines())
-            
-            # Extract imports
-            self._extract_imports(content)
-            
-            # Check for DSA patterns
-            for pattern_name, pattern_def in DSA_PATTERNS.items():
-                if self._matches_pattern(content, pattern_def):
-                    if pattern_name not in self.dsa_found:
-                        self.dsa_found[pattern_name] = []
-                    self.dsa_found[pattern_name].append(str(filepath.relative_to(self.project_path)))
-            
-            # Check for System Design patterns
-            for pattern_name, pattern_def in SYSTEM_DESIGN_PATTERNS.items():
-                if self._matches_pattern(content, pattern_def):
-                    if pattern_name not in self.design_found:
-                        self.design_found[pattern_name] = []
-                    self.design_found[pattern_name].append(str(filepath.relative_to(self.project_path)))
-                    
-        except Exception as e:
-            pass  # Skip files that can't be read
-    
-    def _extract_imports(self, content: str):
-        """Extract import statements from code."""
-        try:
-            tree = ast.parse(content)
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Import):
-                    for alias in node.names:
-                        self.imports.add(alias.name)
-                elif isinstance(node, ast.ImportFrom):
-                    if node.module:
-                        self.imports.add(node.module)
-                        for alias in node.names:
-                            self.imports.add(f"{node.module}.{alias.name}")
-        except SyntaxError:
-            pass
-    
-    def _matches_pattern(self, content: str, pattern_def: dict) -> bool:
-        """Check if content matches a pattern definition."""
-        content_lower = content.lower()
-        
-        # Check keywords
-        for keyword in pattern_def["keywords"]:
-            if keyword.lower() in content_lower:
-                return True
-        
-        # Check imports
-        for imp in pattern_def["imports"]:
-            if any(imp.lower() in i.lower() for i in self.imports):
-                return True
-        
-        return False
+
+    def _scan_file(self, path: Path, source: str) -> None:
+        signals = extract_signals(path, source)
+        self.files_scanned += 1
+        self.total_lines += signals.line_count
+        if not signals.parsed:
+            self.unparsed_files += 1
+
+        rel = display_path(path, self.project_path, self.redact_paths)
+
+        for name, definition in DSA_PATTERNS.items():
+            present, matched = pattern_is_present(signals, definition)
+            if present:
+                self._record(self.dsa_found, self.dsa_evidence, name, rel, matched)
+
+        for name, definition in SYSTEM_DESIGN_PATTERNS.items():
+            present, matched = pattern_is_present(signals, definition)
+            if present:
+                self._record(self.design_found, self.design_evidence, name, rel, matched)
+
+    @staticmethod
+    def _record(
+        found: Dict[str, List[str]],
+        evidence: Dict[str, List[PatternHit]],
+        pattern: str,
+        rel_path: str,
+        matched,
+    ) -> None:
+        found.setdefault(pattern, []).append(rel_path)
+        evidence.setdefault(pattern, []).append(
+            PatternHit(file=rel_path, signals=list(matched))
+        )
+
+    def evidence_for(self, pattern: str) -> List[PatternHit]:
+        """Evidence rows for a pattern, from either category."""
+        return self.dsa_evidence.get(pattern) or self.design_evidence.get(pattern) or []
+
+    def scan_health(self) -> Dict:
+        """What was and was not actually analyzed."""
+        health = self.discovery.as_dict()
+        health["files_scanned"] = self.files_scanned
+        health["unparsed_files"] = self.unparsed_files
+        return health
+
+    @property
+    def has_coverage_gaps(self) -> bool:
+        """True when some files could not be analyzed, or the walk was capped."""
+        return (
+            self.discovery.total_skipped > 0
+            or self.discovery.truncated
+            or self.unparsed_files > 0
+        )

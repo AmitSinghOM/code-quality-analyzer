@@ -1,149 +1,236 @@
-"""DSA and System Design pattern definitions."""
+"""DSA and System Design pattern definitions.
+
+Signal types, all matched case-insensitively:
+
+  identifiers          exact identifier from the AST (name, attribute, def,
+                       class, argument, import alias)
+  identifier_contains  substring of an identifier — for naming conventions like
+                       ``OrderRepository`` or ``WidgetFactory``
+  text                 substring of the source with comments and string
+                       literals blanked out — for syntax like ``dp[`` or
+                       ``@app.route``
+  imports              substring of an imported module path
+
+``min_signals`` is how many distinct signals a file must provide before the
+pattern is reported. Generic patterns need corroboration; a single mention of
+``visited`` is not a graph traversal.
+"""
 
 # DSA patterns to detect
 DSA_PATTERNS = {
     "hash_map": {
-        "keywords": ["dict", "dictionary", "hashmap", "hash_map", "Counter", "defaultdict"],
-        "imports": ["collections.Counter", "collections.defaultdict"],
+        "identifiers": ["defaultdict", "Counter", "hashmap", "hash_map", "setdefault"],
+        "imports": ["collections.counter", "collections.defaultdict"],
         "weight": 1.5,
+        "min_signals": 1,
         "description": "Hash-based data structures for O(1) lookups"
     },
     "set_operations": {
-        "keywords": ["set(", "frozenset", ".union", ".intersection", ".difference"],
-        "imports": [],
+        "identifiers": [
+            "frozenset", "union", "intersection", "difference",
+            "issubset", "issuperset", "symmetric_difference",
+        ],
         "weight": 1.2,
+        "min_signals": 1,
         "description": "Set operations for unique elements and fast membership"
     },
     "sorting": {
-        "keywords": ["sorted(", ".sort(", "heapq", "bisect"],
-        "imports": ["heapq", "bisect"],
+        "identifiers": ["sorted", "sort", "heapq", "bisect", "itemgetter"],
+        "imports": ["heapq", "bisect", "operator.itemgetter"],
         "weight": 1.3,
+        "min_signals": 1,
         "description": "Sorting algorithms and ordered operations"
     },
     "binary_search": {
-        "keywords": ["bisect_left", "bisect_right", "binary_search", "lo, hi", "mid ="],
+        "identifiers": ["bisect_left", "bisect_right", "binary_search", "insort"],
+        "text": ["mid =", "lo, hi", "low, high", "// 2"],
         "imports": ["bisect"],
         "weight": 2.0,
+        "min_signals": 2,
         "description": "Binary search for O(log n) lookups"
     },
     "graph_traversal": {
-        "keywords": ["bfs", "dfs", "visited", "queue.append", "stack.append", "neighbors"],
+        "identifiers": [
+            "bfs", "dfs", "visited", "neighbors", "neighbours",
+            "adjacency", "adj_list", "graph",
+        ],
         "imports": ["collections.deque", "networkx"],
         "weight": 2.5,
+        "min_signals": 2,
         "description": "Graph traversal algorithms (BFS/DFS)"
     },
     "dynamic_programming": {
-        "keywords": ["dp[", "memo[", "@lru_cache", "@cache", "memoize"],
+        "identifiers": ["lru_cache", "memoize", "memo", "dp", "tabulation"],
+        "text": ["dp[", "memo[", "@lru_cache", "@cache", "@functools.cache"],
         "imports": ["functools.lru_cache", "functools.cache"],
         "weight": 3.0,
+        "min_signals": 1,
         "description": "Dynamic programming and memoization"
     },
     "tree_structures": {
-        "keywords": ["TreeNode", "left_child", "right_child", "parent", "root.left", "root.right"],
-        "imports": [],
+        "identifiers": ["treenode", "left_child", "right_child", "subtree"],
+        "identifier_contains": ["treenode"],
+        "text": ["root.left", "root.right", "node.left", "node.right"],
         "weight": 2.0,
+        "min_signals": 1,
         "description": "Tree data structures"
     },
     "linked_list": {
-        "keywords": ["ListNode", "next_node", "head.next", "prev", "curr.next"],
-        "imports": [],
+        "identifiers": ["listnode", "next_node", "prev_node"],
+        "identifier_contains": ["listnode"],
+        "text": ["head.next", "curr.next", "current.next", "node.next"],
         "weight": 1.5,
+        "min_signals": 1,
         "description": "Linked list implementations"
     },
     "queue_stack": {
-        "keywords": ["deque", "queue", "stack", "LIFO", "FIFO", "push", "pop"],
-        "imports": ["collections.deque", "queue.Queue"],
+        "identifiers": ["deque", "lifoqueue", "simplequeue", "popleft", "appendleft"],
+        "text": ["stack.append", "stack.pop", "queue.append", "queue.popleft"],
+        "imports": ["collections.deque", "queue.queue", "queue.lifoqueue"],
         "weight": 1.2,
+        "min_signals": 1,
         "description": "Queue and stack data structures"
     },
     "heap_priority": {
-        "keywords": ["heappush", "heappop", "heapify", "PriorityQueue", "nlargest", "nsmallest"],
-        "imports": ["heapq", "queue.PriorityQueue"],
+        "identifiers": [
+            "heappush", "heappop", "heapify", "heappushpop", "heapreplace",
+            "priorityqueue", "nlargest", "nsmallest",
+        ],
+        "imports": ["heapq", "queue.priorityqueue"],
         "weight": 2.0,
+        "min_signals": 1,
         "description": "Heap/priority queue for efficient min/max operations"
     },
     "trie": {
-        "keywords": ["TrieNode", "Trie", "prefix_tree", "children[", "is_end", "insert_word", "search_prefix"],
-        "imports": ["pygtrie", "marisa_trie"],
+        "identifiers": ["trienode", "trie", "prefix_tree", "insert_word", "search_prefix"],
+        "identifier_contains": ["trienode"],
         "weight": 2.5,
+        "min_signals": 1,
         "description": "Trie/prefix tree for string operations"
     },
     "union_find": {
-        "keywords": ["UnionFind", "DisjointSet", "find_parent", "union(", "parent[", "rank[", "path_compression"],
-        "imports": [],
+        "identifiers": [
+            "unionfind", "disjointset", "find_parent", "find_root",
+            "path_compression", "union_by_rank",
+        ],
+        "identifier_contains": ["unionfind", "disjointset"],
+        "text": ["parent[", "rank["],
         "weight": 2.5,
+        "min_signals": 2,
         "description": "Union-Find/Disjoint Set for connectivity"
     },
     "topological_sort": {
-        "keywords": ["topological", "toposort", "in_degree", "indegree", "kahn", "dag"],
+        "identifiers": [
+            "topological_sort", "toposort", "in_degree", "indegree",
+            "kahn", "topologicalsorter",
+        ],
+        "identifier_contains": ["topological"],
         "imports": ["graphlib", "toposort"],
         "weight": 2.5,
+        "min_signals": 1,
         "description": "Topological sorting for DAG ordering"
     },
     "sliding_window": {
-        "keywords": ["window_start", "window_end", "left_ptr", "right_ptr", "window_size", "shrink_window", "expand_window"],
-        "imports": [],
+        "identifiers": [
+            "window_start", "window_end", "window_size",
+            "shrink_window", "expand_window", "sliding_window",
+        ],
         "weight": 2.0,
+        "min_signals": 1,
         "description": "Sliding window technique for subarray problems"
     },
     "two_pointers": {
-        "keywords": ["two_pointer", "left_pointer", "right_pointer", "slow_fast", "fast_slow", "tortoise_hare"],
-        "imports": [],
+        "identifiers": [
+            "two_pointer", "two_pointers", "left_pointer", "right_pointer",
+            "slow_fast", "fast_slow", "tortoise_hare", "slow", "fast",
+        ],
         "weight": 1.5,
+        "min_signals": 2,
         "description": "Two pointers technique for array traversal"
     },
     "backtracking": {
-        "keywords": ["backtrack", "backtracking", "choose", "unchoose", "explore", "is_valid_state"],
-        "imports": [],
+        "identifiers": ["backtrack", "backtracking", "unchoose", "is_valid_state", "prune"],
+        "identifier_contains": ["backtrack"],
         "weight": 2.5,
+        "min_signals": 1,
         "description": "Backtracking for constraint satisfaction"
     },
     "segment_tree": {
-        "keywords": ["SegmentTree", "segment_tree", "range_query", "range_update", "build_tree", "query_range"],
-        "imports": [],
+        "identifiers": [
+            "segmenttree", "segment_tree", "range_query", "range_update",
+            "build_tree", "query_range", "lazy_propagation",
+        ],
+        "identifier_contains": ["segmenttree"],
         "weight": 3.0,
+        "min_signals": 1,
         "description": "Segment tree for range queries"
     },
     "fenwick_tree": {
-        "keywords": ["FenwickTree", "BinaryIndexedTree", "BIT", "prefix_sum", "update_bit", "query_bit"],
-        "imports": [],
+        "identifiers": [
+            "fenwicktree", "fenwick_tree", "binaryindexedtree",
+            "update_bit", "query_bit",
+        ],
+        "identifier_contains": ["fenwick", "binaryindexedtree"],
         "weight": 3.0,
+        "min_signals": 1,
         "description": "Fenwick/Binary Indexed Tree for prefix operations"
     },
     "lru_cache_manual": {
-        "keywords": ["OrderedDict", "move_to_end", "popitem", "capacity", "cache_hit", "cache_miss", "evict"],
-        "imports": ["collections.OrderedDict"],
+        "identifiers": [
+            "ordereddict", "move_to_end", "popitem", "capacity",
+            "evict", "cache_hit", "cache_miss",
+        ],
+        "imports": ["collections.ordereddict"],
         "weight": 2.0,
+        "min_signals": 2,
         "description": "Manual LRU cache implementation"
     },
     "bloom_filter": {
-        "keywords": ["BloomFilter", "bloom_filter", "hash_functions", "bit_array", "false_positive"],
+        "identifiers": [
+            "bloomfilter", "bloom_filter", "hash_functions",
+            "bit_array", "false_positive_rate",
+        ],
+        "identifier_contains": ["bloomfilter"],
         "imports": ["pybloom", "bloom_filter", "bitarray"],
         "weight": 2.5,
+        "min_signals": 1,
         "description": "Bloom filter for probabilistic membership"
     },
     "dijkstra": {
-        "keywords": ["dijkstra", "shortest_path", "distance[", "dist[", "relaxation", "bellman_ford"],
+        "identifiers": ["dijkstra", "bellman_ford", "shortest_path", "a_star", "astar"],
+        "text": ["dist[", "distance["],
         "imports": ["networkx.dijkstra", "networkx.shortest_path"],
         "weight": 2.5,
+        "min_signals": 1,
         "description": "Shortest path algorithms (Dijkstra/Bellman-Ford)"
     },
     "minimum_spanning_tree": {
-        "keywords": ["kruskal", "prim", "mst", "minimum_spanning", "spanning_tree"],
+        "identifiers": ["kruskal", "prim", "mst", "minimum_spanning", "spanning_tree"],
+        "identifier_contains": ["spanning_tree"],
         "imports": ["networkx.minimum_spanning_tree"],
         "weight": 2.5,
+        "min_signals": 1,
         "description": "Minimum spanning tree algorithms"
     },
     "monotonic_stack": {
-        "keywords": ["monotonic_stack", "mono_stack", "next_greater", "next_smaller", "previous_greater"],
-        "imports": [],
+        "identifiers": [
+            "monotonic_stack", "mono_stack", "next_greater",
+            "next_smaller", "previous_greater", "previous_smaller",
+        ],
+        "identifier_contains": ["monotonic"],
         "weight": 2.0,
+        "min_signals": 1,
         "description": "Monotonic stack for next greater/smaller element"
     },
     "interval_operations": {
-        "keywords": ["merge_intervals", "interval_overlap", "interval_intersection", "start_end", "intervals.sort"],
+        "identifiers": [
+            "merge_intervals", "interval_overlap", "interval_intersection",
+            "intervaltree", "overlaps",
+        ],
+        "text": ["intervals.sort"],
         "imports": ["intervaltree"],
         "weight": 2.0,
+        "min_signals": 1,
         "description": "Interval merging and overlap detection"
     }
 }
@@ -151,87 +238,115 @@ DSA_PATTERNS = {
 # System Design patterns to detect
 SYSTEM_DESIGN_PATTERNS = {
     "api_design": {
-        "keywords": ["@app.route", "@router", "APIRouter", "FastAPI", "Flask", "endpoint"],
-        "imports": ["fastapi", "flask", "django.urls"],
+        "identifiers": ["fastapi", "flask", "apirouter", "blueprint", "asgiapp"],
+        "text": ["@app.route", "@router.", "@app.get", "@app.post", "@bp.route"],
+        "imports": ["fastapi", "flask", "django.urls", "starlette", "aiohttp.web"],
         "weight": 2.0,
+        "min_signals": 1,
         "description": "RESTful API design"
     },
     "database_orm": {
-        "keywords": ["Base.metadata", "session.query", "Model", "ForeignKey", "relationship"],
-        "imports": ["sqlalchemy", "django.db", "peewee", "tortoise"],
+        "identifiers": [
+            "foreignkey", "relationship", "declarative_base",
+            "sessionmaker", "column", "querySet",
+        ],
+        "text": ["base.metadata", "session.query", "objects.filter"],
+        "imports": ["sqlalchemy", "django.db", "peewee", "tortoise", "sqlmodel"],
         "weight": 2.0,
+        "min_signals": 1,
         "description": "Database ORM patterns"
     },
     "caching": {
-        "keywords": ["cache", "redis", "memcached", "@cached", "cache_key", "ttl"],
-        "imports": ["redis", "cachetools", "django.core.cache"],
+        "identifiers": ["redis", "memcached", "cache_key", "ttl", "cached", "cache_clear"],
+        "imports": ["redis", "cachetools", "django.core.cache", "aiocache", "diskcache"],
         "weight": 2.5,
+        "min_signals": 1,
         "description": "Caching layer implementation"
     },
     "message_queue": {
-        "keywords": ["celery", "rabbitmq", "kafka", "sqs", "publish", "subscribe", "consumer"],
-        "imports": ["celery", "pika", "kafka", "boto3.client('sqs')"],
+        "identifiers": ["celery", "kafkaproducer", "kafkaconsumer", "basic_publish", "send_message"],
+        "identifier_contains": ["rabbitmq", "kafka"],
+        "imports": ["celery", "pika", "kafka", "aiokafka", "kombu"],
         "weight": 3.0,
+        "min_signals": 1,
         "description": "Message queue/async processing"
     },
     "factory_pattern": {
-        "keywords": ["Factory", "create_", "get_instance", "register", "build"],
-        "imports": [],
+        "identifiers": ["get_instance", "create_instance", "from_config", "abstractfactory"],
+        "identifier_contains": ["factory"],
         "weight": 1.5,
+        "min_signals": 1,
         "description": "Factory design pattern"
     },
     "singleton_pattern": {
-        "keywords": ["_instance", "__new__", "getInstance", "Singleton"],
-        "imports": [],
+        "identifiers": ["_instance", "getinstance", "singleton"],
+        "identifier_contains": ["singleton"],
+        "text": ["def __new__"],
         "weight": 1.0,
+        "min_signals": 2,
         "description": "Singleton design pattern"
     },
     "dependency_injection": {
-        "keywords": ["Depends", "inject", "@inject", "Container", "provider"],
-        "imports": ["dependency_injector", "fastapi.Depends"],
+        "identifiers": ["depends", "inject", "provider", "container"],
+        "text": ["@inject", "= Depends(", "Depends("],
+        "imports": ["dependency_injector", "fastapi", "injector"],
         "weight": 2.5,
+        "min_signals": 2,
         "description": "Dependency injection pattern"
     },
     "error_handling": {
-        "keywords": ["try:", "except", "raise", "HTTPException", "custom exception", "ErrorHandler"],
-        "imports": [],
+        "identifiers": ["httpexception", "exception_handler", "errorhandler"],
+        "identifier_contains": ["error", "exception"],
+        "text": ["except ", "raise "],
         "weight": 1.5,
+        "min_signals": 2,
         "description": "Structured error handling"
     },
     "logging": {
-        "keywords": ["logging", "logger", "log.info", "log.error", "log.debug"],
+        "identifiers": ["getlogger", "logger", "structlog", "loguru", "basicconfig"],
         "imports": ["logging", "structlog", "loguru"],
         "weight": 1.5,
+        "min_signals": 2,
         "description": "Logging implementation"
     },
     "authentication": {
-        "keywords": ["jwt", "token", "authenticate", "authorize", "OAuth", "bearer", "password_hash"],
-        "imports": ["jwt", "passlib", "python-jose", "authlib"],
+        "identifiers": [
+            "jwt", "oauth", "authenticate", "authorize", "verify_password",
+            "password_hash", "hash_password", "access_token", "bearer",
+        ],
+        "imports": ["jwt", "jose", "passlib", "authlib", "bcrypt", "argon2"],
         "weight": 2.5,
+        "min_signals": 1,
         "description": "Authentication/Authorization"
     },
     "testing": {
-        "keywords": ["pytest", "unittest", "mock", "fixture", "assert", "test_"],
-        "imports": ["pytest", "unittest", "mock"],
+        "identifiers": ["pytest", "unittest", "fixture", "monkeypatch", "mock", "patch"],
+        "identifier_contains": ["test_"],
+        "imports": ["pytest", "unittest", "mock", "hypothesis"],
         "weight": 2.0,
+        "min_signals": 2,
         "description": "Testing patterns"
     },
     "microservices": {
-        "keywords": ["service", "client", "grpc", "proto", "api_client", "ServiceClient"],
-        "imports": ["grpc", "httpx", "aiohttp"],
+        "identifiers": ["grpc", "httpx", "aiohttp", "servicestub", "channel"],
+        "identifier_contains": ["serviceclient", "apiclient"],
+        "imports": ["grpc", "httpx", "aiohttp", "requests"],
         "weight": 2.5,
+        "min_signals": 2,
         "description": "Microservices architecture"
     },
     "repository_pattern": {
-        "keywords": ["Repository", "BaseRepository", "get_by_id", "find_all", "save", "delete"],
-        "imports": [],
+        "identifiers": ["get_by_id", "find_all", "find_by", "baserepository"],
+        "identifier_contains": ["repository"],
         "weight": 2.0,
+        "min_signals": 2,
         "description": "Repository pattern for data access"
     },
     "config_management": {
-        "keywords": ["Settings", "Config", "env", "getenv", "pydantic.BaseSettings"],
-        "imports": ["pydantic", "python-dotenv", "dynaconf"],
+        "identifiers": ["basesettings", "getenv", "load_dotenv", "environ", "settings"],
+        "imports": ["pydantic_settings", "dotenv", "dynaconf", "environs"],
         "weight": 1.5,
+        "min_signals": 2,
         "description": "Configuration management"
     }
 }

@@ -17,6 +17,14 @@ from dataclasses import dataclass, field
 from enum import Enum
 from copy import deepcopy
 
+from .discovery import (
+    DEFAULT_MAX_FILE_SIZE,
+    DEFAULT_MAX_FILES,
+    DiscoveryReport,
+    display_path,
+    iter_python_files,
+)
+
 
 class ComplexityClass(Enum):
     """Big-O complexity classes."""
@@ -124,6 +132,48 @@ COLLECTION_TYPE_HINTS = {
 }
 
 
+# Nodes that start a new scope. Analysis must not descend into them: a nested
+# function is analyzed as its own unit, otherwise its loops inflate the parent's
+# depth and its calls corrupt the parent's recursion count.
+SCOPE_BOUNDARIES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
+
+LOOP_NODES = (ast.For, ast.AsyncFor, ast.While)
+
+
+def _contains_return(node: ast.AST) -> bool:
+    """True if a ``return`` appears in this subtree, ignoring nested scopes."""
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, SCOPE_BOUNDARIES):
+            continue
+        if isinstance(child, ast.Return):
+            return True
+        if _contains_return(child):
+            return True
+    return False
+
+
+def loop_has_early_exit(node: ast.AST) -> bool:
+    """Early exit that actually belongs to *this* loop.
+
+    ``break`` binds to the nearest enclosing loop, so a break inside a nested
+    loop does not exit the outer one. ``return`` exits the function from any
+    depth. The previous implementation used ``ast.walk`` and so marked an outer
+    loop as having an early exit whenever any inner loop had a ``break``.
+    """
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, SCOPE_BOUNDARIES):
+            continue
+        if isinstance(child, (ast.Return, ast.Break)):
+            return True
+        if isinstance(child, LOOP_NODES):
+            if _contains_return(child):
+                return True
+            continue
+        if loop_has_early_exit(child):
+            return True
+    return False
+
+
 class TypeHintAnalyzer(ast.NodeVisitor):
     """Analyzes type hints to infer data sizes."""
     
@@ -131,12 +181,15 @@ class TypeHintAnalyzer(ast.NodeVisitor):
         self.param_types: Dict[str, VariableInfo] = {}
         self.return_type: Optional[str] = None
     
-    def analyze_function(self, node: ast.FunctionDef) -> Dict[str, VariableInfo]:
+    def analyze_function(self, node) -> Dict[str, VariableInfo]:
         """Extract type information from function signature."""
         self.param_types = {}
         
-        # Analyze parameters
-        for arg in node.args.args:
+        # Analyze parameters (positional-only, positional, keyword-only)
+        args = node.args
+        all_args = list(getattr(args, 'posonlyargs', [])) + list(args.args) \
+            + list(args.kwonlyargs)
+        for arg in all_args:
             var_info = VariableInfo(
                 name=arg.arg,
                 source='parameter',
@@ -199,11 +252,19 @@ class DataFlowAnalyzer(ast.NodeVisitor):
         self.input_params = set(initial_vars.keys())
         self.derived_from: Dict[str, Set[str]] = {k: {k} for k in initial_vars}
     
-    def analyze(self, node: ast.FunctionDef):
+    def analyze(self, node):
         """Analyze data flow in function body."""
         for stmt in node.body:
             self.visit(stmt)
         return self.variables, self.derived_from
+    
+    def visit_FunctionDef(self, node):
+        """Nested definitions are a separate scope — do not descend."""
+        return
+    
+    visit_AsyncFunctionDef = visit_FunctionDef
+    visit_Lambda = visit_FunctionDef
+    visit_ClassDef = visit_FunctionDef
     
     def visit_Assign(self, node: ast.Assign):
         """Track assignments to understand data relationships."""
@@ -258,6 +319,8 @@ class DataFlowAnalyzer(ast.NodeVisitor):
         
         self.generic_visit(node)
     
+    visit_AsyncFor = visit_For
+    
     def _get_value_sources(self, node) -> Set[str]:
         """Get all variable names that a value depends on."""
         sources = set()
@@ -303,9 +366,10 @@ class SymbolicExecutor(ast.NodeVisitor):
         self.expensive_ops: List[Tuple[str, str]] = []  # (operation, complexity)
         self.recursive_calls = 0
         self.recursive_pattern: Optional[str] = None
+        self.recursion_in_loop = False
         self.current_function: Optional[str] = None
     
-    def execute(self, node: ast.FunctionDef) -> Dict:
+    def execute(self, node) -> Dict:
         """Symbolically execute function to gather complexity info."""
         self.current_function = node.name
         
@@ -320,43 +384,44 @@ class SymbolicExecutor(ast.NodeVisitor):
             'expensive_ops': self.expensive_ops,
             'recursive_calls': self.recursive_calls,
             'recursive_pattern': self.recursive_pattern,
+            'recursion_in_loop': self.recursion_in_loop,
         }
     
-    def visit_For(self, node: ast.For):
+    def visit_FunctionDef(self, node):
+        """Nested definitions are analyzed separately — do not descend.
+        
+        Descending would add the inner function's loops to this function's
+        depth and count its self-calls as this function's recursion.
+        """
+        return
+    
+    visit_AsyncFunctionDef = visit_FunctionDef
+    visit_Lambda = visit_FunctionDef
+    visit_ClassDef = visit_FunctionDef
+    
+    def visit_For(self, node):
         """Analyze for loop complexity."""
-        self.current_depth += 1
-        self.max_depth = max(self.max_depth, self.current_depth)
-        
-        loop_info = self._analyze_for_loop(node)
-        loop_info.nested_depth = self.current_depth
-        self.loop_stack.append(loop_info)
-        self.all_loops.append(loop_info)
-        
-        # Check for early exit
-        for stmt in ast.walk(node):
-            if isinstance(stmt, (ast.Break, ast.Return)):
-                loop_info.has_early_exit = True
-                self.has_early_exit = True
-        
-        self.generic_visit(node)
-        self.loop_stack.pop()
-        self.current_depth -= 1
+        self._enter_loop(node, self._analyze_for_loop(node))
+    
+    # ``async for`` used to be invisible to the analyzer, so async-heavy code
+    # was reported as O(1).
+    visit_AsyncFor = visit_For
     
     def visit_While(self, node: ast.While):
         """Analyze while loop complexity."""
+        self._enter_loop(node, self._analyze_while_loop(node))
+    
+    def _enter_loop(self, node, loop_info: LoopInfo):
         self.current_depth += 1
         self.max_depth = max(self.max_depth, self.current_depth)
         
-        loop_info = self._analyze_while_loop(node)
         loop_info.nested_depth = self.current_depth
         self.loop_stack.append(loop_info)
         self.all_loops.append(loop_info)
         
-        # Check for early exit
-        for stmt in ast.walk(node):
-            if isinstance(stmt, (ast.Break, ast.Return)):
-                loop_info.has_early_exit = True
-                self.has_early_exit = True
+        if loop_has_early_exit(node):
+            loop_info.has_early_exit = True
+            self.has_early_exit = True
         
         self.generic_visit(node)
         self.loop_stack.pop()
@@ -440,6 +505,10 @@ class SymbolicExecutor(ast.NodeVisitor):
             # Check for recursion
             if func_name == self.current_function:
                 self.recursive_calls += 1
+                if self.loop_stack:
+                    # e.g. `for child in node: walk(child)` — one textual call
+                    # but an unknown branching factor.
+                    self.recursion_in_loop = True
                 self._detect_recursion_pattern(node)
             
             # Check for expensive operations
@@ -476,9 +545,11 @@ class SymbolicExecutor(ast.NodeVisitor):
         self.current_depth -= gens
     
     def _detect_recursion_pattern(self, call_node: ast.Call):
-        """Detect type of recursion (linear, binary, multiple)."""
-        # Count recursive calls in the function
-        if self.recursive_calls == 1:
+        """Detect type of recursion (linear, binary, multiple, fan-out)."""
+        if self.recursion_in_loop:
+            # Branching factor is data-dependent — do not claim linear.
+            self.recursive_pattern = 'fan_out'
+        elif self.recursive_calls == 1:
             self.recursive_pattern = 'linear'  # O(n)
         elif self.recursive_calls == 2:
             self.recursive_pattern = 'binary'  # O(2^n) or O(n) with memoization
@@ -525,7 +596,7 @@ class AdvancedComplexityAnalyzer:
     def __init__(self):
         self.all_functions: Set[str] = set()
     
-    def analyze_function(self, node: ast.FunctionDef, filepath: Path) -> FunctionComplexity:
+    def analyze_function(self, node, filepath: Path) -> FunctionComplexity:
         """Perform complete complexity analysis on a function."""
         reasoning = []
         confidence = 0.8  # Start with high confidence
@@ -563,9 +634,11 @@ class AdvancedComplexityAnalyzer:
         # 7. Adjust confidence based on analysis quality
         if exec_result['recursive_calls'] > 0 and not uses_memo:
             confidence -= 0.2  # Recursion without memo is harder to analyze
+        if exec_result.get('recursion_in_loop'):
+            confidence -= 0.2  # Branching factor is data-dependent
         if exec_result['max_loop_depth'] > 2:
             confidence -= 0.1  # Deep nesting is complex
-        if not any(v.type_hint for v in param_vars.values()):
+        if param_vars and not any(v.type_hint for v in param_vars.values()):
             confidence -= 0.1  # No type hints reduces confidence
         
         return FunctionComplexity(
@@ -609,6 +682,12 @@ class AdvancedComplexityAnalyzer:
             pattern = exec_result['recursive_pattern']
             if uses_memo:
                 reasoning.append(f"Recursive ({pattern}) with memoization → O(n)")
+                return "O(n)", reasoning
+            elif pattern == 'fan_out':
+                reasoning.append(
+                    "Recursive call inside a loop (traversal shape) → O(n) over "
+                    "visited nodes; branching factor is data-dependent"
+                )
                 return "O(n)", reasoning
             elif pattern == 'linear':
                 reasoning.append("Linear recursion without memoization → O(n)")
@@ -718,52 +797,83 @@ class AdvancedComplexityAnalyzer:
 
 
 class ProjectComplexityAnalyzer:
-    """Analyzes complexity across an entire project."""
+    """Analyzes complexity across an entire project.
     
-    SKIP_DIRS = {'.git', '__pycache__', '.venv', 'venv', 'node_modules', 
-                 '.pytest_cache', 'dist', 'build', '.tox', '.eggs'}
+    Directory exclusions and read limits live in ``analyzer.discovery`` so the
+    pattern scan and the complexity scan can never disagree about what counts
+    as project source.
+    """
     
-    def __init__(self, project_path: str):
-        self.project_path = Path(project_path)
+    # Guard against runaway analysis on pathological files.
+    MAX_FUNCTIONS_PER_FILE = 2_000
+    
+    def __init__(
+        self,
+        project_path: str,
+        max_file_size: int = DEFAULT_MAX_FILE_SIZE,
+        max_files: int = DEFAULT_MAX_FILES,
+        redact_paths: bool = False,
+    ):
+        self.project_path = Path(project_path).resolve()
+        self.max_file_size = max_file_size
+        self.max_files = max_files
+        self.redact_paths = redact_paths
         self.results: List[FunctionComplexity] = []
         self.analyzer = AdvancedComplexityAnalyzer()
+        self.discovery = DiscoveryReport()
+        self.failed_functions = 0
     
     def analyze(self) -> List[FunctionComplexity]:
-        """Analyze all Python files in project."""
-        import os
+        """Analyze all Python files in project.
         
-        for py_file in self._get_python_files():
+        File reads go through the shared discovery layer, so size caps, symlink
+        escapes and non-regular files are handled the same way as the pattern
+        scan, and skips are counted rather than swallowed.
+        """
+        for py_file, content in iter_python_files(
+            self.project_path,
+            max_file_size=self.max_file_size,
+            max_files=self.max_files,
+            report=self.discovery,
+        ):
             try:
-                content = py_file.read_text(encoding='utf-8')
                 tree = ast.parse(content)
-                
-                # Collect all function names first
-                for node in ast.walk(tree):
-                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                        self.analyzer.all_functions.add(node.name)
-                
-                # Analyze each function
-                for node in ast.walk(tree):
-                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                        result = self.analyzer.analyze_function(node, py_file)
-                        result.file = str(py_file.relative_to(self.project_path))
-                        self.results.append(result)
-                        
-            except (SyntaxError, UnicodeDecodeError):
+            except SyntaxError:
+                self.discovery.skip('syntax_error', py_file)
                 continue
+            except (RecursionError, MemoryError, ValueError):
+                # Deeply nested or otherwise pathological source.
+                self.discovery.skip('unparseable', py_file)
+                continue
+            
+            functions = [
+                node for node in ast.walk(tree)
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            ]
+            if len(functions) > self.MAX_FUNCTIONS_PER_FILE:
+                self.discovery.skip('too_many_functions', py_file)
+                continue
+            
+            for node in functions:
+                self.analyzer.all_functions.add(node.name)
+            
+            rel = display_path(py_file, self.project_path, self.redact_paths)
+            for node in functions:
+                try:
+                    result = self.analyzer.analyze_function(node, py_file)
+                except RecursionError:
+                    self.failed_functions += 1
+                    continue
+                result.file = rel
+                self.results.append(result)
         
         return self.results
     
-    def _get_python_files(self) -> List[Path]:
-        """Get all Python files."""
-        import os
-        files = []
-        for root, dirs, filenames in os.walk(self.project_path):
-            dirs[:] = [d for d in dirs if d not in self.SKIP_DIRS]
-            for f in filenames:
-                if f.endswith('.py'):
-                    files.append(Path(root) / f)
-        return files
+    def analysis_health(self) -> Dict:
+        """What was and was not analyzed."""
+        health = self.discovery.as_dict()
+        health['failed_functions'] = self.failed_functions
+        return health
     
     def get_summary(self) -> Dict:
         """Get complexity summary statistics."""
