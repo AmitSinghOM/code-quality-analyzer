@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-from typing import Dict, List, Optional
 
 from .patterns import DSA_PATTERNS, SYSTEM_DESIGN_PATTERNS
 
@@ -32,8 +31,8 @@ class QualityRater:
 
     def __init__(
         self,
-        dsa_found: Dict[str, List[str]],
-        design_found: Dict[str, List[str]],
+        dsa_found: dict[str, list[str]],
+        design_found: dict[str, list[str]],
         files_scanned: int,
         total_lines: int,
         coverage_gap_ratio: float = 0.0,
@@ -65,7 +64,7 @@ class QualityRater:
 
         raw_score = (dsa_score * 0.4) + (design_score * 0.5) + (maturity_score * 0.1)
 
-        warnings: List[str] = []
+        warnings: list[str] = []
         if self.coverage_gap_ratio > COVERAGE_WARNING_THRESHOLD:
             # Do not present a confident number when a chunk of the project was
             # never read.
@@ -99,7 +98,7 @@ class QualityRater:
     _DSA_CURVE = ((2, 2.0, 1.0), (5, 4.0, 0.67), (10, 6.0, 0.4), (None, 8.0, 0.1))
     _DESIGN_CURVE = ((3, 2.0, 0.67), (8, 4.0, 0.4), (15, 6.0, 0.29), (None, 8.0, 0.1))
 
-    def _score(self, found: Dict[str, List[str]], definitions: Dict, curve) -> float:
+    def _score(self, found: dict[str, list[str]], definitions: dict, curve) -> float:
         if not found:
             return 1.0
 

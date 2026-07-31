@@ -1,7 +1,6 @@
 """Scanner behaviour: per-file isolation, corroboration, safe reads."""
 
 import os
-import sys
 
 import pytest
 

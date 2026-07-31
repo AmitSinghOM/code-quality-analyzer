@@ -20,7 +20,7 @@ import io
 import tokenize
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Iterable, List, Sequence, Set
+from collections.abc import Iterable, Sequence
 
 # Token types whose text must not be searched. FSTRING_MIDDLE only exists on
 # Python 3.12+, where f-strings are tokenized into parts.
@@ -37,8 +37,8 @@ class FileSignals:
     path: Path
     line_count: int
     code_text: str = ""
-    identifiers: Set[str] = field(default_factory=set)
-    imports: Set[str] = field(default_factory=set)
+    identifiers: set[str] = field(default_factory=set)
+    imports: set[str] = field(default_factory=set)
     parsed: bool = True
     literals_stripped: bool = True
 
@@ -94,7 +94,7 @@ def strip_comments_and_strings(source: str) -> tuple[str, bool]:
     caller knows matches from this file are less trustworthy.
     """
     lines = source.splitlines()
-    buffer: List[List[str]] = [list(line) for line in lines]
+    buffer: list[list[str]] = [list(line) for line in lines]
 
     try:
         tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
@@ -110,7 +110,7 @@ def strip_comments_and_strings(source: str) -> tuple[str, bool]:
 
 
 def _blank_region(
-    buffer: List[List[str]],
+    buffer: list[list[str]],
     start: tuple[int, int],
     end: tuple[int, int],
 ) -> None:
@@ -131,8 +131,8 @@ class _SymbolCollector(ast.NodeVisitor):
     """Collects identifiers and imports actually present in the syntax tree."""
 
     def __init__(self) -> None:
-        self.identifiers: Set[str] = set()
-        self.imports: Set[str] = set()
+        self.identifiers: set[str] = set()
+        self.imports: set[str] = set()
 
     def _add(self, name: str | None) -> None:
         if name:
@@ -190,7 +190,7 @@ class _SymbolCollector(ast.NodeVisitor):
 _SIGNAL_KEYS = ('identifiers', 'identifier_contains', 'text', 'imports')
 
 
-def normalize_pattern(definition: Dict) -> Dict:
+def normalize_pattern(definition: dict) -> dict:
     """Accept both the current and the legacy ``keywords`` pattern schema.
 
     Legacy keywords are split by shape: a bare word becomes an identifier
@@ -212,7 +212,7 @@ def normalize_pattern(definition: Dict) -> Dict:
     return normalized
 
 
-def match_pattern(signals: FileSignals, definition: Dict) -> List[str]:
+def match_pattern(signals: FileSignals, definition: dict) -> list[str]:
     """Return the list of distinct signals this file provides for a pattern.
 
     A pattern is considered present when ``len(result) >= min_signals``.
@@ -220,7 +220,7 @@ def match_pattern(signals: FileSignals, definition: Dict) -> List[str]:
     pattern was reported, which makes false positives reviewable.
     """
     spec = normalize_pattern(definition)
-    matched: List[str] = []
+    matched: list[str] = []
 
     for name in spec['identifiers']:
         if signals.has_identifier(name):
@@ -238,14 +238,14 @@ def match_pattern(signals: FileSignals, definition: Dict) -> List[str]:
     return matched
 
 
-def pattern_is_present(signals: FileSignals, definition: Dict) -> tuple[bool, Sequence[str]]:
+def pattern_is_present(signals: FileSignals, definition: dict) -> tuple[bool, Sequence[str]]:
     """Convenience wrapper around :func:`match_pattern`."""
     matched = match_pattern(signals, definition)
     threshold = max(1, int(definition.get('min_signals', 1)))
     return len(matched) >= threshold, matched
 
 
-def iter_signal_values(definition: Dict) -> Iterable[str]:
+def iter_signal_values(definition: dict) -> Iterable[str]:
     """All raw signal strings for a pattern — used by validation tests."""
     spec = normalize_pattern(definition)
     for key in _SIGNAL_KEYS:

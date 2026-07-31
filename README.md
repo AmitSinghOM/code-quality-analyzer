@@ -15,6 +15,10 @@ A Python tool that analyzes codebases to detect:
 | 7-8 | Good: Strategic DSA, clear design patterns |
 | 9-10 | Excellent: Optimal DSA, comprehensive system design |
 
+Ratings from 2.x are **not comparable** to 1.x ratings. Detection got stricter
+and project size no longer adds score, so most projects will rate lower than
+they did before. See [Scoring](#scoring).
+
 ## Project Structure
 
 ```
@@ -22,9 +26,14 @@ code-quality-analyzer/
 ├── analyzer/
 │   ├── __init__.py
 │   ├── __main__.py      # CLI entry point
+│   ├── discovery.py     # Safe file discovery (limits, symlink guard)
+│   ├── signals.py       # Per-file signal extraction + pattern matching
 │   ├── patterns.py      # DSA & System Design pattern definitions
 │   ├── scanner.py       # File scanner and pattern detector
+│   ├── complexity.py    # Time/space complexity analyzer
 │   └── rater.py         # Rating calculator (1-10)
+├── tests/               # Regression tests
+├── pyproject.toml
 ├── requirements.txt
 ├── README.md
 └── .gitignore
@@ -34,68 +43,181 @@ code-quality-analyzer/
 
 ```bash
 cd code-quality-analyzer
-pip install -r requirements.txt
+python3 -m venv .venv
+.venv/bin/pip install -e .
+```
+
+That installs a `code-quality-analyzer` command. Running as a module works too:
+
+```bash
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python -m analyzer /path/to/project
 ```
 
 ## Usage
 
 ```bash
 # Analyze a project
-python -m analyzer /path/to/project
+code-quality-analyzer /path/to/project
 
-# Analyze with detailed report (shows file matches)
-python -m analyzer /path/to/project -v
+# Show which signals triggered each match
+code-quality-analyzer /path/to/project -v
 
 # Output as JSON
-python -m analyzer /path/to/project -f json
+code-quality-analyzer /path/to/project -f json
+
+# Include time/space complexity analysis
+code-quality-analyzer /path/to/project -c
 ```
 
-## Important: Use Absolute/Full Paths
+`PROJECT_PATH` must be a directory. Pointing at a single file is rejected
+rather than silently returning a rating of 1.
 
-⚠️ **Recommendation:** Always use full absolute paths to avoid "Path does not exist" errors.
+## Options
 
-Relative paths like `../my-project` may fail depending on your current working directory.
+| Option | Default | Purpose |
+|--------|---------|---------|
+| `-v, --verbose` | off | Show matched files and the signals behind each match |
+| `-f, --output-format` | `text` | `text` or `json` |
+| `-c, --complexity` | off | Add time/space complexity analysis |
+| `--max-file-size` | 2 MB | Skip files larger than this many bytes |
+| `--max-files` | 20000 | Stop after discovering this many Python files |
+| `--redact-paths` | off | Report file names only, no directory structure |
+| `--fail-under` | none | Exit non-zero when the rating is below this value |
+| `--strict` | off | Exit non-zero when any discovered file could not be analyzed |
 
-**Examples:**
+`-f` was `--format` in 1.x. It is now `--output-format` so it no longer shadows
+the `format` builtin.
+
+## Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Analysis completed and any threshold was met |
+| 1 | Rating below `--fail-under` |
+| 2 | No Python files were analyzed |
+| 3 | `--strict` and some discovered files could not be analyzed |
+
+## Use in CI
 
 ```bash
-# ✅ Recommended: Full absolute path
-python -m analyzer "/Users/username/projects/my-fastapi-app" -v
-
-# ✅ Also works: Home directory shortcut
-python -m analyzer ~/projects/my-fastapi-app -v
-
-# ⚠️ May fail: Relative path (depends on current directory)
-python -m analyzer "../my-fastapi-app" -v
+code-quality-analyzer . --fail-under 5 --strict
 ```
 
-## Troubleshooting
+Set `--fail-under` just below your current rating and raise it over time. Used
+as a ratchet it catches regressions; set aspirationally it just fails every
+build.
 
-### Path does not exist error
-```
-Error: Invalid value for 'PROJECT_PATH': Path '../project' does not exist.
-```
-**Solution:** Use the full absolute path instead of relative path.
+`--strict` is the more valuable half of the gate: it fails when files could not
+be read or parsed, so a rating that quietly covers half the project doesn't
+pass as a green build.
 
-### Python not found / wrong version
-If your default `python` command doesn't work, use the full path to your Python installation:
-```bash
-/Library/Frameworks/Python.framework/Versions/3.14/bin/python3 -m analyzer /path/to/project -v
+See `.github/workflows/ci.yml` for a working example that also runs the test
+suite, lint, and a dependency vulnerability scan.
+
+## Paths
+
+Absolute paths are never written into reports. File paths are reported relative
+to the project root, and `--redact-paths` reduces them to bare file names for
+reports that get shared outside your machine.
+
+Relative paths work fine as arguments (`.`, `../my-project`) — they are
+resolved before the walk starts.
+
+---
+
+## How Detection Works
+
+Every pattern is defined by signals, all matched case-insensitively:
+
+| Signal type | Matched against |
+|-------------|-----------------|
+| `identifiers` | An exact identifier from the AST: name, attribute, def, class, argument, import alias |
+| `identifier_contains` | A substring of an identifier, for naming conventions like `OrderRepository` |
+| `text` | A substring of the source **with comments and string literals blanked out**, for syntax like `dp[` or `@app.route` |
+| `imports` | A substring of an imported module path |
+
+Two rules keep the noise down:
+
+**Literals and comments are not evidence.** A docstring saying "we should use
+Dijkstra here" no longer reports a shortest-path algorithm. Comments and string
+literals are blanked out before any text matching, with layout preserved so
+positional patterns still match.
+
+**Bare words match identifiers, not raw text.** `pop` matches `items.pop()` but
+not `population`.
+
+Each pattern declares `min_signals` — how many distinct signals a file must
+provide before the pattern is reported. Specific patterns like `heappush` need
+one. Generic ones need corroboration: a lone `visited` is not a graph
+traversal, and `OrderedDict` on its own is not an LRU cache.
+
+Run with `-v` to see exactly which signals fired, so a false positive is
+reviewable rather than mysterious.
+
+### Signals are per file
+
+Imports are collected per file. In 1.x the import set accumulated across the
+whole project, so a single `import heapq` anywhere made every file scanned
+afterwards look like it used heaps — and because results depended on directory
+walk order, renaming a file could change the rating.
+
+## Scoring
+
 ```
-Or create an alias in your shell config (`~/.zshrc` or `~/.bashrc`):
-```bash
-alias py3="/Library/Frameworks/Python.framework/Versions/3.14/bin/python3"
-py3 -m analyzer /path/to/project -v
+rating = dsa_score × 0.4 + design_score × 0.5 + maturity_score × 0.1
 ```
+
+**Breadth discount.** A pattern found in one file counts for 60% of its weight;
+two files 80%; four or more, full weight. One incidental use is weaker evidence
+than a habit.
+
+**Size is not quality.** The 1.x "complexity bonus" grew with file count and
+line count, so padding a codebase raised its rating. Size now only gates how
+much of the `maturity_score` component is reachable, saturating at 2000 lines.
+Past that, more code adds nothing.
+
+**Coverage gaps lower the score.** If more than 10% of discovered files could
+not be read or parsed, the rating is scaled down and reported as a lower bound
+with an explicit warning.
+
+## Scan Safety
+
+File reads go through `analyzer/discovery.py`, which refuses to:
+
+- read a path that resolves outside the project root, so a symlink pointing at
+  `~/.aws/credentials` is skipped rather than parsed
+- read a non-regular file such as a FIFO, which would otherwise block forever
+- read a file above `--max-file-size`
+- walk more than `--max-files` paths
+
+Skips are counted by reason and reported. Nothing is silently dropped, so a
+clean project is distinguishable from a project that failed to parse.
+
+Excluded directories: `.git`, `__pycache__`, `.venv`, `venv`, `env`,
+`node_modules`, `dist`, `build`, `site-packages`, and the usual tool caches.
 
 ## Complexity Analysis
 
 Use the `-c` flag to include time/space complexity analysis:
 
 ```bash
-python -m analyzer /path/to/project -c
-python -m analyzer /path/to/project -v -c  # verbose with reasoning
+code-quality-analyzer /path/to/project -c
+code-quality-analyzer /path/to/project -v -c  # verbose adds reasoning
 ```
+
+Handled correctly as of 2.0:
+
+- **`async for` counts as a loop.** Async-heavy code used to report `O(1)`.
+- **Early exit is scoped to its own loop.** A `break` in an inner loop no
+  longer marks the outer loop as having an early exit. A `return` still does,
+  from any depth.
+- **Nested definitions are separate units.** An inner function's loops no
+  longer inflate the enclosing function's depth, and its self-calls no longer
+  count as the parent's recursion. Each nested function is analyzed on its own.
+- **Recursion inside a loop** is classified as `fan_out` rather than linear.
+  The branching factor is data-dependent, so it reports `O(n)` over visited
+  nodes with reduced confidence instead of claiming certainty.
 
 ### Confidence Score
 
@@ -103,15 +225,14 @@ The confidence score indicates how reliable the complexity estimate is.
 
 **Starting point:** 80%
 
-**Deductions:**
-
 | Condition | Deduction | Reason |
 |-----------|-----------|--------|
-| Recursion without memoization | -20% | Hard to determine if it's O(n), O(2^n), or O(n!) without runtime analysis |
+| Recursion without memoization | -20% | Hard to tell O(n) from O(2^n) without runtime analysis |
+| Recursive call inside a loop | -20% | Branching factor depends on the data |
 | Deep nesting (>2 loops) | -10% | Complex control flow makes static analysis less reliable |
 | No type hints on parameters | -10% | Can't infer if input is a collection or its size relationship |
 
-**Minimum:** 30% (never goes below this)
+**Minimum:** 30%
 
 **Interpreting confidence:**
 - 80%+ → High confidence, estimate is likely accurate
@@ -122,13 +243,14 @@ The confidence score indicates how reliable the complexity estimate is.
 
 ## What It Detects
 
-### DSA Patterns (25 patterns)
+### DSA Patterns (24 patterns)
 
 **Data Structures:**
-- Hash maps, sets, dictionaries
+- Hash maps (Counter, defaultdict)
+- Sets and set algebra
 - Trees (binary, general)
 - Linked lists
-- Queues and stacks
+- Queues and stacks (deque)
 - Heaps and priority queues
 - Trie/prefix tree
 - Segment tree
@@ -136,13 +258,13 @@ The confidence score indicates how reliable the complexity estimate is.
 - Bloom filter
 
 **Algorithms:**
-- Sorting algorithms
+- Sorting
 - Binary search
 - Graph traversal (BFS/DFS)
 - Dynamic programming/memoization
 - Union-Find/Disjoint Set
 - Topological sort
-- Dijkstra/Bellman-Ford (shortest path)
+- Shortest path (Dijkstra/Bellman-Ford/A*)
 - Minimum spanning tree (Kruskal/Prim)
 - Backtracking
 
@@ -153,18 +275,34 @@ The confidence score indicates how reliable the complexity estimate is.
 - Interval operations
 - Manual LRU cache
 
-### System Design Patterns
-- Microservices architecture
-- API design (REST, GraphQL)
-- Database patterns (ORM, connection pooling)
+### System Design Patterns (14 patterns)
+- API design (FastAPI, Flask, Django, Starlette)
+- Database ORM
 - Caching layers
 - Message queues
-- Design patterns (Factory, Singleton, Repository, etc.)
+- Factory, Singleton, Repository patterns
 - Dependency injection
-- Error handling & logging
+- Error handling
+- Logging
 - Authentication/Authorization
+- Testing
+- Microservices/service clients
 - Configuration management
-- Testing patterns
+
+Only Python is analyzed today. Files in other languages are not counted.
+
+## Development
+
+```bash
+.venv/bin/pip install -e ".[dev]"
+.venv/bin/python -m pytest        # tests
+.venv/bin/python -m ruff check .  # lint
+.venv/bin/python -m pip_audit     # dependency vulnerabilities
+```
+
+The test suite carries a regression test for each detection and safety bug
+fixed in 2.0, including symlink escape, FIFO reads, cross-file import leakage,
+and the complexity analyzer's scope handling.
 
 ## License
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 from .discovery import (
     DEFAULT_MAX_FILE_SIZE,
@@ -22,7 +21,7 @@ class PatternHit:
     """One file's evidence for one pattern."""
 
     file: str
-    signals: List[str] = field(default_factory=list)
+    signals: list[str] = field(default_factory=list)
 
 
 class CodeScanner:
@@ -51,13 +50,13 @@ class CodeScanner:
         self.discovery = DiscoveryReport()
 
         # pattern -> [file, ...] (kept for backwards compatibility)
-        self.dsa_found: Dict[str, List[str]] = {}
-        self.design_found: Dict[str, List[str]] = {}
+        self.dsa_found: dict[str, list[str]] = {}
+        self.design_found: dict[str, list[str]] = {}
         # pattern -> [PatternHit, ...] with the evidence behind each match
-        self.dsa_evidence: Dict[str, List[PatternHit]] = {}
-        self.design_evidence: Dict[str, List[PatternHit]] = {}
+        self.dsa_evidence: dict[str, list[PatternHit]] = {}
+        self.design_evidence: dict[str, list[PatternHit]] = {}
 
-    def scan(self) -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
+    def scan(self) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
         """Scan all Python files in the project."""
         for path, source in iter_python_files(
             self.project_path,
@@ -89,8 +88,8 @@ class CodeScanner:
 
     @staticmethod
     def _record(
-        found: Dict[str, List[str]],
-        evidence: Dict[str, List[PatternHit]],
+        found: dict[str, list[str]],
+        evidence: dict[str, list[PatternHit]],
         pattern: str,
         rel_path: str,
         matched,
@@ -100,11 +99,11 @@ class CodeScanner:
             PatternHit(file=rel_path, signals=list(matched))
         )
 
-    def evidence_for(self, pattern: str) -> List[PatternHit]:
+    def evidence_for(self, pattern: str) -> list[PatternHit]:
         """Evidence rows for a pattern, from either category."""
         return self.dsa_evidence.get(pattern) or self.design_evidence.get(pattern) or []
 
-    def scan_health(self) -> Dict:
+    def scan_health(self) -> dict:
         """What was and was not actually analyzed."""
         health = self.discovery.as_dict()
         health["files_scanned"] = self.files_scanned

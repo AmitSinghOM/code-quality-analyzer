@@ -18,7 +18,7 @@ import os
 import stat
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Iterator, List, Tuple
+from collections.abc import Iterator
 
 # Directories that never contain first-party source worth rating.
 SKIP_DIRS = frozenset({
@@ -40,8 +40,8 @@ class DiscoveryReport:
     """Accounting for a discovery pass."""
 
     files_found: int = 0
-    skipped: Dict[str, int] = field(default_factory=dict)
-    skipped_examples: Dict[str, List[str]] = field(default_factory=dict)
+    skipped: dict[str, int] = field(default_factory=dict)
+    skipped_examples: dict[str, list[str]] = field(default_factory=dict)
     truncated: bool = False
 
     def skip(self, reason: str, path: Path) -> None:
@@ -54,7 +54,7 @@ class DiscoveryReport:
     def total_skipped(self) -> int:
         return sum(self.skipped.values())
 
-    def as_dict(self) -> Dict:
+    def as_dict(self) -> dict:
         return {
             "files_found": self.files_found,
             "total_skipped": self.total_skipped,
@@ -69,7 +69,7 @@ def iter_python_files(
     max_file_size: int = DEFAULT_MAX_FILE_SIZE,
     max_files: int = DEFAULT_MAX_FILES,
     report: DiscoveryReport | None = None,
-) -> Iterator[Tuple[Path, str]]:
+) -> Iterator[tuple[Path, str]]:
     """Yield ``(path, source_text)`` for each safe-to-read Python file.
 
     ``path`` is the on-disk path as walked (so it stays relative-able to

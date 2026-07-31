@@ -33,6 +33,6 @@ def function_node(source: str, name: str):
     """Return the AST node for the named function in ``source``."""
     tree = ast.parse(source)
     for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name == name:
             return node
     raise AssertionError(f"function {name!r} not found")

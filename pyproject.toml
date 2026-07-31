@@ -10,8 +10,9 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 dependencies = [
-    "click==8.1.7",
-    "rich==13.9.4",
+    # click <8.3.3 carries PYSEC-2026-2132; keep this at or above the fix.
+    "click==8.3.3",
+    "rich==14.3.4",
 ]
 
 [project.optional-dependencies]

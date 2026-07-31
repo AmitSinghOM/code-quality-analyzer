@@ -264,7 +264,10 @@ SYSTEM_DESIGN_PATTERNS = {
         "description": "Caching layer implementation"
     },
     "message_queue": {
-        "identifiers": ["celery", "kafkaproducer", "kafkaconsumer", "basic_publish", "send_message"],
+        "identifiers": [
+            "celery", "kafkaproducer", "kafkaconsumer",
+            "basic_publish", "send_message",
+        ],
         "identifier_contains": ["rabbitmq", "kafka"],
         "imports": ["celery", "pika", "kafka", "aiokafka", "kombu"],
         "weight": 3.0,
