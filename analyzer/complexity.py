@@ -500,8 +500,11 @@ class SymbolicExecutor(ast.NodeVisitor):
         func_name = self._get_call_name(node)
 
         if func_name:
-            # Check for recursion
-            if func_name == self.current_function:
+            # A matching terminal attribute is not enough to prove recursion:
+            # mapping.get() inside get() and browser.close() inside close() are
+            # calls on other objects. Count direct calls and explicit self/cls
+            # method calls only.
+            if self._is_recursive_call(node):
                 self.recursive_calls += 1
                 if self.loop_stack:
                     # e.g. `for child in node: walk(child)` — one textual call
@@ -518,6 +521,21 @@ class SymbolicExecutor(ast.NodeVisitor):
                 self.space_allocations.append((func_name, BUILTIN_SPACE_COMPLEXITY[func_name]))
 
         self.generic_visit(node)
+
+    def _is_recursive_call(self, node: ast.Call) -> bool:
+        """Whether ``node`` calls the function currently being analyzed."""
+        if not self.current_function:
+            return False
+        if isinstance(node.func, ast.Name):
+            return node.func.id == self.current_function
+        if isinstance(node.func, ast.Attribute):
+            receiver = node.func.value
+            return (
+                node.func.attr == self.current_function
+                and isinstance(receiver, ast.Name)
+                and receiver.id in {"self", "cls"}
+            )
+        return False
 
     def visit_ListComp(self, node: ast.ListComp):
         """Track list comprehension space."""

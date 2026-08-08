@@ -1,18 +1,20 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
-  schedule:
-    # Weekly, so a newly disclosed dependency advisory surfaces without a push.
-    - cron: '0 6 * * 1'
+    paths:
+      - "analyzer/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - "requirements.txt"
+      - ".github/workflows/ci.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:

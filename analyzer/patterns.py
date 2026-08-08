@@ -214,10 +214,9 @@ DSA_PATTERNS = {
     },
     "monotonic_stack": {
         "identifiers": [
-            "monotonic_stack", "mono_stack", "next_greater",
+            "monotonic_stack", "monotonicstack", "mono_stack", "next_greater",
             "next_smaller", "previous_greater", "previous_smaller",
         ],
-        "identifier_contains": ["monotonic"],
         "weight": 2.0,
         "min_signals": 1,
         "description": "Monotonic stack for next greater/smaller element"
@@ -275,8 +274,10 @@ SYSTEM_DESIGN_PATTERNS = {
         "description": "Message queue/async processing"
     },
     "factory_pattern": {
-        "identifiers": ["get_instance", "create_instance", "from_config", "abstractfactory"],
-        "identifier_contains": ["factory"],
+        "identifiers": [
+            "factory", "factory_method", "factorymethod", "get_instance",
+            "create_instance", "from_config", "abstractfactory",
+        ],
         "weight": 1.5,
         "min_signals": 1,
         "description": "Factory design pattern"
