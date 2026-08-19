@@ -12,7 +12,9 @@ from .discovery import (
     display_path,
     iter_python_files,
 )
+from .findings import Finding
 from .patterns import DSA_PATTERNS, SYSTEM_DESIGN_PATTERNS
+from .python_rules import PythonRuleAnalyzer
 from .signals import extract_signals, pattern_is_present
 
 
@@ -58,6 +60,8 @@ class CodeScanner:
         # pattern -> [PatternHit, ...] with the evidence behind each match
         self.dsa_evidence: dict[str, list[PatternHit]] = {}
         self.design_evidence: dict[str, list[PatternHit]] = {}
+        self.rule_analyzer = PythonRuleAnalyzer()
+        self.findings: list[Finding] = []
 
     def scan(self) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
         """Scan all Python files in the project."""
@@ -79,6 +83,8 @@ class CodeScanner:
             return
 
         rel = display_path(path, self.project_path, self.redact_paths)
+        if signals.tree is not None:
+            self.findings.extend(self.rule_analyzer.analyze(signals.tree, rel))
 
         for name, definition in DSA_PATTERNS.items():
             present, matched = pattern_is_present(signals, definition)

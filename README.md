@@ -27,7 +27,9 @@ code-quality-analyzer/
 │   ├── __init__.py
 │   ├── __main__.py      # CLI entry point
 │   ├── discovery.py     # Safe file discovery (limits, symlink guard)
+│   ├── findings.py      # Language-neutral actionable finding model
 │   ├── signals.py       # Per-file signal extraction + pattern matching
+│   ├── python_rules.py  # Source-located Python correctness rules
 │   ├── patterns.py      # DSA & System Design pattern definitions
 │   ├── scanner.py       # File scanner and pattern detector
 │   ├── complexity.py    # Time/space complexity analyzer
@@ -199,6 +201,22 @@ clean project is distinguishable from a project that failed to parse.
 
 Excluded directories: `.git`, `__pycache__`, `.venv`, `venv`, `env`,
 `node_modules`, `dist`, `build`, `site-packages`, and the usual tool caches.
+
+## Actionable Findings
+
+Actionable Python findings are separate from descriptive DSA and architecture
+signals. Every finding includes a stable rule ID, category, severity,
+confidence, message, remediation, and a one-based project-relative source
+location. JSON reports include both `findings` and an aggregate
+`finding_summary`; terminal reports show an **Actionable Findings** table.
+
+The first rule is `PY-COR-001`, which detects mutable function defaults such as
+`items=[]` and `cache=dict()`. See [`docs/RULES.md`](docs/RULES.md) for rule
+behavior and remediation examples.
+
+Files are parsed once for signal extraction and actionable Python rules.
+Malformed files emit no semantic findings and remain visible through analysis
+health.
 
 ## Complexity Analysis
 

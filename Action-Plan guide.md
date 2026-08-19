@@ -185,7 +185,7 @@ Do not force every language into one universal AST. Normalize only shared facts 
 
 ### Phase 1 — Trust, privacy, and correctness
 
-#### Progress (August 20, 2026)
+#### Phase 1 progress (August 20, 2026)
 
 **Status:** In progress
 
@@ -235,6 +235,22 @@ Remaining Phase 1 work includes anonymized stable file identifiers, duplicate-ba
 - All report consumers can identify the exact report contract version.
 
 ### Phase 2 — Actionable Python findings
+
+#### Phase 2 progress (August 20, 2026)
+
+**Status:** In progress
+
+Completed in the first Phase 2 vertical slice:
+
+- Added language-neutral `Finding` and `Location` report contracts.
+- Added a Python rule protocol and deterministic rule runner.
+- Reused the AST created during signal extraction instead of parsing files again.
+- Added `PY-COR-001` for mutable default arguments with precise locations and remediation.
+- Added JSON finding details, aggregate finding summaries, and terminal rendering.
+- Added positive, negative, determinism, location, parse-once, and report integration tests.
+- Added the initial rule reference in `docs/RULES.md`.
+
+Next work is `.code-quality.toml`, ignore/suppression support, severity-based gates, and additional high-confidence correctness rules.
 
 **Objective:** Provide enough value for developers to use the analyzer during daily Python development.
 

@@ -40,9 +40,9 @@ def test_json_output_is_valid_and_includes_health(project):
     payload = json.loads(result.output)
 
     assert result.exit_code == EXIT_OK
-    assert payload["schema_version"] == "1.0.0"
-    assert payload["analyzer_version"] == "2.0.0"
-    assert payload["ruleset_version"] == "2.0.0"
+    assert payload["schema_version"] == "1.1.0"
+    assert payload["analyzer_version"] == "2.1.0"
+    assert payload["ruleset_version"] == "2.1.0"
     assert payload["project"] == root.name
     assert 1.0 <= payload["rating"] <= 10.0
     assert payload["scan_health"]["files_scanned"] == 1
@@ -185,3 +185,36 @@ def test_text_output_does_not_print_absolute_project_path(project):
     assert result.exit_code == EXIT_OK
     assert str(root) not in result.output
     assert root.name in result.output
+
+
+def test_json_includes_actionable_findings(project):
+    root = project({
+        "service.py": "def add(item, items=[]):\n    items.append(item)\n",
+    })
+
+    result = run([str(root), "--output-format", "json"])
+    payload = json.loads(result.output)
+
+    assert result.exit_code == EXIT_OK
+    assert payload["finding_summary"] == {
+        "total": 1,
+        "by_severity": {"warning": 1},
+        "by_category": {"correctness": 1},
+    }
+    finding = payload["findings"][0]
+    assert finding["rule_id"] == "PY-COR-001"
+    assert finding["location"]["path"] == "service.py"
+    assert finding["location"]["line"] == 1
+    assert finding["location"]["column"] == 21
+    assert "Use None" in finding["remediation"]
+
+
+def test_text_output_shows_actionable_finding(project):
+    root = project({"service.py": "def f(cache={}):\n    return cache\n"})
+
+    result = run([str(root)])
+
+    assert result.exit_code == EXIT_OK
+    assert "Actionable Findings" in result.output
+    assert "PY-COR-001" in result.output
+    assert "service.py:1:13" in result.output

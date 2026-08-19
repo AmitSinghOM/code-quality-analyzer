@@ -39,6 +39,7 @@ class FileSignals:
     code_text: str = ""
     identifiers: set[str] = field(default_factory=set)
     imports: set[str] = field(default_factory=set)
+    tree: ast.AST | None = field(default=None, repr=False)
     parsed: bool = True
     literals_stripped: bool = True
 
@@ -85,6 +86,7 @@ def extract_signals(path: Path, source: str) -> FileSignals:
 
     signals.identifiers = collector.identifiers
     signals.imports = collector.imports
+    signals.tree = tree
     return signals
 
 

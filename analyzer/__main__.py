@@ -154,6 +154,19 @@ def _pattern_payload(found, definitions, evidence, verbose: bool):
     return payload
 
 
+def _finding_summary(findings):
+    by_severity = {}
+    by_category = {}
+    for finding in findings:
+        by_severity[finding.severity] = by_severity.get(finding.severity, 0) + 1
+        by_category[finding.category] = by_category.get(finding.category, 0) + 1
+    return {
+        "total": len(findings),
+        "by_severity": dict(sorted(by_severity.items())),
+        "by_category": dict(sorted(by_category.items())),
+    }
+
+
 def _emit_json(root, rating, rater, breakdown, dsa_found, design_found,
                scanner, scan_health, complexity_data, complexity_health,
                verbose):
@@ -166,6 +179,8 @@ def _emit_json(root, rating, rater, breakdown, dsa_found, design_found,
         "label": rater.get_rating_label(rating),
         "breakdown": breakdown,
         "scan_health": scan_health,
+        "finding_summary": _finding_summary(scanner.findings),
+        "findings": [finding.as_dict() for finding in scanner.findings],
         "dsa_patterns": _pattern_payload(
             dsa_found, DSA_PATTERNS, scanner.dsa_evidence, verbose=verbose),
         "design_patterns": _pattern_payload(
@@ -205,6 +220,7 @@ def _emit_text(rating, rater, breakdown, dsa_found, design_found,
     if breakdown.get('warnings') or scanner.has_coverage_gaps:
         console.print()
 
+    _print_findings(scanner.findings)
     _print_pattern_table(
         "DSA Patterns Detected", "cyan", dsa_found, DSA_PATTERNS,
         scanner.dsa_evidence, verbose,
@@ -241,6 +257,29 @@ def _print_scan_health(scan_health, scanner):
             "[yellow]![/yellow] File limit reached — results cover part of the "
             "project only (raise --max-files)"
         )
+
+
+def _print_findings(findings):
+    if not findings:
+        return
+    table = Table(title="Actionable Findings", show_header=True)
+    table.add_column("Rule", style="yellow")
+    table.add_column("Severity")
+    table.add_column("Location", style="cyan")
+    table.add_column("Message")
+    table.add_column("Remediation")
+
+    for finding in findings:
+        location = finding.location
+        table.add_row(
+            finding.rule_id,
+            finding.severity,
+            f"{location.path}:{location.line}:{location.column}",
+            finding.message,
+            finding.remediation,
+        )
+    console.print(table)
+    console.print()
 
 
 def _print_pattern_table(title, style, found, definitions, evidence, verbose):
