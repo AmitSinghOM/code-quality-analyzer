@@ -33,7 +33,11 @@ code-quality-analyzer/
 │   ├── python_rules.py  # Source-located Python correctness rules
 │   ├── patterns.py      # DSA & System Design pattern definitions
 │   ├── package_intelligence.py # Metadata, modules, imports, cycles
-│   ├── scanner.py       # File scanner and pattern detector
+│   ├── protocols.py     # Language-neutral source, parse, and plugin contracts
+│   ├── registry.py      # Deterministic adapter/rule/metric/reporter registry
+│   ├── plugins.py       # Built-in plugin assembly
+│   ├── languages/       # Built-in language adapters and rule packs
+│   ├── scanner.py       # Python orchestration through registered plugins
 │   ├── complexity.py    # Time/space complexity analyzer
 │   └── rater.py         # Rating calculator (1-10)
 ├── tests/               # Regression tests

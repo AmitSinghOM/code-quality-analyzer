@@ -433,6 +433,22 @@ Follow-up hardening includes dependency declaration synchronization, action SHA 
 
 ### Phase 6 — Multi-language foundation
 
+#### Phase 6 progress (August 20, 2026)
+
+**Status:** In progress
+
+Completed in the first compatibility slice:
+
+- Added language-neutral `SourceFile` and opaque `ParsedFile` models.
+- Added protocols for language adapters, rule packs, metric providers, and reporters.
+- Added deterministic plugin registration, extension resolution, capability metadata, and conflict rejection.
+- Moved Python parsing and normalized Python rule execution behind built-in adapter and rule-pack plugins.
+- Migrated the scanner to resolve Python behavior through the default registry while preserving parse-once, findings, patterns, package intelligence, baselines, and report output.
+- Updated package discovery so built-in language subpackages are included in wheels and source distributions.
+- Added a minimal synthetic language, rule pack, metric provider, and reporter contract test.
+
+Next work includes moving package intelligence and complexity behind providers, registering the current text/JSON reporters, adding capability negotiation, and removing remaining Python-specific discovery and pattern assumptions from the core orchestration.
+
 **Objective:** Extract a stable language-neutral core before adding another language.
 
 **Work:**

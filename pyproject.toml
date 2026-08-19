@@ -28,8 +28,8 @@ dev = [
 [project.scripts]
 code-quality-analyzer = "analyzer.__main__:main"
 
-[tool.setuptools]
-packages = ["analyzer"]
+[tool.setuptools.packages.find]
+include = ["analyzer*"]
 
 [tool.setuptools.dynamic]
 version = { attr = "analyzer.__version__" }

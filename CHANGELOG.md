@@ -6,6 +6,8 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ### Added
 
+- Language-neutral plugin contracts and deterministic extension registry
+- Built-in Python adapter and normalized Python rule-pack plugin
 - Fully anonymized text and JSON reports with opaque source-identity tokens
 - Explicit offline enforcement that denies socket operations during analysis
 - Privacy-state metadata in the JSON report contract
@@ -16,7 +18,7 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ### Changed
 
-- Report schema advanced to 1.4.0 and analyzer version to 2.5.0
+- Report schema remains 1.4.0 and analyzer version advanced to 2.6.0
 - Anonymized package intelligence exposes aggregate facts only
 - Verbose anonymized reports replace source-derived signals and reasoning
 - Reports use project-relative paths and omit semantic evidence from malformed source
