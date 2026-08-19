@@ -71,23 +71,26 @@ class DiscoveryReport:
         }
 
 
-def iter_python_files(
+def iter_source_files(
     root: Path,
+    extensions: tuple[str, ...],
     max_file_size: int = DEFAULT_MAX_FILE_SIZE,
     max_files: int = DEFAULT_MAX_FILES,
     report: DiscoveryReport | None = None,
 ) -> Iterator[tuple[Path, str]]:
-    """Yield ``(path, source_text)`` for each safe-to-read Python file.
-
-    ``path`` is the on-disk path as walked (so it stays relative-able to
-    ``root``); decoding and size checks have already passed.
-    """
+    """Yield safe UTF-8 source files matching registered extensions."""
     root = Path(root).resolve()
     report = report if report is not None else DiscoveryReport()
     if report.root is None:
         report.root = root
 
-    for path in _candidate_paths(root, max_files, report):
+    normalized = tuple(
+        extension.lower()
+        if extension.startswith(".")
+        else f".{extension.lower()}"
+        for extension in extensions
+    )
+    for path in _candidate_paths(root, normalized, max_files, report):
         text = read_source(path, root, max_file_size, report)
         if text is None:
             continue
@@ -95,15 +98,34 @@ def iter_python_files(
         yield path, text
 
 
+def iter_python_files(
+    root: Path,
+    max_file_size: int = DEFAULT_MAX_FILE_SIZE,
+    max_files: int = DEFAULT_MAX_FILES,
+    report: DiscoveryReport | None = None,
+) -> Iterator[tuple[Path, str]]:
+    """Compatibility wrapper for bounded Python-only discovery."""
+    yield from iter_source_files(
+        root,
+        (".py",),
+        max_file_size=max_file_size,
+        max_files=max_files,
+        report=report,
+    )
+
+
 def _candidate_paths(
-    root: Path, max_files: int, report: DiscoveryReport
+    root: Path,
+    extensions: tuple[str, ...],
+    max_files: int,
+    report: DiscoveryReport,
 ) -> Iterator[Path]:
     seen = 0
     # followlinks=False: symlinked directories are not descended into.
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
         dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
         for name in sorted(filenames):
-            if not name.endswith('.py'):
+            if not name.lower().endswith(extensions):
                 continue
             if seen >= max_files:
                 report.truncated = True
@@ -118,7 +140,7 @@ def read_source(
     max_file_size: int = DEFAULT_MAX_FILE_SIZE,
     report: DiscoveryReport | None = None,
 ) -> str | None:
-    """Read ``path`` if it is safe to do so, else record a skip and return None."""
+    """Read a safe source path or record why it was skipped."""
     report = report if report is not None else DiscoveryReport()
 
     # Symlink escape: a link inside the tree pointing at, say,

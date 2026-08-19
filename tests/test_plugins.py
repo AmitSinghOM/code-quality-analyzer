@@ -8,6 +8,7 @@ from analyzer.findings import Finding, Location
 from analyzer.plugins import create_default_registry
 from analyzer.protocols import ParsedFile, SourceFile
 from analyzer.registry import PluginRegistrationError, PluginRegistry
+from analyzer.scanner import CodeScanner
 
 
 class StubAdapter:
@@ -149,3 +150,21 @@ def test_builtin_python_adapter_marks_malformed_source_incomplete():
 
     assert parsed.complete is False
     assert list(registry.rule_packs_for("python")[0].evaluate(parsed)) == []
+
+
+def test_scanner_discovers_registered_extension_without_branching(
+    project,
+):
+    root = project({"src/example.stub": "value\n", "ignored.txt": "value\n"})
+    registry = PluginRegistry()
+    registry.register_language(StubAdapter())
+    registry.register_rule_pack(StubRulePack())
+
+    scanner = CodeScanner(root, registry=registry)
+    dsa, design = scanner.scan()
+
+    assert scanner.files_scanned == 1
+    assert scanner.language_counts == {"stub": 1}
+    assert [finding.rule_id for finding in scanner.findings] == ["STUB-001"]
+    assert dsa == {}
+    assert design == {}

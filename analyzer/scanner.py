@@ -10,13 +10,13 @@ from .discovery import (
     DEFAULT_MAX_FILES,
     DiscoveryReport,
     display_path,
-    iter_python_files,
+    iter_source_files,
 )
 from .findings import Finding
 from .package_intelligence import PackageIntelligence, PythonPackageAnalyzer
 from .patterns import DSA_PATTERNS, SYSTEM_DESIGN_PATTERNS
 from .plugins import create_default_registry
-from .protocols import LanguageAdapter, RulePack, SourceFile
+from .protocols import SourceFile
 from .registry import PluginRegistry
 from .signals import FileSignals, pattern_is_present
 
@@ -45,12 +45,7 @@ class CodeScanner:
         self.max_files = max_files
         self.redact_paths = redact_paths
         self.registry = registry or create_default_registry()
-        self.language_adapter: LanguageAdapter = self.registry.language(
-            "python"
-        )
-        self.rule_packs: tuple[RulePack, ...] = self.registry.rule_packs_for(
-            "python"
-        )
+        self.language_counts: dict[str, int] = {}
 
         self.files_scanned = 0
         self.total_lines = 0
@@ -70,9 +65,10 @@ class CodeScanner:
         self.package_health = {"errors": 0, "complete": True}
 
     def scan(self) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
-        """Scan all bounded Python files in the project."""
-        for path, content in iter_python_files(
+        """Scan all bounded files supported by the active registry."""
+        for path, content in iter_source_files(
             self.project_path,
+            self.registry.source_extensions(),
             max_file_size=self.max_file_size,
             max_files=self.max_files,
             report=self.discovery,
@@ -100,6 +96,10 @@ class CodeScanner:
         )
 
     def _scan_file(self, path: Path, content: str) -> None:
+        adapter = self.registry.adapter_for_path(path)
+        if adapter is None:  # Discovery only yields registered extensions.
+            return
+
         internal_path = display_path(path, self.project_path, redact=False)
         report_path = display_path(
             path,
@@ -112,19 +112,25 @@ class CodeScanner:
             identity_path=internal_path,
             content=content,
         )
-        parsed = self.language_adapter.parse(source)
+        parsed = adapter.parse(source)
         self.files_scanned += 1
         self.total_lines += parsed.line_count
+        self.language_counts[adapter.language_id] = (
+            self.language_counts.get(adapter.language_id, 0) + 1
+        )
         if not parsed.complete:
             self.unparsed_files += 1
             return
+
+        for rule_pack in self.registry.rule_packs_for(adapter.language_id):
+            self.findings.extend(rule_pack.evaluate(parsed))
+
+        if adapter.language_id != "python":
+            return
         if not isinstance(parsed.facts, FileSignals):
             raise TypeError("Python adapter must provide FileSignals facts")
-
         if parsed.artifact is not None:
             self.parsed_files[internal_path] = parsed.artifact
-            for rule_pack in self.rule_packs:
-                self.findings.extend(rule_pack.evaluate(parsed))
 
         signals = parsed.facts
         for name, definition in DSA_PATTERNS.items():

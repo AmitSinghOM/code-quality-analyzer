@@ -110,6 +110,10 @@ class PluginRegistry:
                 f"No reporter registered for {format_name}"
             ) from error
 
+    def source_extensions(self) -> tuple[str, ...]:
+        """Return all registered source extensions in deterministic order."""
+        return tuple(sorted(self._extensions))
+
     def capabilities(self) -> dict:
         """Return deterministic, non-sensitive plugin metadata."""
         return {
