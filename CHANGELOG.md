@@ -6,6 +6,8 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ### Added
 
+- Bounded Go adapter and `GO-COR-001` ignored-error pilot rule
+- Mixed Python/Go reports with language counts and adapter versions
 - Language-neutral plugin contracts and deterministic extension registry
 - Built-in Python adapter and normalized Python rule-pack plugin
 - Fully anonymized text and JSON reports with opaque source-identity tokens
@@ -18,7 +20,8 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ### Changed
 
-- Report schema remains 1.4.0 and analyzer version advanced to 2.6.0
+- Analyzer version advanced to 2.7.0, report schema to 1.5.0, and ruleset to 2.3.0
+- Reports now inventory registered language adapters and analyzed language counts
 - Anonymized package intelligence exposes aggregate facts only
 - Verbose anonymized reports replace source-derived signals and reasoning
 - Reports use project-relative paths and omit semantic evidence from malformed source

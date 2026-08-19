@@ -457,6 +457,7 @@ def _emit_json(
         "schema_version": REPORT_SCHEMA_VERSION,
         "analyzer_version": __version__,
         "ruleset_version": RULESET_VERSION,
+        "language_adapters": scanner.registry.capabilities()["languages"],
         "project": project_label,
         "privacy": _privacy_payload(anonymizer, offline, redact_paths),
         "rating": rating,
@@ -527,9 +528,13 @@ def _emit_text(
         expand=False,
     ))
 
+    languages = ", ".join(
+        f"{language}={count}"
+        for language, count in sorted(scanner.language_counts.items())
+    )
     console.print(
         f"\n[dim]Files scanned: {breakdown['files_scanned']} | "
-        f"Lines: {breakdown['total_lines']}[/dim]"
+        f"Lines: {breakdown['total_lines']} | Languages: {languages}[/dim]"
     )
     console.print(
         f"[dim]DSA Score: {breakdown['dsa_score']} | "

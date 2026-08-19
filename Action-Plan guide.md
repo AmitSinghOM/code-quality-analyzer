@@ -468,6 +468,21 @@ Next work includes moving package intelligence and complexity behind providers, 
 
 ### Phase 7 — Pilot second language
 
+#### Phase 7 progress (August 20, 2026)
+
+**Status:** Bounded Go pilot implemented
+
+Completed:
+
+- Added passive `.go` discovery through the same bounded, symlink-safe inventory used by Python.
+- Added a Go adapter with package/import facts and lexical comment/string stripping; it does not invoke Go tooling or execute project code.
+- Added `GO-COR-001` for ignored errors from a narrow set of imported standard-library calls.
+- Reused normalized findings, severity gates, baselines, anonymization, offline enforcement, and text/JSON reporters without CLI language branches.
+- Added language counts and adapter versions to reports.
+- Added mixed Python/Go, malformed Go, false-positive boundary, location, anonymization, and registry tests.
+
+The pilot intentionally does not claim full Go parsing, package graph coverage, or broad ignored-error inference. Next work should evaluate the adapter against real Go fixtures, add import aliases and multi-file package graphs, and revise the contracts before a third language.
+
 **Objective:** Prove the extension model with one useful, bounded language implementation.
 
 **Recommended pilot:** Go, because its package model and parser/tooling conventions are relatively standardized.

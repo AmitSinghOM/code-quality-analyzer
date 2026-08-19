@@ -57,3 +57,30 @@ Correct the entry-point target or ensure that the target module is included in t
 The project contains `pyproject.toml`, but it cannot be read as valid TOML. Package metadata and build configuration cannot be trusted until parsing succeeds. This finding also marks strict analysis as incomplete.
 
 Correct the TOML syntax and rerun the analyzer. The report intentionally avoids reproducing source content from the invalid file.
+
+## GO-COR-001: Ignored standard-library error
+
+**Category:** Correctness
+
+**Default severity:** Warning
+
+**Confidence:** High
+
+A two-result assignment discards the second result from a known imported Go standard-library function whose second result is an `error`. The pilot is intentionally narrow: it covers selected functions from `encoding/json`, `io`, `net/http`, `net/url`, `os`, and `strconv`; it does not assume every second return value is an error.
+
+### Non-compliant
+
+```go
+data, _ := os.ReadFile(path)
+```
+
+### Compliant
+
+```go
+data, err := os.ReadFile(path)
+if err != nil {
+    return nil, err
+}
+```
+
+The rule requires the corresponding standard-library import, ignores comments and string literals, and reports the discarded result's one-based location. Aliased imports are not yet supported by the pilot.

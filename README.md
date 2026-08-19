@@ -1,9 +1,12 @@
 # Code Quality Analyzer
 
-A Python tool that analyzes codebases to detect:
-- **Data Structures & Algorithms (DSA)** patterns used
-- **System Design** principles implemented
-- Generates a **quality rating from 1-10**
+A privacy-first local tool that analyzes Python packages and includes a bounded
+Go pilot. It detects:
+
+- **Actionable correctness and package findings** with normalized locations
+- **Data Structures & Algorithms (DSA)** patterns in Python
+- **System Design** principles implemented in Python
+- A compatibility **quality rating from 1-10**
 
 ## Rating Scale
 
@@ -402,7 +405,11 @@ The confidence score indicates how reliable the complexity estimate is.
 - Microservices/service clients
 - Configuration management
 
-Only Python is analyzed today. Files in other languages are not counted.
+Python receives actionable rules, package intelligence, architecture signals,
+and experimental complexity analysis. The Go pilot discovers `.go` files and
+emits `GO-COR-001` when code discards errors from a narrow allowlist of imported
+standard-library calls. Python and Go findings share the same report, baseline,
+privacy, offline, and CI-gate contracts. See [`docs/RULES.md`](docs/RULES.md).
 
 ## Development
 

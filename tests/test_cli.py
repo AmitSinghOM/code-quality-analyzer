@@ -41,9 +41,13 @@ def test_json_output_is_valid_and_includes_health(project):
     payload = json.loads(result.output)
 
     assert result.exit_code == EXIT_OK
-    assert payload["schema_version"] == "1.4.0"
-    assert payload["analyzer_version"] == "2.6.0"
-    assert payload["ruleset_version"] == "2.2.0"
+    assert payload["schema_version"] == "1.5.0"
+    assert payload["analyzer_version"] == "2.7.0"
+    assert payload["ruleset_version"] == "2.3.0"
+    assert payload["language_adapters"] == {
+        "go": "1.0.0",
+        "python": "1.0.0",
+    }
     assert payload["project"] == root.name
     assert 1.0 <= payload["rating"] <= 10.0
     assert payload["scan_health"]["files_scanned"] == 1
@@ -484,3 +488,68 @@ def test_offline_cli_stops_network_attempt_before_connection(project, monkeypatc
     assert result.exit_code != EXIT_OK
     assert "Network access was attempted" in result.output
     assert "Traceback" not in result.output
+
+
+def test_mixed_python_go_report_uses_one_findings_contract(project):
+    root = project({
+        "service.py": "def add(items=[]):\n    return items\n",
+        "worker.go": (
+            "package worker\n\n"
+            'import "os"\n\n'
+            "func load(privatePath string) []byte {\n"
+            "    privateData, _ := os.ReadFile(privatePath)\n"
+            "    return privateData\n"
+            "}\n"
+        ),
+    })
+
+    result = run([str(root), "--output-format", "json"])
+    payload = json.loads(result.output)
+
+    assert result.exit_code == EXIT_OK
+    assert payload["scan_health"]["languages"] == {"go": 1, "python": 1}
+    assert [finding["rule_id"] for finding in payload["findings"]] == [
+        "PY-COR-001",
+        "GO-COR-001",
+    ]
+
+
+def test_anonymized_go_finding_removes_source_identifiers(project):
+    root = project({
+        "private/worker.go": (
+            "package privateworker\n\n"
+            'import "os"\n\n'
+            "func load(privatePath string) []byte {\n"
+            "    privateData, _ := os.ReadFile(privatePath)\n"
+            "    return privateData\n"
+            "}\n"
+        ),
+    })
+
+    result = run([
+        str(root), "--output-format", "json", "--anonymize", "--offline",
+    ])
+    payload = json.loads(result.output)
+
+    assert result.exit_code == EXIT_OK
+    assert payload["findings"][0]["rule_id"] == "GO-COR-001"
+    assert payload["findings"][0]["location"]["path"] == "file-0001"
+    for sensitive in (
+        "private/worker.go",
+        "privateworker",
+        "privatePath",
+        "privateData",
+        "os.ReadFile",
+    ):
+        assert sensitive not in result.output
+
+
+def test_strict_fails_for_incomplete_go_source(project):
+    root = project({"broken.go": "func main() {}\n"})
+
+    result = run([str(root), "--strict", "--output-format", "json"])
+    payload = json.loads(result.output)
+
+    assert result.exit_code == EXIT_COVERAGE_GAP
+    assert payload["scan_health"]["languages"] == {"go": 1}
+    assert payload["scan_health"]["unparsed_files"] == 1

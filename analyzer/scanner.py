@@ -181,6 +181,7 @@ class CodeScanner:
         health = self.discovery.as_dict()
         health["files_scanned"] = self.files_scanned
         health["unparsed_files"] = self.unparsed_files
+        health["languages"] = dict(sorted(self.language_counts.items()))
         health["package_analysis"] = self.package_health
         return health
 
