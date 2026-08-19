@@ -388,6 +388,23 @@ code-quality-analyzer check . \
 
 ### Phase 5 — Distribution and privacy hardening
 
+#### Phase 5 progress (August 20, 2026)
+
+**Status:** In progress
+
+Completed in the first Phase 5 vertical slice:
+
+- Added checked-in MIT license, security policy, changelog, and privacy/threat-model documentation.
+- Pinned the setuptools build backend and local build tool versions.
+- Replaced deprecated license metadata with an SPDX expression and license-file declaration.
+- Added a source-distribution manifest for legal, security, changelog, and documentation artifacts.
+- Added CI source/wheel build, wheel installation, and installed-command smoke checks.
+- Added focused filesystem/privacy tests on Linux, macOS, and Windows.
+- Added push-triggered CI for the main branch while preserving read-only workflow permissions.
+- Documented report, baseline, cache, temporary-file, and project-execution privacy boundaries.
+
+Next work includes fully anonymized reports, explicit offline enforcement, dependency declaration synchronization, action SHA pinning, migration/contribution guides, and broader resource-limit tests.
+
 **Objective:** Make installation, offline use, and report sharing dependable.
 
 **Work:**

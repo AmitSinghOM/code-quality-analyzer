@@ -37,6 +37,11 @@ code-quality-analyzer/
 │   ├── complexity.py    # Time/space complexity analyzer
 │   └── rater.py         # Rating calculator (1-10)
 ├── tests/               # Regression tests
+├── docs/                # Rule, baseline, and privacy guidance
+├── LICENSE
+├── SECURITY.md
+├── CHANGELOG.md
+├── MANIFEST.in
 ├── pyproject.toml
 ├── requirements.txt
 ├── README.md
@@ -150,6 +155,12 @@ for reports shared outside your machine.
 
 Relative paths work fine as arguments (`.`, `../my-project`)—they are resolved
 internally before discovery, but the resolved absolute path is not reported.
+
+`--redact-paths` is path minimization, not full anonymization: findings,
+package metadata, identifiers, and architecture signals can remain sensitive.
+Review [`docs/PRIVACY.md`](docs/PRIVACY.md) before sharing reports. Security
+issues should follow [`SECURITY.md`](SECURITY.md); do not attach proprietary
+source to vulnerability reports.
 
 ---
 
@@ -373,4 +384,4 @@ and the complexity analyzer's scope handling.
 
 ## License
 
-MIT
+[MIT](LICENSE)

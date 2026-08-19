@@ -42,7 +42,7 @@ def test_json_output_is_valid_and_includes_health(project):
 
     assert result.exit_code == EXIT_OK
     assert payload["schema_version"] == "1.3.0"
-    assert payload["analyzer_version"] == "2.3.0"
+    assert payload["analyzer_version"] == "2.4.0"
     assert payload["ruleset_version"] == "2.2.0"
     assert payload["project"] == root.name
     assert 1.0 <= payload["rating"] <= 10.0

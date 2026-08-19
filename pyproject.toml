@@ -1,14 +1,15 @@
 [build-system]
-requires = ["setuptools>=69"]
+requires = ["setuptools==80.9.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "code-quality-analyzer"
 dynamic = ["version"]
-description = "Detect DSA and system design patterns in a codebase and rate it 1-10"
+description = "Privacy-first static code health analysis for Python packages"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     # click <8.3.3 carries PYSEC-2026-2132; keep this at or above the fix.
     "click==8.3.3",
@@ -18,6 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "build==1.3.0",
     "pytest==8.3.4",
     "pip-audit==2.7.3",
     "ruff==0.8.4",
