@@ -442,12 +442,13 @@ Completed in the first compatibility slice:
 - Added language-neutral `SourceFile` and opaque `ParsedFile` models.
 - Added protocols for language adapters, rule packs, metric providers, and reporters.
 - Added deterministic plugin registration, extension resolution, capability metadata, and conflict rejection.
-- Moved Python parsing and normalized Python rule execution behind built-in adapter and rule-pack plugins.
+- Moved Python parsing, normalized Python rule execution, passive package intelligence, and optional complexity analysis behind built-in adapter, rule-pack, and project-provider plugins.
 - Migrated the scanner to resolve Python behavior through the default registry while preserving parse-once, findings, patterns, package intelligence, baselines, and report output.
+- Added cached project-provider execution and deterministic capability metadata for default and optional analyses.
 - Updated package discovery so built-in language subpackages are included in wheels and source distributions.
 - Added a minimal synthetic language, rule pack, metric provider, and reporter contract test.
 
-Next work includes moving package intelligence and complexity behind providers, registering the current text/JSON reporters, adding capability negotiation, and removing remaining Python-specific discovery and pattern assumptions from the core orchestration.
+Next work includes registering the current text/JSON reporters, adding capability negotiation, sharing parsed facts with complexity analysis, and removing remaining Python-specific architecture-signal assumptions from the core orchestration.
 
 **Objective:** Extract a stable language-neutral core before adding another language.
 

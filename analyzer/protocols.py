@@ -70,3 +70,35 @@ class Reporter(Protocol):
     format_name: str
 
     def render(self, report: object) -> bytes: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectContext:
+    """Bounded project data supplied to a language project provider."""
+
+    root: Path
+    parsed_files: Mapping[str, ParsedFile]
+    max_file_size: int
+    max_files: int
+    redact_paths: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderResult:
+    """Language-neutral result envelope for project-level analysis."""
+
+    payload: object
+    health: Mapping[str, object]
+    findings: tuple[Finding, ...] = ()
+
+
+@runtime_checkable
+class ProjectProvider(Protocol):
+    """Produce package, graph, or complexity data for one language."""
+
+    provider_id: str
+    language_id: str
+    capability: str
+    enabled_by_default: bool
+
+    def analyze(self, project: ProjectContext) -> ProviderResult: ...

@@ -93,6 +93,7 @@ def test_minimal_plugins_register_and_share_normalized_models():
             "language_id": "stub",
             "provider_id": "stub-metrics",
         }],
+        "project_providers": [],
         "reporters": ["stub"],
     }
 
@@ -168,3 +169,41 @@ def test_scanner_discovers_registered_extension_without_branching(
     assert [finding.rule_id for finding in scanner.findings] == ["STUB-001"]
     assert dsa == {}
     assert design == {}
+
+
+def test_python_project_providers_are_registered_and_cached(project):
+    root = project({
+        "pyproject.toml": "[project]\nname = 'demo'\n",
+        "demo/__init__.py": "",
+        "demo/core.py": (
+            "def pairs(items):\n"
+            "    for left in items:\n"
+            "        for right in items:\n"
+            "            yield left, right\n"
+        ),
+    })
+    scanner = CodeScanner(root)
+
+    scanner.scan()
+    package = scanner.project_results[("python", "package")]
+    first = scanner.run_project_provider("python", "complexity")
+    second = scanner.run_project_provider("python", "complexity")
+
+    assert package.payload is scanner.package_intelligence
+    assert package.health == {"errors": 0, "complete": True}
+    assert first is second
+    assert first.payload["total_functions"] == 1
+    assert scanner.registry.capabilities()["project_providers"] == [
+        {
+            "language_id": "python",
+            "capability": "complexity",
+            "provider_id": "python-complexity",
+            "enabled_by_default": False,
+        },
+        {
+            "language_id": "python",
+            "capability": "package",
+            "provider_id": "python-package",
+            "enabled_by_default": True,
+        },
+    ]

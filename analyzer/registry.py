@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .protocols import LanguageAdapter, MetricProvider, Reporter, RulePack
+from .protocols import (
+    LanguageAdapter,
+    MetricProvider,
+    ProjectProvider,
+    Reporter,
+    RulePack,
+)
 
 
 class PluginRegistrationError(ValueError):
@@ -19,6 +25,9 @@ class PluginRegistry:
         self._extensions: dict[str, str] = {}
         self._rule_packs: dict[tuple[str, str], RulePack] = {}
         self._metrics: dict[tuple[str, str], MetricProvider] = {}
+        self._project_providers: dict[
+            tuple[str, str], ProjectProvider
+        ] = {}
         self._reporters: dict[str, Reporter] = {}
 
     def register_language(self, adapter: LanguageAdapter) -> None:
@@ -95,6 +104,33 @@ class PluginRegistry:
             if owner == language_id
         )
 
+    def register_project_provider(self, provider: ProjectProvider) -> None:
+        if provider.language_id not in self._languages:
+            raise PluginRegistrationError(
+                "Register a language adapter before its project providers"
+            )
+        key = (provider.language_id, provider.capability)
+        if key in self._project_providers:
+            raise PluginRegistrationError(
+                "Project provider already registered for "
+                f"{provider.language_id}:{provider.capability}"
+            )
+        self._project_providers[key] = provider
+
+    def project_provider(
+        self,
+        language_id: str,
+        capability: str,
+    ) -> ProjectProvider | None:
+        return self._project_providers.get((language_id, capability))
+
+    def default_project_providers(self) -> tuple[ProjectProvider, ...]:
+        return tuple(
+            provider
+            for _, provider in sorted(self._project_providers.items())
+            if provider.enabled_by_default
+        )
+
     def register_reporter(self, reporter: Reporter) -> None:
         if reporter.format_name in self._reporters:
             raise PluginRegistrationError(
@@ -134,6 +170,17 @@ class PluginRegistry:
             "metric_providers": [
                 {"language_id": language_id, "provider_id": provider_id}
                 for language_id, provider_id in sorted(self._metrics)
+            ],
+            "project_providers": [
+                {
+                    "language_id": language_id,
+                    "capability": capability,
+                    "provider_id": provider.provider_id,
+                    "enabled_by_default": provider.enabled_by_default,
+                }
+                for (language_id, capability), provider in sorted(
+                    self._project_providers.items()
+                )
             ],
             "reporters": sorted(self._reporters),
         }

@@ -19,7 +19,6 @@ from .baseline import (
     load_baseline,
     write_baseline,
 )
-from .complexity import ProjectComplexityAnalyzer
 from .discovery import DEFAULT_MAX_FILE_SIZE, DEFAULT_MAX_FILES
 from .offline import OfflineViolationError, enforce_offline
 from .patterns import DSA_PATTERNS, SYSTEM_DESIGN_PATTERNS
@@ -265,15 +264,10 @@ def _run_analysis(
     complexity_data = None
     complexity_health = None
     if complexity:
-        comp_analyzer = ProjectComplexityAnalyzer(
-            root,
-            max_file_size=max_file_size,
-            max_files=max_files,
-            redact_paths=internal_redaction,
-        )
-        comp_analyzer.analyze()
-        complexity_data = comp_analyzer.get_summary()
-        complexity_health = comp_analyzer.analysis_health()
+        result = scanner.run_project_provider("python", "complexity")
+        if result is not None:
+            complexity_data = result.payload
+            complexity_health = dict(result.health)
 
     if output_format == "json":
         _emit_json(

@@ -5,8 +5,15 @@ from __future__ import annotations
 import ast
 from collections.abc import Iterable
 
+from ..complexity import ProjectComplexityAnalyzer
 from ..findings import Finding
-from ..protocols import ParsedFile, SourceFile
+from ..package_intelligence import PythonPackageAnalyzer
+from ..protocols import (
+    ParsedFile,
+    ProjectContext,
+    ProviderResult,
+    SourceFile,
+)
 from ..python_rules import PythonRuleAnalyzer
 from ..registry import PluginRegistry
 from ..signals import extract_signals
@@ -56,8 +63,59 @@ class PythonRulePack:
         )
 
 
+class PythonPackageProvider:
+    """Provide passive Python package intelligence from shared parse data."""
+
+    provider_id = "python-package"
+    language_id = "python"
+    capability = "package"
+    enabled_by_default = True
+
+    def analyze(self, project: ProjectContext) -> ProviderResult:
+        artifacts = {
+            path: parsed.artifact
+            for path, parsed in project.parsed_files.items()
+            if isinstance(parsed.artifact, ast.AST)
+        }
+        analyzer = PythonPackageAnalyzer(
+            project.root,
+            artifacts,
+            redact_paths=project.redact_paths,
+        )
+        payload = analyzer.analyze()
+        return ProviderResult(
+            payload=payload,
+            health=analyzer.analysis_health(),
+            findings=tuple(analyzer.findings),
+        )
+
+
+class PythonComplexityProvider:
+    """Provide optional legacy Python complexity estimates via the registry."""
+
+    provider_id = "python-complexity"
+    language_id = "python"
+    capability = "complexity"
+    enabled_by_default = False
+
+    def analyze(self, project: ProjectContext) -> ProviderResult:
+        analyzer = ProjectComplexityAnalyzer(
+            project.root,
+            max_file_size=project.max_file_size,
+            max_files=project.max_files,
+            redact_paths=project.redact_paths,
+        )
+        analyzer.analyze()
+        return ProviderResult(
+            payload=analyzer.get_summary(),
+            health=analyzer.analysis_health(),
+        )
+
+
 def register_python_plugins(registry: PluginRegistry) -> PluginRegistry:
-    """Register the built-in Python adapter and rule pack."""
+    """Register the built-in Python adapter and analysis providers."""
     registry.register_language(PythonLanguageAdapter())
     registry.register_rule_pack(PythonRulePack())
+    registry.register_project_provider(PythonPackageProvider())
+    registry.register_project_provider(PythonComplexityProvider())
     return registry

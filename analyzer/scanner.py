@@ -13,10 +13,10 @@ from .discovery import (
     iter_source_files,
 )
 from .findings import Finding
-from .package_intelligence import PackageIntelligence, PythonPackageAnalyzer
+from .package_intelligence import PackageIntelligence
 from .patterns import DSA_PATTERNS, SYSTEM_DESIGN_PATTERNS
 from .plugins import create_default_registry
-from .protocols import SourceFile
+from .protocols import ParsedFile, ProjectContext, ProviderResult, SourceFile
 from .registry import PluginRegistry
 from .signals import FileSignals, pattern_is_present
 
@@ -60,7 +60,8 @@ class CodeScanner:
         self.dsa_evidence: dict[str, list[PatternHit]] = {}
         self.design_evidence: dict[str, list[PatternHit]] = {}
         self.findings: list[Finding] = []
-        self.parsed_files: dict[str, object] = {}
+        self.parsed_files: dict[str, dict[str, ParsedFile]] = {}
+        self.project_results: dict[tuple[str, str], ProviderResult] = {}
         self.package_intelligence = PackageIntelligence()
         self.package_health = {"errors": 0, "complete": True}
 
@@ -74,18 +75,59 @@ class CodeScanner:
             report=self.discovery,
         ):
             self._scan_file(path, content)
-        self._analyze_package()
+        self._run_default_project_providers()
         return self.dsa_found, self.design_found
 
-    def _analyze_package(self) -> None:
-        analyzer = PythonPackageAnalyzer(
-            self.project_path,
-            self.parsed_files,
+    def _project_context(self, language_id: str) -> ProjectContext:
+        return ProjectContext(
+            root=self.project_path,
+            parsed_files=self.parsed_files.get(language_id, {}),
+            max_file_size=self.max_file_size,
+            max_files=self.max_files,
             redact_paths=self.redact_paths,
         )
-        self.package_intelligence = analyzer.analyze()
-        self.package_health = analyzer.analysis_health()
-        self.findings.extend(analyzer.findings)
+
+    def _run_default_project_providers(self) -> None:
+        for provider in self.registry.default_project_providers():
+            self._run_project_provider(
+                provider.language_id,
+                provider.capability,
+            )
+        self._sort_findings()
+
+    def run_project_provider(
+        self,
+        language_id: str,
+        capability: str,
+    ) -> ProviderResult | None:
+        """Run one registered optional project provider once."""
+        result = self.project_results.get((language_id, capability))
+        if result is not None:
+            return result
+        result = self._run_project_provider(language_id, capability)
+        self._sort_findings()
+        return result
+
+    def _run_project_provider(
+        self,
+        language_id: str,
+        capability: str,
+    ) -> ProviderResult | None:
+        provider = self.registry.project_provider(language_id, capability)
+        if provider is None:
+            return None
+        result = provider.analyze(self._project_context(language_id))
+        self.project_results[(language_id, capability)] = result
+        self.findings.extend(result.findings)
+        if capability == "package" and isinstance(
+            result.payload,
+            PackageIntelligence,
+        ):
+            self.package_intelligence = result.payload
+            self.package_health = dict(result.health)
+        return result
+
+    def _sort_findings(self) -> None:
         self.findings.sort(
             key=lambda item: (
                 item.location.path,
@@ -122,6 +164,9 @@ class CodeScanner:
             self.unparsed_files += 1
             return
 
+        self.parsed_files.setdefault(adapter.language_id, {})[
+            internal_path
+        ] = parsed
         for rule_pack in self.registry.rule_packs_for(adapter.language_id):
             self.findings.extend(rule_pack.evaluate(parsed))
 
@@ -129,8 +174,6 @@ class CodeScanner:
             return
         if not isinstance(parsed.facts, FileSignals):
             raise TypeError("Python adapter must provide FileSignals facts")
-        if parsed.artifact is not None:
-            self.parsed_files[internal_path] = parsed.artifact
 
         signals = parsed.facts
         for name, definition in DSA_PATTERNS.items():
