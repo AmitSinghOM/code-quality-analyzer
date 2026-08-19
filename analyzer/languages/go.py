@@ -66,11 +66,15 @@ class GoLanguageAdapter:
         code_text, lexical_complete = _strip_comments_and_strings(
             source.content
         )
-        package = _PACKAGE.search(source.content)
+        metadata_text, metadata_complete = _strip_comments_and_strings(
+            source.content,
+            blank_strings=False,
+        )
+        package = _PACKAGE.search(code_text)
         facts = (
             GoFacts(
                 package_name=package.group(1),
-                imports=_imports(source.content),
+                imports=_imports(metadata_text),
                 code_text=code_text,
             )
             if package is not None
@@ -81,7 +85,11 @@ class GoLanguageAdapter:
             artifact=facts,
             facts=facts,
             line_count=len(source.content.splitlines()),
-            complete=lexical_complete and facts is not None,
+            complete=(
+                lexical_complete
+                and metadata_complete
+                and facts is not None
+            ),
         )
 
 
@@ -181,8 +189,12 @@ def _line_column(source: str, offset: int) -> tuple[int, int]:
     return line, offset - line_start + 1
 
 
-def _strip_comments_and_strings(source: str) -> tuple[str, bool]:
-    """Blank Go comments and string contents while preserving layout."""
+def _strip_comments_and_strings(
+    source: str,
+    *,
+    blank_strings: bool = True,
+) -> tuple[str, bool]:
+    """Blank Go comments and optional string contents, preserving layout."""
     output = list(source)
     index = 0
     state = "code"
@@ -206,7 +218,8 @@ def _strip_comments_and_strings(source: str) -> tuple[str, bool]:
                 continue
             if current in {'"', "'", "`"}:
                 quote = current
-                output[index] = " "
+                if blank_strings:
+                    output[index] = " "
                 state = "raw_string" if current == "`" else "string"
                 index += 1
                 continue
@@ -229,23 +242,26 @@ def _strip_comments_and_strings(source: str) -> tuple[str, bool]:
             continue
         elif state == "raw_string":
             if current == "`":
-                output[index] = " "
+                if blank_strings:
+                    output[index] = " "
                 state = "code"
-            elif current != "\n":
+            elif blank_strings and current != "\n":
                 output[index] = " "
             index += 1
             continue
         elif state == "string":
             if current == "\\" and following:
-                output[index] = " "
-                if following != "\n":
-                    output[index + 1] = " "
+                if blank_strings:
+                    output[index] = " "
+                    if following != "\n":
+                        output[index + 1] = " "
                 index += 2
                 continue
             if current == quote:
-                output[index] = " "
+                if blank_strings:
+                    output[index] = " "
                 state = "code"
-            elif current != "\n":
+            elif blank_strings and current != "\n":
                 output[index] = " "
             index += 1
             continue

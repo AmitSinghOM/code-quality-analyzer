@@ -71,11 +71,25 @@ def test_go_rule_ignores_comments_strings_unknown_calls_and_ok_values():
 
 
 def test_go_adapter_marks_missing_package_or_unclosed_literal_incomplete():
-    missing_package = parse_go("func main() {}\n")
+    missing_package = parse_go("// package fake\nfunc main() {}\n")
     unclosed_literal = parse_go('package main\nvar value = "unterminated\n')
 
     assert missing_package.complete is False
     assert unclosed_literal.complete is False
+
+
+def test_go_rule_does_not_trust_commented_imports():
+    parsed = parse_go(
+        "package service\n\n"
+        '// import "os"\n\n'
+        "func load(path string) []byte {\n"
+        "    data, _ := os.ReadFile(path)\n"
+        "    return data\n"
+        "}\n"
+    )
+
+    assert parsed.facts.imports == ()
+    assert list(GoRulePack().evaluate(parsed)) == []
 
 
 def test_scanner_handles_mixed_python_and_go_findings(project):
