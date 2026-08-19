@@ -37,8 +37,10 @@ DEFAULT_MAX_FILES = 20_000
 
 @dataclass
 class DiscoveryReport:
-    """Accounting for a discovery pass."""
+    """Accounting for a discovery pass with privacy-safe example paths."""
 
+    root: Path | None = field(default=None, repr=False)
+    redact_paths: bool = field(default=False, repr=False)
     files_found: int = 0
     skipped: dict[str, int] = field(default_factory=dict)
     skipped_examples: dict[str, list[str]] = field(default_factory=dict)
@@ -48,7 +50,12 @@ class DiscoveryReport:
         self.skipped[reason] = self.skipped.get(reason, 0) + 1
         examples = self.skipped_examples.setdefault(reason, [])
         if len(examples) < 3:
-            examples.append(str(path))
+            safe_path = (
+                display_path(path, self.root, self.redact_paths)
+                if self.root is not None
+                else Path(path).name
+            )
+            examples.append(safe_path)
 
     @property
     def total_skipped(self) -> int:
@@ -77,6 +84,8 @@ def iter_python_files(
     """
     root = Path(root).resolve()
     report = report if report is not None else DiscoveryReport()
+    if report.root is None:
+        report.root = root
 
     for path in _candidate_paths(root, max_files, report):
         text = read_source(path, root, max_file_size, report)

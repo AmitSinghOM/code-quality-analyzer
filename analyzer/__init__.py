@@ -1,3 +1,5 @@
-"""Code Quality Analyzer - Detect DSA and System Design patterns."""
+"""Code Quality Analyzer package and public contract versions."""
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
+REPORT_SCHEMA_VERSION = "1.0.0"
+RULESET_VERSION = "2.0.0"

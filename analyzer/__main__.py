@@ -11,6 +11,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from . import REPORT_SCHEMA_VERSION, RULESET_VERSION, __version__
 from .complexity import ProjectComplexityAnalyzer
 from .discovery import DEFAULT_MAX_FILE_SIZE, DEFAULT_MAX_FILES
 from .patterns import DSA_PATTERNS, SYSTEM_DESIGN_PATTERNS
@@ -35,17 +36,20 @@ EXIT_COVERAGE_GAP = 3
               type=click.Choice(['text', 'json']), default='text',
               help='Output format')
 @click.option('--complexity', '-c', is_flag=True,
-              help='Include time/space complexity analysis')
-@click.option('--max-file-size', default=DEFAULT_MAX_FILE_SIZE, show_default=True,
+              help='Include experimental time/space complexity estimates')
+@click.option('--max-file-size', type=click.IntRange(min=1),
+              default=DEFAULT_MAX_FILE_SIZE, show_default=True,
               help='Skip files larger than this many bytes')
-@click.option('--max-files', default=DEFAULT_MAX_FILES, show_default=True,
+@click.option('--max-files', type=click.IntRange(min=1),
+              default=DEFAULT_MAX_FILES, show_default=True,
               help='Stop after discovering this many Python files')
 @click.option('--redact-paths', is_flag=True,
               help='Report file names only, no directory structure')
-@click.option('--fail-under', type=float, default=None,
+@click.option('--fail-under', type=click.FloatRange(min=1.0, max=10.0),
+              default=None,
               help='Exit non-zero if the rating is below this value (for CI)')
 @click.option('--strict', is_flag=True,
-              help='Exit non-zero if any discovered file could not be analyzed')
+              help='Exit non-zero if any requested analysis is incomplete')
 def main(project_path: str, verbose: bool, output_format: str, complexity: bool,
          max_file_size: int, max_files: int, redact_paths: bool,
          fail_under: float | None, strict: bool):
@@ -55,8 +59,7 @@ def main(project_path: str, verbose: bool, output_format: str, complexity: bool,
     is_text = output_format == 'text'
 
     if is_text:
-        shown_root = root.name if redact_paths else root
-        console.print(f"\n[bold blue]Analyzing:[/bold blue] {shown_root}\n")
+        console.print(f"\n[bold blue]Analyzing:[/bold blue] {root.name}\n")
 
     scanner = CodeScanner(
         root,
@@ -94,25 +97,44 @@ def main(project_path: str, verbose: bool, output_format: str, complexity: bool,
         complexity_health = comp_analyzer.analysis_health()
 
     if output_format == 'json':
-        _emit_json(root, rating, rater, breakdown, dsa_found, design_found,
-                   scanner, scan_health, complexity_data, complexity_health,
-                   redact_paths)
+        _emit_json(
+            root, rating, rater, breakdown, dsa_found, design_found,
+            scanner, scan_health, complexity_data, complexity_health, verbose,
+        )
     else:
         _emit_text(rating, rater, breakdown, dsa_found, design_found,
                    scanner, scan_health, complexity_data, verbose)
 
-    sys.exit(_exit_code(scanner, rating, fail_under, strict))
+    sys.exit(
+        _exit_code(
+            scanner, rating, fail_under, strict,
+            complexity_health=complexity_health,
+        )
+    )
 
 
 def _exit_code(scanner: CodeScanner, rating: float,
-               fail_under: float | None, strict: bool) -> int:
+               fail_under: float | None, strict: bool,
+               complexity_health: dict | None = None) -> int:
     if scanner.files_scanned == 0:
         return EXIT_NOTHING_ANALYZED
-    if strict and scanner.has_coverage_gaps:
+    if strict and (
+        scanner.has_coverage_gaps or _health_has_gaps(complexity_health)
+    ):
         return EXIT_COVERAGE_GAP
     if fail_under is not None and rating < fail_under:
         return EXIT_BELOW_THRESHOLD
     return EXIT_OK
+
+
+def _health_has_gaps(health: dict | None) -> bool:
+    if not health:
+        return False
+    return bool(
+        health.get('total_skipped', 0)
+        or health.get('truncated', False)
+        or health.get('failed_functions', 0)
+    )
 
 
 def _pattern_payload(found, definitions, evidence, verbose: bool):
@@ -134,18 +156,21 @@ def _pattern_payload(found, definitions, evidence, verbose: bool):
 
 def _emit_json(root, rating, rater, breakdown, dsa_found, design_found,
                scanner, scan_health, complexity_data, complexity_health,
-               redact_paths):
+               verbose):
     output = {
-        "project": root.name if redact_paths else str(root),
+        "schema_version": REPORT_SCHEMA_VERSION,
+        "analyzer_version": __version__,
+        "ruleset_version": RULESET_VERSION,
+        "project": root.name,
         "rating": rating,
         "label": rater.get_rating_label(rating),
         "breakdown": breakdown,
         "scan_health": scan_health,
         "dsa_patterns": _pattern_payload(
-            dsa_found, DSA_PATTERNS, scanner.dsa_evidence, verbose=True),
+            dsa_found, DSA_PATTERNS, scanner.dsa_evidence, verbose=verbose),
         "design_patterns": _pattern_payload(
             design_found, SYSTEM_DESIGN_PATTERNS, scanner.design_evidence,
-            verbose=True),
+            verbose=verbose),
     }
     if complexity_data:
         output["complexity"] = complexity_data
@@ -209,7 +234,7 @@ def _print_scan_health(scan_health, scanner):
     if scanner.unparsed_files:
         console.print(
             f"[yellow]![/yellow] {scanner.unparsed_files} file(s) could not be "
-            f"parsed; only text signals were used for those"
+            f"parsed; no semantic signals were used for those files"
         )
     if scan_health['truncated']:
         console.print(

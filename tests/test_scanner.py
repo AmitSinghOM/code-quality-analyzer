@@ -153,13 +153,15 @@ def test_redacted_paths_drop_directories(project):
 
 
 def test_syntax_error_file_is_counted_as_unparsed(project):
-    root = project({"broken.py": "def f(:\n    pass\n"})
+    root = project({"broken.py": "def f(:\n    dp[0] = 1\n"})
 
     scanner = CodeScanner(root)
-    scanner.scan()
+    dsa, design = scanner.scan()
 
     assert scanner.unparsed_files == 1
     assert scanner.has_coverage_gaps is True
+    assert dsa == {}
+    assert design == {}
 
 
 def test_scanner_is_deterministic(project):

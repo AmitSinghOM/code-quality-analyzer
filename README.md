@@ -77,17 +77,18 @@ rather than silently returning a rating of 1.
 
 | Option | Default | Purpose |
 |--------|---------|---------|
-| `-v, --verbose` | off | Show matched files and the signals behind each match |
-| `-f, --output-format` | `text` | `text` or `json` |
-| `-c, --complexity` | off | Add time/space complexity analysis |
-| `--max-file-size` | 2 MB | Skip files larger than this many bytes |
-| `--max-files` | 20000 | Stop after discovering this many Python files |
+| `-v, --verbose` | off | Include matched files and evidence; JSON omits evidence unless enabled |
+| `-f, --output-format` | `text` | `text` or versioned `json` |
+| `-c, --complexity` | off | Add experimental time/space complexity estimates |
+| `--max-file-size` | 2 MB | Skip files larger than this positive byte count |
+| `--max-files` | 20000 | Stop after this positive number of Python files |
 | `--redact-paths` | off | Report file names only, no directory structure |
-| `--fail-under` | none | Exit non-zero when the rating is below this value |
-| `--strict` | off | Exit non-zero when any discovered file could not be analyzed |
+| `--fail-under` | none | Exit non-zero when the rating is below a value from 1 to 10 |
+| `--strict` | off | Exit non-zero when any requested analysis is incomplete |
 
 `-f` was `--format` in 1.x. It is now `--output-format` so it no longer shadows
-the `format` builtin.
+the `format` builtin. JSON reports include schema, analyzer, and ruleset versions
+so consumers can identify the contract that produced a result.
 
 ## Exit Codes
 
@@ -96,7 +97,7 @@ the `format` builtin.
 | 0 | Analysis completed and any threshold was met |
 | 1 | Rating below `--fail-under` |
 | 2 | No Python files were analyzed |
-| 3 | `--strict` and some discovered files could not be analyzed |
+| 3 | `--strict` and the pattern or requested complexity analysis was incomplete |
 
 ## Use in CI
 
@@ -109,20 +110,22 @@ as a ratchet it catches regressions; set aspirationally it just fails every
 build.
 
 `--strict` is the more valuable half of the gate: it fails when files could not
-be read or parsed, so a rating that quietly covers half the project doesn't
-pass as a green build.
+be read or parsed, discovery was truncated, or requested complexity analysis
+had a coverage gap. An incomplete rating therefore cannot silently pass as a
+green build.
 
 See `.github/workflows/ci.yml` for a working example that also runs the test
 suite, lint, and a dependency vulnerability scan.
 
 ## Paths
 
-Absolute paths are never written into reports. File paths are reported relative
-to the project root, and `--redact-paths` reduces them to bare file names for
-reports that get shared outside your machine.
+Absolute paths are never written into reports. The project is identified by its
+directory name, and file paths—including skipped-file examples—are reported
+relative to the project root. `--redact-paths` reduces file paths to bare names
+for reports shared outside your machine.
 
-Relative paths work fine as arguments (`.`, `../my-project`) — they are
-resolved before the walk starts.
+Relative paths work fine as arguments (`.`, `../my-project`)—they are resolved
+internally before discovery, but the resolved absolute path is not reported.
 
 ---
 
@@ -198,6 +201,10 @@ Excluded directories: `.git`, `__pycache__`, `.venv`, `venv`, `env`,
 `node_modules`, `dist`, `build`, `site-packages`, and the usual tool caches.
 
 ## Complexity Analysis
+
+Complexity output is an **experimental static estimate**, not an authoritative
+Big-O guarantee. Use its assumptions, reasoning, and confidence to prioritize
+manual review; do not use inferred Big-O alone as a CI quality gate.
 
 Use the `-c` flag to include time/space complexity analysis:
 

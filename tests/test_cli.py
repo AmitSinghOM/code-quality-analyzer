@@ -40,8 +40,22 @@ def test_json_output_is_valid_and_includes_health(project):
     payload = json.loads(result.output)
 
     assert result.exit_code == EXIT_OK
+    assert payload["schema_version"] == "1.0.0"
+    assert payload["analyzer_version"] == "2.0.0"
+    assert payload["ruleset_version"] == "2.0.0"
+    assert payload["project"] == root.name
     assert 1.0 <= payload["rating"] <= 10.0
     assert payload["scan_health"]["files_scanned"] == 1
+    assert "evidence" not in payload["dsa_patterns"]["dynamic_programming"]
+
+
+def test_verbose_json_includes_evidence(project):
+    root = project({"lib.py": RICH_SOURCE})
+
+    result = run([str(root), "-f", "json", "--verbose"])
+    payload = json.loads(result.output)
+
+    assert result.exit_code == EXIT_OK
     assert "evidence" in payload["dsa_patterns"]["dynamic_programming"]
 
 
@@ -81,13 +95,39 @@ def test_strict_flags_unreadable_files(project):
     assert result.exit_code == EXIT_COVERAGE_GAP
 
 
-def test_redact_paths_keeps_absolute_paths_out_of_json(project):
-    root = project({"pkg/lib.py": RICH_SOURCE})
+def test_report_paths_are_project_relative_and_never_absolute(project):
+    root = project({
+        "ok.py": "\n",
+        "pkg/too_large.py": RICH_SOURCE,
+    })
 
-    result = run([str(root), "-f", "json", "--redact-paths"])
+    result = run([str(root), "-f", "json", "--max-file-size", "1"])
+    payload = json.loads(result.output)
+
+    assert result.exit_code == EXIT_OK
+    assert str(root) not in result.output
+    assert payload["project"] == root.name
+    assert payload["scan_health"]["skipped_examples"]["too_large"] == [
+        "pkg/too_large.py"
+    ]
+
+
+def test_redact_paths_keeps_absolute_paths_out_of_json(project):
+    root = project({
+        "ok.py": "\n",
+        "pkg/too_large.py": RICH_SOURCE,
+    })
+
+    result = run([
+        str(root), "-f", "json", "--redact-paths", "--max-file-size", "1",
+    ])
+    payload = json.loads(result.output)
 
     assert str(root) not in result.output
-    assert json.loads(result.output)["project"] == root.name
+    assert payload["project"] == root.name
+    assert payload["scan_health"]["skipped_examples"]["too_large"] == [
+        "too_large.py"
+    ]
 
 
 def test_complexity_flag_adds_a_section(project):
@@ -98,3 +138,50 @@ def test_complexity_flag_adds_a_section(project):
 
     assert payload["complexity"]["total_functions"] == 2
     assert "complexity_health" in payload
+
+
+def test_strict_flags_truncated_scan(project):
+    root = project({
+        "a.py": "x = 1\n",
+        "b.py": "y = 2\n",
+    })
+
+    result = run([str(root), "--strict", "--max-files", "1"])
+
+    assert result.exit_code == EXIT_COVERAGE_GAP
+
+
+def test_strict_includes_complexity_health(project, monkeypatch):
+    from analyzer.complexity import ProjectComplexityAnalyzer
+
+    root = project({"lib.py": "def f():\n    return 1\n"})
+    monkeypatch.setattr(ProjectComplexityAnalyzer, "MAX_FUNCTIONS_PER_FILE", 0)
+
+    result = run([str(root), "--strict", "--complexity"])
+
+    assert result.exit_code == EXIT_COVERAGE_GAP
+
+
+def test_numeric_options_reject_out_of_range_values(project):
+    root = project({"lib.py": "x = 1\n"})
+
+    for option, value in (
+        ("--max-file-size", "0"),
+        ("--max-files", "0"),
+        ("--fail-under", "0"),
+        ("--fail-under", "11"),
+    ):
+        result = run([str(root), option, value])
+
+        assert result.exit_code != EXIT_OK
+        assert "invalid value" in result.output.lower()
+
+
+def test_text_output_does_not_print_absolute_project_path(project):
+    root = project({"lib.py": "x = 1\n"})
+
+    result = run([str(root)])
+
+    assert result.exit_code == EXIT_OK
+    assert str(root) not in result.output
+    assert root.name in result.output

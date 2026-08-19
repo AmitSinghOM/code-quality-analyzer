@@ -47,7 +47,10 @@ class CodeScanner:
         self.files_scanned = 0
         self.total_lines = 0
         self.unparsed_files = 0
-        self.discovery = DiscoveryReport()
+        self.discovery = DiscoveryReport(
+            root=self.project_path,
+            redact_paths=redact_paths,
+        )
 
         # pattern -> [file, ...] (kept for backwards compatibility)
         self.dsa_found: dict[str, list[str]] = {}
@@ -71,8 +74,9 @@ class CodeScanner:
         signals = extract_signals(path, source)
         self.files_scanned += 1
         self.total_lines += signals.line_count
-        if not signals.parsed:
+        if not signals.parsed or not signals.literals_stripped:
             self.unparsed_files += 1
+            return
 
         rel = display_path(path, self.project_path, self.redact_paths)
 

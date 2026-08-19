@@ -55,12 +55,11 @@ def test_attribute_and_call_names_are_collected():
     assert signals.has_import("heapq")
 
 
-def test_unparseable_file_still_yields_text_signals():
+def test_unparseable_file_produces_no_semantic_signals():
     signals = signals_for("def broken(:\n    dp[0] = 1\n")
 
     assert signals.parsed is False
-    # Tokenizer also fails here, so we fall back to raw text.
-    assert signals.has_text("dp[")
+    assert not signals.has_text("dp[")
 
 
 def test_fstring_contents_are_not_searched():

@@ -842,7 +842,10 @@ class ProjectComplexityAnalyzer:
         self.redact_paths = redact_paths
         self.results: list[FunctionComplexity] = []
         self.analyzer = AdvancedComplexityAnalyzer()
-        self.discovery = DiscoveryReport()
+        self.discovery = DiscoveryReport(
+            root=self.project_path,
+            redact_paths=redact_paths,
+        )
         self.failed_functions = 0
 
     def analyze(self) -> list[FunctionComplexity]:

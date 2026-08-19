@@ -71,14 +71,17 @@ def extract_signals(path: Path, source: str) -> FileSignals:
         tree = ast.parse(source)
     except (SyntaxError, ValueError, RecursionError):
         signals.parsed = False
+        signals.code_text = ""
         return signals
 
     collector = _SymbolCollector()
     try:
         collector.visit(tree)
     except RecursionError:
-        # Deeply nested source can blow the visitor stack. Keep what we have.
+        # Partial semantic facts are unsafe to use as pattern evidence.
         signals.parsed = False
+        signals.code_text = ""
+        return signals
 
     signals.identifiers = collector.identifiers
     signals.imports = collector.imports
