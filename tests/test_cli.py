@@ -7,6 +7,7 @@ from click.testing import CliRunner
 from analyzer.__main__ import (
     EXIT_BELOW_THRESHOLD,
     EXIT_COVERAGE_GAP,
+    EXIT_FINDINGS,
     EXIT_NOTHING_ANALYZED,
     EXIT_OK,
     main,
@@ -40,8 +41,8 @@ def test_json_output_is_valid_and_includes_health(project):
     payload = json.loads(result.output)
 
     assert result.exit_code == EXIT_OK
-    assert payload["schema_version"] == "1.2.0"
-    assert payload["analyzer_version"] == "2.2.0"
+    assert payload["schema_version"] == "1.3.0"
+    assert payload["analyzer_version"] == "2.3.0"
     assert payload["ruleset_version"] == "2.2.0"
     assert payload["project"] == root.name
     assert 1.0 <= payload["rating"] <= 10.0
@@ -253,3 +254,97 @@ def test_strict_fails_for_invalid_package_metadata(project):
         "complete": False,
     }
     assert payload["findings"][0]["rule_id"] == "PY-PKG-003"
+
+
+def test_baseline_supports_new_findings_only_ci_gate(project, tmp_path):
+    root = project({
+        "existing.py": "def existing(items=[]):\n    return items\n",
+    })
+    baseline = tmp_path / "baseline.json"
+
+    written = run([
+        str(root), "--output-format", "json", "--write-baseline", str(baseline),
+    ])
+    written_payload = json.loads(written.output)
+
+    assert written.exit_code == EXIT_OK
+    assert written_payload["baseline"]["written"] is True
+    assert "existing.py" not in baseline.read_text(encoding="utf-8")
+
+    unchanged = run([
+        str(root), "--output-format", "json", "--baseline", str(baseline),
+        "--new-findings-only", "--fail-on", "warning",
+    ])
+    unchanged_payload = json.loads(unchanged.output)
+
+    assert unchanged.exit_code == EXIT_OK
+    assert unchanged_payload["findings"] == []
+    assert unchanged_payload["baseline"]["new_findings"] == 0
+
+    (root / "new.py").write_text(
+        "def introduced(cache={}):\n    return cache\n",
+        encoding="utf-8",
+    )
+    changed = run([
+        str(root), "--output-format", "json", "--baseline", str(baseline),
+        "--new-findings-only", "--fail-on", "warning",
+    ])
+    changed_payload = json.loads(changed.output)
+
+    assert changed.exit_code == EXIT_FINDINGS
+    assert changed_payload["baseline"]["new_findings"] == 1
+    assert len(changed_payload["findings"]) == 1
+    assert changed_payload["findings"][0]["location"]["path"] == "new.py"
+
+
+def test_error_gate_ignores_warning_findings(project):
+    root = project({"service.py": "def f(cache={}):\n    return cache\n"})
+
+    result = run([str(root), "--fail-on", "error"])
+
+    assert result.exit_code == EXIT_OK
+
+
+def test_warning_gate_fails_for_warning_findings(project):
+    root = project({"service.py": "def f(cache={}):\n    return cache\n"})
+
+    result = run([str(root), "--fail-on", "warning"])
+
+    assert result.exit_code == EXIT_FINDINGS
+
+
+def test_new_findings_only_requires_baseline(project):
+    root = project({"service.py": "VALUE = 1\n"})
+
+    result = run([str(root), "--new-findings-only"])
+
+    assert result.exit_code != EXIT_OK
+    assert "requires --baseline" in result.output
+
+
+def test_invalid_baseline_fails_without_traceback(project, tmp_path):
+    root = project({"service.py": "VALUE = 1\n"})
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text("not-json", encoding="utf-8")
+
+    result = run([str(root), "--baseline", str(baseline)])
+
+    assert result.exit_code != EXIT_OK
+    assert "Baseline is not readable valid JSON" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_error_gate_fails_for_package_error(project):
+    root = project({
+        "pyproject.toml": (
+            "[project]\n"
+            "name = 'demo'\n\n"
+            "[project.scripts]\n"
+            "demo = 'demo.missing:main'\n"
+        ),
+        "demo/__init__.py": "",
+    })
+
+    result = run([str(root), "--fail-on", "error"])
+
+    assert result.exit_code == EXIT_FINDINGS

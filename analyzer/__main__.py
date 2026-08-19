@@ -12,6 +12,12 @@ from rich.panel import Panel
 from rich.table import Table
 
 from . import REPORT_SCHEMA_VERSION, RULESET_VERSION, __version__
+from .baseline import (
+    BaselineError,
+    compare_findings,
+    load_baseline,
+    write_baseline,
+)
 from .complexity import ProjectComplexityAnalyzer
 from .discovery import DEFAULT_MAX_FILE_SIZE, DEFAULT_MAX_FILES
 from .patterns import DSA_PATTERNS, SYSTEM_DESIGN_PATTERNS
@@ -24,6 +30,7 @@ EXIT_OK = 0
 EXIT_BELOW_THRESHOLD = 1
 EXIT_NOTHING_ANALYZED = 2
 EXIT_COVERAGE_GAP = 3
+EXIT_FINDINGS = 4
 
 
 @click.command()
@@ -48,12 +55,35 @@ EXIT_COVERAGE_GAP = 3
 @click.option('--fail-under', type=click.FloatRange(min=1.0, max=10.0),
               default=None,
               help='Exit non-zero if the rating is below this value (for CI)')
+@click.option('--fail-on', type=click.Choice(['warning', 'error']), default=None,
+              help='Exit 4 when a reported finding meets this severity')
+@click.option('--baseline', 'baseline_path', type=click.Path(
+                  exists=True, file_okay=True, dir_okay=False,
+                  readable=True, path_type=Path),
+              default=None, help='Compare findings with a hashed baseline')
+@click.option('--write-baseline', 'write_baseline_path', type=click.Path(
+                  file_okay=True, dir_okay=False, path_type=Path),
+              default=None, help='Write current finding fingerprints atomically')
+@click.option('--new-findings-only', is_flag=True,
+              help='Report and gate only findings absent from --baseline')
 @click.option('--strict', is_flag=True,
               help='Exit non-zero if any requested analysis is incomplete')
 def main(project_path: str, verbose: bool, output_format: str, complexity: bool,
          max_file_size: int, max_files: int, redact_paths: bool,
-         fail_under: float | None, strict: bool):
-    """Analyze a project for DSA and System Design patterns."""
+         fail_under: float | None, fail_on: str | None,
+         baseline_path: Path | None, write_baseline_path: Path | None,
+         new_findings_only: bool, strict: bool):
+    """Analyze a project without sending source outside the machine."""
+
+    if new_findings_only and baseline_path is None:
+        raise click.UsageError('--new-findings-only requires --baseline')
+
+    known_fingerprints = None
+    if baseline_path is not None:
+        try:
+            known_fingerprints = load_baseline(baseline_path)
+        except BaselineError as error:
+            raise click.ClickException(str(error)) from error
 
     root = Path(project_path).resolve()
     is_text = output_format == 'text'
@@ -83,6 +113,30 @@ def main(project_path: str, verbose: bool, output_format: str, complexity: bool,
     )
     rating, breakdown = rater.calculate_rating()
 
+    baseline_written = False
+    if write_baseline_path is not None:
+        try:
+            write_baseline(write_baseline_path, scanner.findings)
+        except BaselineError as error:
+            raise click.ClickException(str(error)) from error
+        baseline_written = True
+
+    comparison = compare_findings(
+        scanner.findings,
+        known_fingerprints,
+        written=baseline_written,
+    )
+    reported_findings = (
+        list(comparison.new_findings)
+        if new_findings_only
+        else scanner.findings
+    )
+    baseline_summary = (
+        comparison.as_dict()
+        if baseline_path is not None or write_baseline_path is not None
+        else None
+    )
+
     complexity_data = None
     complexity_health = None
     if complexity:
@@ -100,22 +154,29 @@ def main(project_path: str, verbose: bool, output_format: str, complexity: bool,
         _emit_json(
             root, rating, rater, breakdown, dsa_found, design_found,
             scanner, scan_health, complexity_data, complexity_health, verbose,
+            reported_findings, baseline_summary,
         )
     else:
-        _emit_text(rating, rater, breakdown, dsa_found, design_found,
-                   scanner, scan_health, complexity_data, verbose)
+        _emit_text(
+            rating, rater, breakdown, dsa_found, design_found,
+            scanner, scan_health, complexity_data, verbose,
+            reported_findings, baseline_summary,
+        )
 
     sys.exit(
         _exit_code(
             scanner, rating, fail_under, strict,
             complexity_health=complexity_health,
+            findings=reported_findings,
+            fail_on=fail_on,
         )
     )
 
 
 def _exit_code(scanner: CodeScanner, rating: float,
                fail_under: float | None, strict: bool,
-               complexity_health: dict | None = None) -> int:
+               complexity_health: dict | None = None,
+               findings=None, fail_on: str | None = None) -> int:
     if scanner.files_scanned == 0:
         return EXIT_NOTHING_ANALYZED
     if strict and (
@@ -124,7 +185,18 @@ def _exit_code(scanner: CodeScanner, rating: float,
         return EXIT_COVERAGE_GAP
     if fail_under is not None and rating < fail_under:
         return EXIT_BELOW_THRESHOLD
+    if fail_on is not None and _findings_reach_severity(findings or [], fail_on):
+        return EXIT_FINDINGS
     return EXIT_OK
+
+
+def _findings_reach_severity(findings, threshold: str) -> bool:
+    severity_rank = {"warning": 1, "error": 2}
+    minimum = severity_rank[threshold]
+    return any(
+        severity_rank.get(finding.severity, 0) >= minimum
+        for finding in findings
+    )
 
 
 def _health_has_gaps(health: dict | None) -> bool:
@@ -169,7 +241,7 @@ def _finding_summary(findings):
 
 def _emit_json(root, rating, rater, breakdown, dsa_found, design_found,
                scanner, scan_health, complexity_data, complexity_health,
-               verbose):
+               verbose, reported_findings, baseline_summary):
     output = {
         "schema_version": REPORT_SCHEMA_VERSION,
         "analyzer_version": __version__,
@@ -180,14 +252,16 @@ def _emit_json(root, rating, rater, breakdown, dsa_found, design_found,
         "breakdown": breakdown,
         "scan_health": scan_health,
         "package_intelligence": scanner.package_intelligence.as_dict(),
-        "finding_summary": _finding_summary(scanner.findings),
-        "findings": [finding.as_dict() for finding in scanner.findings],
+        "finding_summary": _finding_summary(reported_findings),
+        "findings": [finding.as_dict() for finding in reported_findings],
         "dsa_patterns": _pattern_payload(
             dsa_found, DSA_PATTERNS, scanner.dsa_evidence, verbose=verbose),
         "design_patterns": _pattern_payload(
             design_found, SYSTEM_DESIGN_PATTERNS, scanner.design_evidence,
             verbose=verbose),
     }
+    if baseline_summary is not None:
+        output["baseline"] = baseline_summary
     if complexity_data:
         output["complexity"] = complexity_data
     if complexity_health:
@@ -196,7 +270,8 @@ def _emit_json(root, rating, rater, breakdown, dsa_found, design_found,
 
 
 def _emit_text(rating, rater, breakdown, dsa_found, design_found,
-               scanner, scan_health, complexity_data, verbose):
+               scanner, scan_health, complexity_data, verbose,
+               reported_findings, baseline_summary):
     rating_color = "red" if rating < 4 else "yellow" if rating < 7 else "green"
     console.print(Panel(
         f"[bold {rating_color}]{rating}/10[/bold {rating_color}]\n"
@@ -222,7 +297,8 @@ def _emit_text(rating, rater, breakdown, dsa_found, design_found,
         console.print()
 
     _print_package_intelligence(scanner.package_intelligence)
-    _print_findings(scanner.findings)
+    _print_baseline_summary(baseline_summary)
+    _print_findings(reported_findings)
     _print_pattern_table(
         "DSA Patterns Detected", "cyan", dsa_found, DSA_PATTERNS,
         scanner.dsa_evidence, verbose,
@@ -259,6 +335,20 @@ def _print_scan_health(scan_health, scanner):
             "[yellow]![/yellow] File limit reached — results cover part of the "
             "project only (raise --max-files)"
         )
+
+
+def _print_baseline_summary(summary):
+    if summary is None:
+        return
+    console.print(Panel(
+        f"[bold]Loaded:[/bold] {summary['loaded']}\n"
+        f"[bold]Written:[/bold] {summary['written']}\n"
+        f"[bold]Current findings:[/bold] {summary['current_findings']}\n"
+        f"[bold]New findings:[/bold] {summary['new_findings']}",
+        title="[bold]Finding Baseline[/bold]",
+        expand=False,
+    ))
+    console.print()
 
 
 def _print_package_intelligence(package):

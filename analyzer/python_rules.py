@@ -14,7 +14,12 @@ class PythonRule(Protocol):
 
     rule_id: str
 
-    def evaluate(self, tree: ast.AST, path: str) -> Iterable[Finding]: ...
+    def evaluate(
+        self,
+        tree: ast.AST,
+        path: str,
+        identity_path: str | None = None,
+    ) -> Iterable[Finding]: ...
 
 
 class MutableDefaultRule:
@@ -28,16 +33,23 @@ class MutableDefaultRule:
         "Use None as the default and create a new value inside the function."
     )
 
-    def evaluate(self, tree: ast.AST, path: str) -> Iterable[Finding]:
+    def evaluate(
+        self,
+        tree: ast.AST,
+        path: str,
+        identity_path: str | None = None,
+    ) -> Iterable[Finding]:
+        identity_path = identity_path or path
         for node in ast.walk(tree):
             if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
                 continue
-            yield from self._function_findings(node, path)
+            yield from self._function_findings(node, path, identity_path)
 
     def _function_findings(
         self,
         node: ast.FunctionDef | ast.AsyncFunctionDef,
         path: str,
+        identity_path: str,
     ) -> Iterable[Finding]:
         positional = [*node.args.posonlyargs, *node.args.args]
         positional_with_defaults = (
@@ -52,15 +64,34 @@ class MutableDefaultRule:
         )
         for argument, default in defaults:
             if kind := _mutable_default_kind(default):
-                yield self._finding(node.name, argument.arg, default, kind, path)
+                yield self._finding(
+                    node.name,
+                    argument.arg,
+                    default,
+                    kind,
+                    path,
+                    identity_path,
+                )
 
         for argument, default in zip(
             node.args.kwonlyargs,
             node.args.kw_defaults,
             strict=True,
         ):
-            if default is not None and (kind := _mutable_default_kind(default)):
-                yield self._finding(node.name, argument.arg, default, kind, path)
+            kind = (
+                _mutable_default_kind(default)
+                if default is not None
+                else None
+            )
+            if kind is not None:
+                yield self._finding(
+                    node.name,
+                    argument.arg,
+                    default,
+                    kind,
+                    path,
+                    identity_path,
+                )
 
     def _finding(
         self,
@@ -69,6 +100,7 @@ class MutableDefaultRule:
         default: ast.expr,
         kind: str,
         path: str,
+        identity_path: str,
     ) -> Finding:
         return Finding(
             rule_id=self.rule_id,
@@ -89,6 +121,7 @@ class MutableDefaultRule:
                     if getattr(default, "end_col_offset", None) is not None
                     else None
                 ),
+                identity_path=identity_path,
             ),
             remediation=self.remediation,
         )
@@ -122,13 +155,22 @@ class PythonRuleAnalyzer:
     """Run registered Python rules and return deterministic findings."""
 
     def __init__(self, rules: Sequence[PythonRule] | None = None) -> None:
-        self.rules = tuple(rules) if rules is not None else (MutableDefaultRule(),)
+        self.rules = (
+            tuple(rules)
+            if rules is not None
+            else (MutableDefaultRule(),)
+        )
 
-    def analyze(self, tree: ast.AST, path: str) -> list[Finding]:
+    def analyze(
+        self,
+        tree: ast.AST,
+        path: str,
+        identity_path: str | None = None,
+    ) -> list[Finding]:
         findings = [
             finding
             for rule in self.rules
-            for finding in rule.evaluate(tree, path)
+            for finding in rule.evaluate(tree, path, identity_path)
         ]
         return sorted(
             findings,

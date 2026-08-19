@@ -110,7 +110,13 @@ class CodeScanner:
         rel = display_path(path, self.project_path, self.redact_paths)
         if signals.tree is not None:
             self.parsed_files[internal_rel] = signals.tree
-            self.findings.extend(self.rule_analyzer.analyze(signals.tree, rel))
+            self.findings.extend(
+                self.rule_analyzer.analyze(
+                    signals.tree,
+                    rel,
+                    identity_path=internal_rel,
+                )
+            )
 
         for name, definition in DSA_PATTERNS.items():
             present, matched = pattern_is_present(signals, definition)

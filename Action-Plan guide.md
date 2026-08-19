@@ -337,6 +337,23 @@ Next work includes namespace-package coverage, dependency declaration comparison
 
 ### Phase 4 — Developer and CI workflows
 
+#### Phase 4 progress (August 20, 2026)
+
+**Status:** In progress
+
+Completed in the first Phase 4 vertical slice:
+
+- Added deterministic SHA-256 finding fingerprints with hidden project-relative identity paths.
+- Added bounded, schema-versioned baseline loading with strict validation.
+- Added atomic baseline writing that stores no source paths, messages, or snippets.
+- Added `--baseline`, `--write-baseline`, and `--new-findings-only` workflows.
+- Added `--fail-on warning|error` with dedicated exit code 4.
+- Added baseline summaries to JSON and terminal reports.
+- Kept fingerprints stable when report paths are redacted.
+- Added privacy, comparison, invalid-input, and end-to-end CI-gate tests.
+
+Next work includes SARIF, changed-line awareness, pre-commit integration, content-hash caching, and richer category/rule-specific policies.
+
 **Objective:** Make adoption practical without forcing teams to fix all historical findings immediately.
 
 **Work:**

@@ -237,6 +237,7 @@ def _build_import_graph(
                             ) is not None
                             else None
                         ),
+                        identity_path=path,
                     ),
                 )
     return graph, locations

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True, slots=True)
@@ -14,6 +14,11 @@ class Location:
     column: int
     end_line: int | None = None
     end_column: int | None = None
+    identity_path: str | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+    )
 
     def as_dict(self) -> dict:
         payload = {

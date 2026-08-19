@@ -26,6 +26,7 @@ code-quality-analyzer/
 ├── analyzer/
 │   ├── __init__.py
 │   ├── __main__.py      # CLI entry point
+│   ├── baseline.py      # Hashed finding baselines and comparison
 │   ├── discovery.py     # Safe file discovery (limits, symlink guard)
 │   ├── findings.py      # Language-neutral actionable finding model
 │   ├── signals.py       # Per-file signal extraction + pattern matching
@@ -87,6 +88,10 @@ rather than silently returning a rating of 1.
 | `--max-files` | 20000 | Stop after this positive number of Python files |
 | `--redact-paths` | off | Report file names only, no directory structure |
 | `--fail-under` | none | Exit non-zero when the rating is below a value from 1 to 10 |
+| `--fail-on` | none | Exit 4 for reported findings at `warning` or `error` severity |
+| `--baseline` | none | Compare findings with an existing hashed baseline |
+| `--write-baseline` | none | Atomically write current finding fingerprints |
+| `--new-findings-only` | off | Report and gate only findings absent from `--baseline` |
 | `--strict` | off | Exit non-zero when any requested analysis is incomplete |
 
 `-f` was `--format` in 1.x. It is now `--output-format` so it no longer shadows
@@ -101,21 +106,37 @@ so consumers can identify the contract that produced a result.
 | 1 | Rating below `--fail-under` |
 | 2 | No Python files were analyzed |
 | 3 | `--strict` and the pattern or requested complexity analysis was incomplete |
+| 4 | A reported finding met the `--fail-on` severity threshold |
 
 ## Use in CI
 
+Create a baseline once after reviewing existing findings:
+
 ```bash
-code-quality-analyzer . --fail-under 5 --strict
+code-quality-analyzer . --write-baseline .code-quality-baseline.json
 ```
 
-Set `--fail-under` just below your current rating and raise it over time. Used
-as a ratchet it catches regressions; set aspirationally it just fails every
-build.
+Then gate only newly introduced warning-or-higher findings:
 
-`--strict` is the more valuable half of the gate: it fails when files could not
-be read or parsed, discovery was truncated, or requested complexity analysis
-had a coverage gap. An incomplete rating therefore cannot silently pass as a
-green build.
+```bash
+code-quality-analyzer . \
+  --baseline .code-quality-baseline.json \
+  --new-findings-only \
+  --fail-on warning \
+  --strict
+```
+
+Baseline files contain only schema metadata and SHA-256 fingerprints. They do
+not contain source paths, messages, identifiers, snippets, or report evidence.
+Baseline writes are atomic, malformed or oversized baselines are rejected, and
+fingerprints remain stable when `--redact-paths` changes report presentation.
+See [`docs/BASELINES.md`](docs/BASELINES.md) for workflow and review guidance.
+
+`--fail-under` remains available as a rating ratchet, but actionable finding
+gates are more explicit. `--strict` fails when files cannot be read or parsed,
+discovery is truncated, package metadata is invalid, or requested complexity
+analysis has a coverage gap. Incomplete analysis therefore cannot silently
+pass as a green build.
 
 See `.github/workflows/ci.yml` for a working example that also runs the test
 suite, lint, and a dependency vulnerability scan.
