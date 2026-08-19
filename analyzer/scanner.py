@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from .discovery import (
     iter_python_files,
 )
 from .findings import Finding
+from .package_intelligence import PackageIntelligence, PythonPackageAnalyzer
 from .patterns import DSA_PATTERNS, SYSTEM_DESIGN_PATTERNS
 from .python_rules import PythonRuleAnalyzer
 from .signals import extract_signals, pattern_is_present
@@ -62,6 +64,9 @@ class CodeScanner:
         self.design_evidence: dict[str, list[PatternHit]] = {}
         self.rule_analyzer = PythonRuleAnalyzer()
         self.findings: list[Finding] = []
+        self.parsed_files: dict[str, ast.AST] = {}
+        self.package_intelligence = PackageIntelligence()
+        self.package_health = {"errors": 0, "complete": True}
 
     def scan(self) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
         """Scan all Python files in the project."""
@@ -72,7 +77,26 @@ class CodeScanner:
             report=self.discovery,
         ):
             self._scan_file(path, source)
+        self._analyze_package()
         return self.dsa_found, self.design_found
+
+    def _analyze_package(self) -> None:
+        analyzer = PythonPackageAnalyzer(
+            self.project_path,
+            self.parsed_files,
+            redact_paths=self.redact_paths,
+        )
+        self.package_intelligence = analyzer.analyze()
+        self.package_health = analyzer.analysis_health()
+        self.findings.extend(analyzer.findings)
+        self.findings.sort(
+            key=lambda item: (
+                item.location.path,
+                item.location.line,
+                item.location.column,
+                item.rule_id,
+            )
+        )
 
     def _scan_file(self, path: Path, source: str) -> None:
         signals = extract_signals(path, source)
@@ -82,8 +106,10 @@ class CodeScanner:
             self.unparsed_files += 1
             return
 
+        internal_rel = display_path(path, self.project_path, redact=False)
         rel = display_path(path, self.project_path, self.redact_paths)
         if signals.tree is not None:
+            self.parsed_files[internal_rel] = signals.tree
             self.findings.extend(self.rule_analyzer.analyze(signals.tree, rel))
 
         for name, definition in DSA_PATTERNS.items():
@@ -118,6 +144,7 @@ class CodeScanner:
         health = self.discovery.as_dict()
         health["files_scanned"] = self.files_scanned
         health["unparsed_files"] = self.unparsed_files
+        health["package_analysis"] = self.package_health
         return health
 
     @property
@@ -127,4 +154,5 @@ class CodeScanner:
             self.discovery.total_skipped > 0
             or self.discovery.truncated
             or self.unparsed_files > 0
+            or self.package_health.get("errors", 0) > 0
         )

@@ -31,6 +31,7 @@ code-quality-analyzer/
 │   ├── signals.py       # Per-file signal extraction + pattern matching
 │   ├── python_rules.py  # Source-located Python correctness rules
 │   ├── patterns.py      # DSA & System Design pattern definitions
+│   ├── package_intelligence.py # Metadata, modules, imports, cycles
 │   ├── scanner.py       # File scanner and pattern detector
 │   ├── complexity.py    # Time/space complexity analyzer
 │   └── rater.py         # Rating calculator (1-10)
@@ -217,6 +218,26 @@ behavior and remediation examples.
 Files are parsed once for signal extraction and actionable Python rules.
 Malformed files emit no semantic findings and remain visible through analysis
 health.
+
+## Package Intelligence
+
+Package intelligence is passive: it does not import, build, or execute project
+code. Every normal scan now reports:
+
+- Parsed `pyproject.toml` name, Python requirement, build backend, dependencies,
+  optional dependency groups, and console scripts
+- Detected `src` or flat package layout and source roots
+- First-party modules and their local import graph
+- Circular import groups
+- Console scripts that target missing local modules
+
+Invalid TOML produces `PY-PKG-003` and makes `--strict` fail. Circular imports
+produce `PY-PKG-001`; invalid console-script module targets produce
+`PY-PKG-002`. Test-only directories without a package initializer are excluded
+from flat-layout package modules. See [`docs/RULES.md`](docs/RULES.md).
+
+Python 3.10 uses the pinned `tomli` compatibility parser; Python 3.11 and newer
+use the standard-library `tomllib` parser.
 
 ## Complexity Analysis
 

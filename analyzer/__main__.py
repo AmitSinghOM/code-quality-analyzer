@@ -179,6 +179,7 @@ def _emit_json(root, rating, rater, breakdown, dsa_found, design_found,
         "label": rater.get_rating_label(rating),
         "breakdown": breakdown,
         "scan_health": scan_health,
+        "package_intelligence": scanner.package_intelligence.as_dict(),
         "finding_summary": _finding_summary(scanner.findings),
         "findings": [finding.as_dict() for finding in scanner.findings],
         "dsa_patterns": _pattern_payload(
@@ -220,6 +221,7 @@ def _emit_text(rating, rater, breakdown, dsa_found, design_found,
     if breakdown.get('warnings') or scanner.has_coverage_gaps:
         console.print()
 
+    _print_package_intelligence(scanner.package_intelligence)
     _print_findings(scanner.findings)
     _print_pattern_table(
         "DSA Patterns Detected", "cyan", dsa_found, DSA_PATTERNS,
@@ -257,6 +259,23 @@ def _print_scan_health(scan_health, scanner):
             "[yellow]![/yellow] File limit reached — results cover part of the "
             "project only (raise --max-files)"
         )
+
+
+def _print_package_intelligence(package):
+    if not package.pyproject_present and not package.modules:
+        return
+    name = package.project_name or "not declared"
+    source_roots = ", ".join(package.source_roots) or "none"
+    console.print(Panel(
+        f"[bold]Project:[/bold] {name}\n"
+        f"[bold]Layout:[/bold] {package.layout} ({source_roots})\n"
+        f"[bold]Modules:[/bold] {len(package.modules)}\n"
+        f"[bold]Declared dependencies:[/bold] {len(package.dependencies)}\n"
+        f"[bold]Circular import groups:[/bold] {len(package.circular_imports)}",
+        title="[bold]Package Intelligence[/bold]",
+        expand=False,
+    ))
+    console.print()
 
 
 def _print_findings(findings):

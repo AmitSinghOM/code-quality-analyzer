@@ -290,6 +290,23 @@ Next work is `.code-quality.toml`, ignore/suppression support, severity-based ga
 
 ### Phase 3 — Python package intelligence
 
+#### Phase 3 progress (August 20, 2026)
+
+**Status:** In progress
+
+Completed in the first Phase 3 vertical slice:
+
+- Added passive `pyproject.toml` parsing without importing or executing project code.
+- Added project name, Python requirement, build backend, dependencies, optional groups, and console scripts to reports.
+- Added `src` and flat-layout detection with first-party module inventory.
+- Added a local module import graph using the AST already produced by the scanner.
+- Added strongly connected component detection for circular imports.
+- Added `PY-PKG-001` for circular imports, `PY-PKG-002` for missing console-script modules, and `PY-PKG-003` for invalid TOML.
+- Made invalid package metadata participate in strict-mode analysis health.
+- Added a pinned Python 3.10 TOML compatibility dependency.
+
+Next work includes namespace-package coverage, dependency declaration comparison, public API analysis, package-data validation, and opt-in isolated build/import checks.
+
 **Objective:** Analyze whether a Python package is correctly structured and distributable.
 
 **Work:**

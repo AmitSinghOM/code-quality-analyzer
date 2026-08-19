@@ -40,9 +40,9 @@ def test_json_output_is_valid_and_includes_health(project):
     payload = json.loads(result.output)
 
     assert result.exit_code == EXIT_OK
-    assert payload["schema_version"] == "1.1.0"
-    assert payload["analyzer_version"] == "2.1.0"
-    assert payload["ruleset_version"] == "2.1.0"
+    assert payload["schema_version"] == "1.2.0"
+    assert payload["analyzer_version"] == "2.2.0"
+    assert payload["ruleset_version"] == "2.2.0"
     assert payload["project"] == root.name
     assert 1.0 <= payload["rating"] <= 10.0
     assert payload["scan_health"]["files_scanned"] == 1
@@ -218,3 +218,38 @@ def test_text_output_shows_actionable_finding(project):
     assert "Actionable Findings" in result.output
     assert "PY-COR-001" in result.output
     assert "service.py:1:13" in result.output
+
+
+def test_json_includes_package_intelligence(project):
+    root = project({
+        "pyproject.toml": "[project]\nname = 'demo'\ndependencies = ['click']\n",
+        "demo/__init__.py": "",
+        "demo/core.py": "VALUE = 1\n",
+    })
+
+    result = run([str(root), "--output-format", "json"])
+    payload = json.loads(result.output)
+
+    assert result.exit_code == EXIT_OK
+    package = payload["package_intelligence"]
+    assert package["project_name"] == "demo"
+    assert package["layout"] == "flat"
+    assert package["modules"] == ["demo", "demo.core"]
+    assert package["dependencies"] == ["click"]
+
+
+def test_strict_fails_for_invalid_package_metadata(project):
+    root = project({
+        "pyproject.toml": "[project\nname = 'broken'\n",
+        "module.py": "VALUE = 1\n",
+    })
+
+    result = run([str(root), "--strict", "--output-format", "json"])
+    payload = json.loads(result.output)
+
+    assert result.exit_code == EXIT_COVERAGE_GAP
+    assert payload["scan_health"]["package_analysis"] == {
+        "errors": 1,
+        "complete": False,
+    }
+    assert payload["findings"][0]["rule_id"] == "PY-PKG-003"
