@@ -2,29 +2,43 @@
 
 ## Privacy promise
 
-The analyzer processes source locally. Runtime analysis does not require an account, API key, hosted model, telemetry endpoint, or network connection. The analyzer does not upload source, findings, metadata, or usage information.
+The analyzer processes source locally. Runtime analysis does not require an account, API key, hosted model, telemetry endpoint, or network connection. It does not upload source, findings, metadata, or usage information.
+
+`--offline` enforces this boundary in the analyzer process by denying socket connections and name resolution while analysis runs. A blocked attempt terminates the command with an error. The guard is not an operating-system sandbox and does not control unrelated processes; the analyzer currently launches no project code or network-backed subprocess during passive analysis.
 
 ## Data read
 
 Default analysis reads bounded regular Python files under the selected project root and, when present, `pyproject.toml`. It does not follow directory symlinks, read symlink targets outside the project, read non-regular files, import the project, run build hooks, or execute project code.
 
-## Data emitted
+## Normal report data
 
 Normal reports can contain:
 
-- Project directory name
-- Project-relative source paths
-- Function, argument, package, module, and dependency names
+- Project directory name and project-relative source paths
+- Function, argument, package, module, dependency, and script names
 - Rule messages, locations, and remediation
-- Architecture signals and optional evidence
+- Architecture signals and optional source-derived evidence
 - Package metadata and import relationships
-- Experimental complexity estimates
+- Experimental complexity estimates and reasoning
 
-`--redact-paths` removes directory components from report paths, but it is not full anonymization. Basenames, identifiers, messages, package metadata, and architecture signals can still be sensitive. Review reports before sharing them outside the trusted environment.
+`--redact-paths` removes directory components from report paths, but it is not full anonymization. Basenames, identifiers, messages, package metadata, and architecture signals can still be sensitive.
+
+## Fully anonymized reports
+
+`--anonymize` is stronger than `--redact-paths` and applies to text and JSON output. It:
+
+- Replaces the project name with `anonymized-project`
+- Replaces file and function identities with report-local opaque tokens
+- Replaces finding messages and remediation with generic rule guidance
+- Reduces package intelligence to booleans and aggregate counts
+- Replaces verbose architecture evidence with signal counts
+- Removes detailed complexity reasoning and operation identifiers
+
+Anonymized reports intentionally retain rule IDs, finding categories and severities, line and column numbers, aggregate counts, rating data, built-in pattern names, and complexity classes. Those facts may still reveal project characteristics. Review any artifact before sharing it with an untrusted party. Tokens provide data minimization, not cryptographic anonymity or stable cross-report pseudonyms.
 
 ## Baselines
 
-Baseline files contain a schema version, algorithm name, and SHA-256 finding fingerprints. They do not contain source paths, messages, snippets, identifiers, or evidence in plain text. Fingerprints are deterministic and are intended for regression comparison, not cryptographic secrecy against an attacker who already knows likely finding inputs.
+Baseline files contain a schema version, algorithm name, and SHA-256 finding fingerprints. They do not contain source paths, messages, snippets, identifiers, or evidence in plain text. Fingerprints are deterministic and are intended for regression comparison, not cryptographic secrecy against an attacker who already knows likely finding inputs. Anonymization and path redaction do not change fingerprint identity.
 
 ## Local storage
 

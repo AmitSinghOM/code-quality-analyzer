@@ -41,8 +41,8 @@ def test_json_output_is_valid_and_includes_health(project):
     payload = json.loads(result.output)
 
     assert result.exit_code == EXIT_OK
-    assert payload["schema_version"] == "1.3.0"
-    assert payload["analyzer_version"] == "2.4.0"
+    assert payload["schema_version"] == "1.4.0"
+    assert payload["analyzer_version"] == "2.5.0"
     assert payload["ruleset_version"] == "2.2.0"
     assert payload["project"] == root.name
     assert 1.0 <= payload["rating"] <= 10.0
@@ -348,3 +348,139 @@ def test_error_gate_fails_for_package_error(project):
     result = run([str(root), "--fail-on", "error"])
 
     assert result.exit_code == EXIT_FINDINGS
+
+
+def _private_project(project):
+    return project({
+        "pyproject.toml": (
+            "[project]\n"
+            "name = 'acme-private'\n"
+            "dependencies = ['internal-dependency']\n\n"
+            "[project.scripts]\n"
+            "secret-command = 'secret_pkg.missing:main'\n"
+        ),
+        "secret_pkg/__init__.py": "",
+        "secret_pkg/private_module.py": (
+            "def proprietary_engine(secret_items=[]):\n"
+            "    dp = {}\n"
+            "    for secret_outer in secret_items:\n"
+            "        for secret_inner in secret_items:\n"
+            "            dp[secret_outer] = secret_inner\n"
+            "    return dp\n"
+        ),
+        "private/oversized.py": "PRIVATE_MARKER = '" + ("x" * 2000) + "'\n",
+    })
+
+
+def test_anonymized_json_removes_source_identifiers(project):
+    root = _private_project(project)
+
+    result = run([
+        str(root), "--output-format", "json", "--anonymize", "--offline",
+        "--verbose", "--complexity", "--max-file-size", "500",
+    ])
+    payload = json.loads(result.output)
+    rendered = result.output
+
+    assert result.exit_code == EXIT_OK
+    assert payload["project"] == "anonymized-project"
+    assert payload["privacy"] == {
+        "anonymized": True,
+        "paths_redacted": True,
+        "offline_enforced": True,
+    }
+    assert payload["scan_health"]["skipped_examples"]["too_large"] == [
+        "file-0001"
+    ]
+    finding = payload["findings"][0]
+    assert finding["location"]["path"].startswith("file-")
+    evidence = payload["dsa_patterns"]["dynamic_programming"]["evidence"][0]
+    assert "signal_count" in evidence
+    assert "signals" not in evidence
+    high = payload["complexity"]["high_complexity_functions"][0]
+    assert high["name"].startswith("function-")
+    assert high["file"].startswith("file-")
+
+    for sensitive in (
+        "acme-private",
+        "internal-dependency",
+        "secret-command",
+        "secret_pkg",
+        "private_module.py",
+        "private/oversized.py",
+        "proprietary_engine",
+        "secret_items",
+        "secret_outer",
+        "secret_inner",
+        "PRIVATE_MARKER",
+    ):
+        assert sensitive not in rendered
+
+
+def test_anonymized_text_removes_source_identifiers(project):
+    root = _private_project(project)
+
+    result = run([
+        str(root), "--anonymize", "--offline", "--verbose", "--complexity",
+        "--max-file-size", "500",
+    ])
+
+    assert result.exit_code == EXIT_OK
+    assert "Analyzing: anonymized-project" in result.output
+    assert "offline enforced=yes" in result.output
+    assert "function-" in result.output
+    assert "signal(s) redacted" in result.output
+    for sensitive in (
+        "acme-private",
+        "internal-dependency",
+        "secret-command",
+        "secret_pkg",
+        "private_module.py",
+        "proprietary_engine",
+        "secret_items",
+    ):
+        assert sensitive not in result.output
+
+
+def test_anonymization_does_not_change_baseline_fingerprints(project, tmp_path):
+    root = _private_project(project)
+    normal = tmp_path / "normal.json"
+    anonymous = tmp_path / "anonymous.json"
+
+    first = run([str(root), "--write-baseline", str(normal)])
+    second = run([
+        str(root), "--anonymize", "--write-baseline", str(anonymous),
+    ])
+
+    assert first.exit_code == EXIT_OK
+    assert second.exit_code == EXIT_OK
+    assert normal.read_bytes() == anonymous.read_bytes()
+
+
+def test_offline_metadata_is_reported(project):
+    root = project({"module.py": "VALUE = 1\n"})
+
+    result = run([str(root), "--output-format", "json", "--offline"])
+    payload = json.loads(result.output)
+
+    assert result.exit_code == EXIT_OK
+    assert payload["privacy"]["offline_enforced"] is True
+
+
+def test_offline_cli_stops_network_attempt_before_connection(project, monkeypatch):
+    import socket
+
+    from analyzer.scanner import CodeScanner
+
+    root = project({"module.py": "VALUE = 1\n"})
+
+    def attempt_network(_scanner):
+        socket.create_connection(("127.0.0.1", 9))
+
+    monkeypatch.setattr(CodeScanner, "scan", attempt_network)
+
+    result = run([str(root), "--offline"])
+
+    assert result.exit_code != EXIT_OK
+    assert "Network access was attempted" in result.output
+    assert "Traceback" not in result.output

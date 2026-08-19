@@ -390,9 +390,9 @@ code-quality-analyzer check . \
 
 #### Phase 5 progress (August 20, 2026)
 
-**Status:** In progress
+**Status:** Core exit criteria met; follow-up hardening remains
 
-Completed in the first Phase 5 vertical slice:
+Completed:
 
 - Added checked-in MIT license, security policy, changelog, and privacy/threat-model documentation.
 - Pinned the setuptools build backend and local build tool versions.
@@ -402,8 +402,12 @@ Completed in the first Phase 5 vertical slice:
 - Added focused filesystem/privacy tests on Linux, macOS, and Windows.
 - Added push-triggered CI for the main branch while preserving read-only workflow permissions.
 - Documented report, baseline, cache, temporary-file, and project-execution privacy boundaries.
+- Added `--anonymize` for text and JSON reports, including project/file/function tokenization, aggregate-only package intelligence, generic finding text, redacted pattern signals, and redacted complexity reasoning.
+- Added `--offline` process-local enforcement that blocks socket connections and name resolution during analysis.
+- Preserved baseline fingerprints across normal, path-redacted, and anonymized presentation modes.
+- Added adversarial tests for project paths, package metadata, source identifiers, skipped-file examples, verbose evidence, complexity output, and blocked network attempts.
 
-Next work includes fully anonymized reports, explicit offline enforcement, dependency declaration synchronization, action SHA pinning, migration/contribution guides, and broader resource-limit tests.
+Follow-up hardening includes dependency declaration synchronization, action SHA pinning, migration/contribution guides, operating-system sandbox guidance, and broader resource-limit tests.
 
 **Objective:** Make installation, offline use, and report sharing dependable.
 

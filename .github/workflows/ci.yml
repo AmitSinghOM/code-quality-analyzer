@@ -105,7 +105,9 @@ jobs:
         run: python -m pip install --force-reinstall dist/*.whl
 
       - name: Smoke test installed command
-        run: code-quality-analyzer . --strict --output-format json
+        run: >-
+          code-quality-analyzer . --strict --output-format json
+          --offline --anonymize
 
   audit:
     runs-on: ubuntu-latest

@@ -82,6 +82,30 @@ code-quality-analyzer /path/to/project -c
 `PROJECT_PATH` must be a directory. Pointing at a single file is rejected
 rather than silently returning a rating of 1.
 
+## Privacy and offline options
+
+Use `--anonymize` when a report may leave the trusted development environment:
+
+```bash
+code-quality-analyzer /path/to/project --anonymize -f json
+code-quality-analyzer /path/to/project --anonymize --offline -v -c
+```
+
+Anonymized reports replace project, file, and function identities with opaque
+report-local tokens; remove package/module/dependency/script names; replace
+finding messages and remediation; reduce package intelligence to aggregate
+counts; and remove source-derived pattern signals and complexity reasoning.
+Rule IDs, locations, counts, ratings, pattern names, complexity classes, and
+line numbers remain so the report is still useful.
+
+`--offline` adds runtime enforcement by denying socket connection and
+name-resolution operations while analysis runs. Normal analysis is already
+local and has no network-backed integration; this option makes an accidental
+future network call fail the command instead of silently connecting.
+
+See [`docs/PRIVACY.md`](docs/PRIVACY.md) for the exact data boundary and
+remaining disclosure considerations.
+
 ## Options
 
 | Option | Default | Purpose |
@@ -92,6 +116,8 @@ rather than silently returning a rating of 1.
 | `--max-file-size` | 2 MB | Skip files larger than this positive byte count |
 | `--max-files` | 20000 | Stop after this positive number of Python files |
 | `--redact-paths` | off | Report file names only, no directory structure |
+| `--anonymize` | off | Remove project paths, metadata, and source identifiers |
+| `--offline` | off | Deny socket operations while analysis runs |
 | `--fail-under` | none | Exit non-zero when the rating is below a value from 1 to 10 |
 | `--fail-on` | none | Exit 4 for reported findings at `warning` or `error` severity |
 | `--baseline` | none | Compare findings with an existing hashed baseline |
@@ -99,9 +125,14 @@ rather than silently returning a rating of 1.
 | `--new-findings-only` | off | Report and gate only findings absent from `--baseline` |
 | `--strict` | off | Exit non-zero when any requested analysis is incomplete |
 
+`--anonymize` is stronger than `--redact-paths` and takes precedence for report
+presentation. Baseline fingerprints continue to use hidden project-relative
+identities, so changing either presentation option does not change CI identity.
+
 `-f` was `--format` in 1.x. It is now `--output-format` so it no longer shadows
 the `format` builtin. JSON reports include schema, analyzer, and ruleset versions
-so consumers can identify the contract that produced a result.
+plus explicit privacy state so consumers can identify the contract and
+protections that produced a result.
 
 ## Exit Codes
 
