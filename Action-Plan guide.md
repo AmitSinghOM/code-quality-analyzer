@@ -327,10 +327,12 @@ Completed in the first Phase 3 vertical slice:
 - Added a local module import graph using the AST already produced by the scanner.
 - Added strongly connected component detection for circular imports.
 - Added `PY-PKG-001` for circular imports, `PY-PKG-002` for missing console-script modules, and `PY-PKG-003` for invalid TOML.
+- Added conservative literal `__all__` validation through `PY-PKG-004` for missing module bindings and `PY-PKG-005` for duplicate exports.
+- Reused shared ASTs and reason-required same-line suppressions for package public-API findings.
 - Made invalid package metadata participate in strict-mode analysis health.
 - Added a pinned Python 3.10 TOML compatibility dependency.
 
-Next work includes namespace-package coverage, dependency declaration comparison, public API analysis, package-data validation, and opt-in isolated build/import checks.
+Next work includes namespace-package coverage, dependency declaration comparison, package-data validation, and opt-in isolated build/import checks.
 
 **Objective:** Analyze whether a Python package is correctly structured and distributable.
 

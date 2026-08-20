@@ -354,11 +354,15 @@ code. Every normal scan now reports:
 - First-party modules and their local import graph
 - Circular import groups
 - Console scripts that target missing local modules
+- Literal `__all__` exports with missing bindings or duplicate names
 
 Invalid TOML produces `PY-PKG-003` and makes `--strict` fail. Circular imports
 produce `PY-PKG-001`; invalid console-script module targets produce
-`PY-PKG-002`. Test-only directories without a package initializer are excluded
-from flat-layout package modules. See [`docs/RULES.md`](docs/RULES.md).
+`PY-PKG-002`; missing and duplicate literal public exports produce
+`PY-PKG-004` and `PY-PKG-005`. Dynamic or ambiguous `__all__` declarations are
+conservatively skipped. Test-only directories without a package initializer are
+excluded from flat-layout package modules. See
+[`docs/RULES.md`](docs/RULES.md).
 
 Python 3.10 uses the pinned `tomli` compatibility parser; Python 3.11 and newer
 use the standard-library `tomllib` parser.

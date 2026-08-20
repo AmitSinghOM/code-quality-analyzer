@@ -52,7 +52,7 @@ class PythonRulePack:
 
     rule_pack_id = PYTHON_RULE_PACK_ID
     language_id = "python"
-    ruleset_version = "2.9.0"
+    ruleset_version = "2.10.0"
     plugin_api_version = PLUGIN_API_VERSION
 
     def __init__(self, analyzer: PythonRuleAnalyzer | None = None) -> None:
@@ -119,10 +119,16 @@ class PythonPackageProvider:
             for path, parsed in project.parsed_files.items()
             if isinstance(parsed.artifact, ast.AST)
         }
+        suppressions = {
+            path: suppression_lines(parsed.source.content)
+            for path, parsed in project.parsed_files.items()
+            if isinstance(parsed.artifact, ast.AST)
+        }
         analyzer = PythonPackageAnalyzer(
             project.root,
             artifacts,
             redact_paths=project.redact_paths,
+            suppressions_by_path=suppressions,
         )
         payload = analyzer.analyze()
         return ProviderResult(

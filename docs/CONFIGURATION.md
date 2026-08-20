@@ -46,7 +46,8 @@ configuration across analyzer/plugin versions.
 
 ## Python inline suppressions
 
-Python file rules support explicit, same-line suppressions:
+Python source findings support explicit, same-line suppressions, including the
+literal `__all__` package rules `PY-PKG-004` and `PY-PKG-005`:
 
 ```python
 def legacy(cache={}):  # cqa: ignore=PY-COR-001 reason="public API compatibility"

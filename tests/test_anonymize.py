@@ -88,3 +88,28 @@ def test_complexity_projection_replaces_identities_and_reasoning():
     assert "private_items" not in rendered
     assert "private_operation" not in rendered
     assert summary["high_complexity_functions"][0]["name"] == "private_algorithm"
+
+
+def test_literal_public_export_name_is_removed_from_anonymized_finding():
+    finding = Finding(
+        rule_id="PY-PKG-004",
+        category="package-health",
+        severity="error",
+        confidence="high",
+        message=(
+            "Literal __all__ export 'private_export' has no module-level "
+            "binding."
+        ),
+        location=Location(
+            "private/api.py",
+            2,
+            5,
+            identity_path="private/api.py",
+        ),
+        remediation="Define or import private_export.",
+    )
+
+    payload = ReportAnonymizer().finding(finding)
+
+    assert payload["message"] == "Finding reported by PY-PKG-004."
+    assert "private_export" not in str(payload)

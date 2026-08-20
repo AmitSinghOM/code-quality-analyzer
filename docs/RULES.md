@@ -205,6 +205,34 @@ The project contains `pyproject.toml`, but it cannot be read as valid TOML. Pack
 
 Correct the TOML syntax and rerun the analyzer. The report intentionally avoids reproducing source content from the invalid file.
 
+## PY-PKG-004: Missing literal public export binding
+
+**Category:** Package health
+**Default severity:** Error
+**Confidence:** High
+
+A literal string in an eligible module-level `__all__` list or tuple has no
+module-scope binding. Forward definitions and names bound by functions, classes,
+assignments, imports, and module-level control-flow suites are recognized.
+
+Define or import the name at module scope, or remove it from `__all__`.
+Analysis is skipped when `__all__` is dynamic or ambiguous, including multiple
+assignments, mutation, wildcard imports, module `__getattr__`, namespace
+manipulation, comprehensions, concatenation, unpacking, or non-string values.
+
+## PY-PKG-005: Duplicate literal public export
+
+**Category:** Package health
+**Default severity:** Warning
+**Confidence:** High
+
+An eligible literal module-level `__all__` declaration repeats an exported
+name. Each occurrence after the first receives a finding at its own string
+literal, with case-sensitive comparison.
+
+Remove repeated names from `__all__`. The same conservative eligibility
+boundaries as `PY-PKG-004` apply.
+
 ## GO-COR-001: Ignored standard-library error
 
 **Category:** Correctness

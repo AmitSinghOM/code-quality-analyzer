@@ -58,10 +58,14 @@ class PythonPackageAnalyzer:
         root: Path,
         parsed_files: dict[str, ast.AST],
         redact_paths: bool = False,
+        suppressions_by_path: (
+            dict[str, frozenset[tuple[int, str]]] | None
+        ) = None,
     ) -> None:
         self.root = root
         self.parsed_files = parsed_files
         self.redact_paths = redact_paths
+        self.suppressions_by_path = suppressions_by_path or {}
         self.result = PackageIntelligence()
         self.findings: list[Finding] = []
         self.errors = 0
@@ -89,6 +93,13 @@ class PythonPackageAnalyzer:
         self.findings.extend(
             _cycle_findings(self.result.circular_imports, locations)
         )
+        for path in sorted(module_paths.values()):
+            self.findings.extend(_public_api_findings(
+                path,
+                self.parsed_files[path],
+                self.suppressions_by_path.get(path, frozenset()),
+                redact_paths=self.redact_paths,
+            ))
         if metadata is not None:
             self.findings.extend(_entry_point_findings(metadata, module_paths))
         self.findings.sort(key=_finding_key)
@@ -143,6 +154,264 @@ class PythonPackageAnalyzer:
             if isinstance(target, str)
         }
         return data
+
+
+class _AllSafetyVisitor(ast.NodeVisitor):
+    """Reject modules whose public API declaration may be dynamic."""
+
+    def __init__(self, candidate: ast.Assign | ast.AnnAssign) -> None:
+        self.candidate = candidate
+        self.unsafe = False
+
+    def visit_Assign(self, node: ast.Assign) -> None:
+        if node is self.candidate:
+            self.visit(node.value)
+            return
+        self.generic_visit(node)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        if node is self.candidate:
+            if node.value is not None:
+                self.visit(node.value)
+            return
+        self.generic_visit(node)
+
+    def visit_Name(self, node: ast.Name) -> None:
+        if node.id == "__all__":
+            self.unsafe = True
+
+    def visit_Import(self, node: ast.Import) -> None:
+        for alias in node.names:
+            bound = alias.asname or alias.name.partition(".")[0]
+            if bound == "__all__":
+                self.unsafe = True
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        for alias in node.names:
+            if alias.name == "*" or (alias.asname or alias.name) == "__all__":
+                self.unsafe = True
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        if node.name in {"__all__", "__getattr__"}:
+            self.unsafe = True
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        if node.name in {"__all__", "__getattr__"}:
+            self.unsafe = True
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        if node.name == "__all__":
+            self.unsafe = True
+
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        return
+
+    def visit_Call(self, node: ast.Call) -> None:
+        if (
+            isinstance(node.func, ast.Name)
+            and node.func.id in {"exec", "globals", "locals"}
+        ):
+            self.unsafe = True
+        self.generic_visit(node)
+
+
+class _ModuleBindingVisitor(ast.NodeVisitor):
+    """Collect names bound in module scope, including control-flow suites."""
+
+    def __init__(self) -> None:
+        self.bindings: set[str] = set()
+
+    def visit_Name(self, node: ast.Name) -> None:
+        if isinstance(node.ctx, ast.Store):
+            self.bindings.add(node.id)
+
+    def visit_Import(self, node: ast.Import) -> None:
+        for alias in node.names:
+            self.bindings.add(alias.asname or alias.name.partition(".")[0])
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        for alias in node.names:
+            if alias.name != "*":
+                self.bindings.add(alias.asname or alias.name)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self.bindings.add(node.name)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self.bindings.add(node.name)
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.bindings.add(node.name)
+
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        return
+
+    def visit_ListComp(self, node: ast.ListComp) -> None:
+        return
+
+    def visit_SetComp(self, node: ast.SetComp) -> None:
+        return
+
+    def visit_DictComp(self, node: ast.DictComp) -> None:
+        return
+
+    def visit_GeneratorExp(self, node: ast.GeneratorExp) -> None:
+        return
+
+    def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
+        if node.name:
+            self.bindings.add(node.name)
+        for statement in node.body:
+            self.visit(statement)
+
+    def visit_MatchAs(self, node: ast.MatchAs) -> None:
+        if node.name:
+            self.bindings.add(node.name)
+        if node.pattern is not None:
+            self.visit(node.pattern)
+
+    def visit_MatchStar(self, node: ast.MatchStar) -> None:
+        if node.name:
+            self.bindings.add(node.name)
+
+    def visit_MatchMapping(self, node: ast.MatchMapping) -> None:
+        if node.rest:
+            self.bindings.add(node.rest)
+        self.generic_visit(node)
+
+
+def _public_api_findings(
+    path: str,
+    tree: ast.AST,
+    suppressions: frozenset[tuple[int, str]],
+    redact_paths: bool = False,
+) -> list[Finding]:
+    exports = _literal_all_exports(tree)
+    if exports is None:
+        return []
+
+    collector = _ModuleBindingVisitor()
+    collector.visit(tree)
+    findings = []
+    seen: set[str] = set()
+    for name, node in exports:
+        if name in seen:
+            finding = _public_api_finding(
+                "PY-PKG-005",
+                name,
+                node,
+                path,
+                redact_paths,
+            )
+        else:
+            seen.add(name)
+            if name in collector.bindings:
+                continue
+            finding = _public_api_finding(
+                "PY-PKG-004",
+                name,
+                node,
+                path,
+                redact_paths,
+            )
+        if (node.lineno, finding.rule_id) not in suppressions:
+            findings.append(finding)
+    return findings
+
+
+def _literal_all_exports(
+    tree: ast.AST,
+) -> list[tuple[str, ast.Constant]] | None:
+    if not isinstance(tree, ast.Module):
+        return None
+    candidates = [
+        statement
+        for statement in tree.body
+        if _is_direct_all_assignment(statement)
+    ]
+    if len(candidates) != 1:
+        return None
+
+    candidate = candidates[0]
+    safety = _AllSafetyVisitor(candidate)
+    safety.visit(tree)
+    if safety.unsafe:
+        return None
+
+    value = candidate.value
+    if not isinstance(value, ast.List | ast.Tuple):
+        return None
+    exports = []
+    for element in value.elts:
+        if not (
+            isinstance(element, ast.Constant)
+            and isinstance(element.value, str)
+        ):
+            return None
+        exports.append((element.value, element))
+    return exports
+
+
+def _is_direct_all_assignment(statement: ast.stmt) -> bool:
+    if isinstance(statement, ast.Assign):
+        return (
+            len(statement.targets) == 1
+            and isinstance(statement.targets[0], ast.Name)
+            and statement.targets[0].id == "__all__"
+        )
+    return (
+        isinstance(statement, ast.AnnAssign)
+        and isinstance(statement.target, ast.Name)
+        and statement.target.id == "__all__"
+        and statement.value is not None
+        and statement.simple == 1
+    )
+
+
+def _public_api_finding(
+    rule_id: str,
+    name: str,
+    node: ast.Constant,
+    path: str,
+    redact_paths: bool,
+) -> Finding:
+    location = Location(
+        path=Path(path).name if redact_paths else path,
+        line=node.lineno,
+        column=node.col_offset + 1,
+        end_line=getattr(node, "end_lineno", None),
+        end_column=(
+            node.end_col_offset + 1
+            if getattr(node, "end_col_offset", None) is not None
+            else None
+        ),
+        identity_path=path,
+    )
+    if rule_id == "PY-PKG-004":
+        return Finding(
+            rule_id=rule_id,
+            category="package-health",
+            severity="error",
+            confidence="high",
+            message=(
+                f"Literal __all__ export '{name}' has no module-level "
+                "binding."
+            ),
+            location=location,
+            remediation=(
+                "Define or import the exported name at module scope, or "
+                "remove it from __all__."
+            ),
+        )
+    return Finding(
+        rule_id=rule_id,
+        category="package-health",
+        severity="warning",
+        confidence="high",
+        message=f"Literal __all__ exports '{name}' more than once.",
+        location=location,
+        remediation="Remove the repeated name from __all__.",
+    )
 
 
 def _table(value) -> dict:
