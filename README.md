@@ -357,6 +357,7 @@ code. Every normal scan now reports:
 - Circular import groups
 - Console scripts that target missing local modules
 - Literal `__all__` exports with missing bindings or duplicate names
+- Missing literal static setuptools package-data source targets
 
 Invalid TOML produces `PY-PKG-003` and makes `--strict` fail. Circular imports
 produce `PY-PKG-001`; invalid console-script module targets produce
@@ -366,8 +367,13 @@ conservatively skipped. Configured PEP 420 discovery accepts only setuptools
 metadata with namespace discovery enabled, safe project-relative `where` roots,
 and nonempty exact or `prefix.*` includes. Custom backends, remapping, excludes,
 complex globs, and ambiguous roots retain conventional discovery without
-executing build hooks. Test-only directories without a package initializer are
-excluded from unconfigured flat-layout package modules. See
+executing build hooks. Literal package-data validation is limited to exact
+package keys and safe, non-glob paths when setuptools is the only declared build
+requirement and no custom setup file, backend path, command class, or package
+remapping is present. It checks source-tree regular-file existence with metadata
+operations only; wildcard declarations, generated files, and built-artifact
+contents remain out of scope. Test-only directories without a package
+initializer are excluded from unconfigured flat-layout package modules. See
 [`docs/RULES.md`](docs/RULES.md).
 
 Python 3.10 uses the pinned `tomli` compatibility parser; Python 3.11 and newer

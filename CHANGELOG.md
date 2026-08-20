@@ -29,10 +29,11 @@ All notable changes are documented in this file. Versions follow semantic versio
 - Conservative Python findings for blocking async calls and unmanaged local resources
 - Literal `__all__` checks for missing module bindings and duplicate exports
 - Bounded setuptools PEP 420 namespace discovery using shared parsed artifacts
+- `PY-PKG-006` for missing literal static setuptools package-data targets
 
 ### Changed
 
-- Analyzer version advanced to 2.21.0; report schema remains 1.8.0 and ruleset advanced to 2.11.0
+- Analyzer version advanced to 2.22.0; report schema remains 1.8.0 and ruleset advanced to 2.12.0
 - Reports now qualify authority with source-candidate, readable-file, and successful-analysis counts, completeness ratio, and stable reason codes
 - `architecture_signal_score` replaces `rating` as the primary score name; `rating` remains a documented equal-valued 2.x compatibility alias
 - Source candidates with zero successful analyses now exit 3 even without strict mode

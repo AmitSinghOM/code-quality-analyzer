@@ -558,3 +558,300 @@ def test_namespace_discovery_parses_each_source_once(project, monkeypatch):
         "acme.plugins.cli",
         "acme.plugins.service",
     ]
+
+
+def _package_data_pyproject(
+    declaration: str,
+    *,
+    backend: str = "setuptools.build_meta",
+    requires: str = "['setuptools==80.9.0']",
+    build_extra: str = "",
+    setuptools_extra: str = "",
+) -> str:
+    return (
+        "[build-system]\n"
+        f"requires = {requires}\n"
+        f"build-backend = '{backend}'\n"
+        f"{build_extra}\n"
+        "[project]\n"
+        "name = 'package-data-demo'\n\n"
+        f"{setuptools_extra}"
+        "[tool.setuptools.package-data]\n"
+        f"{declaration}\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("module_path", "existing_path"),
+    [
+        ("pkg/__init__.py", "pkg/data/existing.json"),
+        ("src/pkg/__init__.py", "src/pkg/data/existing.json"),
+    ],
+)
+def test_literal_package_data_reports_only_missing_files(
+    project,
+    module_path,
+    existing_path,
+):
+    root = project({
+        "pyproject.toml": _package_data_pyproject(
+            "pkg = ['data/existing.json', 'data/missing.json']"
+        ),
+        module_path: "",
+        existing_path: "{}\n",
+    })
+
+    scanner = CodeScanner(root)
+    scanner.scan()
+    findings = [
+        item for item in scanner.findings if item.rule_id == "PY-PKG-006"
+    ]
+
+    assert len(findings) == 1
+    assert findings[0].severity == "warning"
+    assert findings[0].confidence == "high"
+    assert findings[0].location.path == "pyproject.toml"
+    assert "pkg" in findings[0].message
+    assert "data/missing.json" in findings[0].message
+    assert scanner.package_health == {"errors": 0, "complete": True}
+
+
+def test_literal_package_data_supports_configured_namespaces(project):
+    root = project({
+        "pyproject.toml": _package_data_pyproject(
+            "'acme.plugins' = ['data/missing.json']",
+            setuptools_extra=(
+                "[tool.setuptools.packages.find]\n"
+                "where = ['lib']\n"
+                "include = ['acme.*']\n\n"
+            ),
+        ),
+        "lib/acme/plugins/cli.py": "VALUE = 1\n",
+    })
+
+    scanner = CodeScanner(root)
+    scanner.scan()
+    finding = next(
+        item for item in scanner.findings if item.rule_id == "PY-PKG-006"
+    )
+
+    assert scanner.package_intelligence.source_roots == ["lib"]
+    assert "acme.plugins" in finding.message
+    assert "data/missing.json" in finding.message
+
+
+def test_literal_package_data_findings_are_deterministic(project):
+    root = project({
+        "pyproject.toml": _package_data_pyproject(
+            "zeta = ['z.json', 'a.json', 'z.json']\n"
+            "alpha = ['b.json', 'a.json']"
+        ),
+        "alpha/__init__.py": "",
+        "zeta/__init__.py": "",
+    })
+
+    first = CodeScanner(root)
+    first.scan()
+    second = CodeScanner(root)
+    second.scan()
+    first_messages = [
+        item.message
+        for item in first.findings
+        if item.rule_id == "PY-PKG-006"
+    ]
+    second_messages = [
+        item.message
+        for item in second.findings
+        if item.rule_id == "PY-PKG-006"
+    ]
+
+    assert first_messages == second_messages
+    assert first_messages == [
+        (
+            "Static package-data declaration for 'alpha' names missing "
+            "source file 'a.json'."
+        ),
+        (
+            "Static package-data declaration for 'alpha' names missing "
+            "source file 'b.json'."
+        ),
+        (
+            "Static package-data declaration for 'zeta' names missing "
+            "source file 'a.json'."
+        ),
+        (
+            "Static package-data declaration for 'zeta' names missing "
+            "source file 'z.json'."
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    "pyproject",
+    [
+        _package_data_pyproject(
+            "pkg = ['missing.json']",
+            backend="hatchling.build",
+        ),
+        _package_data_pyproject(
+            "pkg = ['missing.json']",
+            build_extra="backend-path = ['build_backend']\n",
+        ),
+        _package_data_pyproject(
+            "pkg = ['missing.json']",
+            requires="['setuptools==80.9.0', 'wheel==0.45.1']",
+        ),
+        _package_data_pyproject(
+            "pkg = ['missing.json']",
+            setuptools_extra=(
+                "[tool.setuptools.cmdclass]\n"
+                "build_py = 'build.CustomBuild'\n\n"
+            ),
+        ),
+        _package_data_pyproject(
+            "pkg = ['missing.json']",
+            setuptools_extra=(
+                "[tool.setuptools]\n"
+                "package-dir = {'' = 'src'}\n\n"
+            ),
+        ),
+        _package_data_pyproject("'*' = ['missing.json']"),
+        _package_data_pyproject("pkg = ['data/*.json']"),
+        _package_data_pyproject("'invalid-key' = ['missing.json']"),
+        _package_data_pyproject("pkg = [1]"),
+        _package_data_pyproject("unknown = ['missing.json']"),
+    ],
+)
+def test_ambiguous_package_data_declarations_are_skipped(project, pyproject):
+    root = project({
+        "pyproject.toml": pyproject,
+        "pkg/__init__.py": "",
+    })
+
+    scanner = CodeScanner(root)
+    scanner.scan()
+
+    assert not any(
+        item.rule_id == "PY-PKG-006" for item in scanner.findings
+    )
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        "/absolute.json",
+        "../outside.json",
+        "data\\windows.json",
+        "data/./local.json",
+        "data//local.json",
+        "C:/drive.json",
+        "data/[ab].json",
+    ],
+)
+def test_unsafe_package_data_paths_are_skipped(project, target):
+    root = project({
+        "pyproject.toml": _package_data_pyproject(
+            f"pkg = [{target!r}]"
+        ),
+        "pkg/__init__.py": "",
+    })
+
+    scanner = CodeScanner(root)
+    scanner.scan()
+
+    assert not any(
+        item.rule_id == "PY-PKG-006" for item in scanner.findings
+    )
+
+
+def test_package_data_directories_and_symlinks_are_skipped(project, tmp_path):
+    root = project({
+        "pyproject.toml": _package_data_pyproject(
+            "pkg = ['data', 'linked.json']"
+        ),
+        "pkg/__init__.py": "",
+        "pkg/data/present.json": "{}\n",
+    })
+    outside = tmp_path / "outside.json"
+    outside.write_text("private\n", encoding="utf-8")
+    try:
+        (root / "pkg" / "linked.json").symlink_to(outside)
+    except OSError:
+        pytest.skip("symlinks are unavailable on this platform")
+
+    scanner = CodeScanner(root)
+    scanner.scan()
+
+    assert not any(
+        item.rule_id == "PY-PKG-006" for item in scanner.findings
+    )
+
+
+def test_package_data_rule_honors_project_policy(project):
+    from analyzer.config import load_config
+
+    root = project({
+        ".code-quality.toml": (
+            "[rules.\"PY-PKG-006\"]\n"
+            "enabled = false\n"
+        ),
+        "pyproject.toml": _package_data_pyproject(
+            "pkg = ['missing.json']"
+        ),
+        "pkg/__init__.py": "",
+    })
+
+    disabled = CodeScanner(root, configuration=load_config(root))
+    disabled.scan()
+    assert not any(
+        item.rule_id == "PY-PKG-006" for item in disabled.findings
+    )
+
+    (root / ".code-quality.toml").write_text(
+        "[rules.\"PY-PKG-006\"]\nseverity = 'error'\n",
+        encoding="utf-8",
+    )
+    overridden = CodeScanner(root, configuration=load_config(root))
+    overridden.scan()
+    finding = next(
+        item for item in overridden.findings
+        if item.rule_id == "PY-PKG-006"
+    )
+    assert finding.severity == "error"
+
+
+def test_custom_setup_files_disable_package_data_validation(project):
+    for filename in ("setup.py", "setup.cfg"):
+        root = project({
+            "pyproject.toml": _package_data_pyproject(
+                "pkg = ['missing.json']"
+            ),
+            "pkg/__init__.py": "",
+            filename: "# custom build\n",
+        })
+
+        scanner = CodeScanner(root)
+        scanner.scan()
+
+        assert not any(
+            item.rule_id == "PY-PKG-006" for item in scanner.findings
+        )
+        (root / filename).unlink()
+
+
+def test_package_data_skips_unconfigured_namespace_like_directory(project):
+    root = project({
+        "pyproject.toml": _package_data_pyproject(
+            "'pkg.plugins' = ['missing.json']"
+        ),
+        "pkg/__init__.py": "",
+        "pkg/plugins/tool.py": "VALUE = 1\n",
+    })
+
+    scanner = CodeScanner(root)
+    scanner.scan()
+
+    assert "pkg.plugins.tool" in scanner.package_intelligence.modules
+    assert not any(
+        item.rule_id == "PY-PKG-006" for item in scanner.findings
+    )

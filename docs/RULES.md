@@ -240,6 +240,27 @@ literal, with case-sensitive comparison.
 Remove repeated names from `__all__`. The same conservative eligibility
 boundaries as `PY-PKG-004` apply.
 
+## PY-PKG-006: Missing literal package-data target
+
+**Category:** Package health
+**Default severity:** Warning
+**Confidence:** High
+
+An eligible static `[tool.setuptools.package-data]` declaration names a literal
+source-tree path that does not exist as a regular file beneath the uniquely
+resolved package directory. The finding is reported at `pyproject.toml:1:1`
+because the bounded TOML parser does not expose key locations.
+
+Add the file, correct the literal path, or disable the rule when a documented
+build step generates it. The rule does not make strict analysis incomplete.
+It runs only for standard setuptools builds with one unambiguous setuptools
+build requirement and no custom setup file, backend path, command class, or
+package remapping. Wildcard package keys, globs, unsafe paths, malformed or
+oversized tables, unknown/ambiguous packages, symlinks, directories, special
+files, and stat errors are skipped. The analyzer never reads package-data
+contents, walks data directories, executes build hooks, or claims that a file
+is present in a built wheel or source distribution.
+
 ## GO-COR-001: Ignored standard-library error
 
 **Category:** Correctness

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import ast
+import re
+import stat
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -109,6 +111,12 @@ class PythonPackageAnalyzer:
             ))
         if metadata is not None:
             self.findings.extend(_entry_point_findings(metadata, module_paths))
+            self.findings.extend(_package_data_findings(
+                self.root,
+                metadata,
+                module_paths,
+                namespace_discovery,
+            ))
         self.findings.sort(key=_finding_key)
         return self.result
 
@@ -433,6 +441,227 @@ def _string_list(value) -> list[str]:
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, str)]
+
+
+_SETUPTOOLS_BACKENDS = {
+    "setuptools.build_meta",
+    "setuptools.build_meta:__legacy__",
+}
+_PACKAGE_DATA_MAX_KEYS = 256
+_PACKAGE_DATA_MAX_VALUES = 1024
+_PACKAGE_DATA_MAX_TEXT = 512
+_SETUPTOOLS_REQUIREMENT = re.compile(
+    r"setuptools(?:\s*(?:===|==|~=|!=|<=|>=|<|>)[^;]+)?",
+    re.IGNORECASE,
+)
+
+
+def _package_data_findings(
+    root: Path,
+    metadata: dict,
+    module_paths: dict[str, str],
+    namespace_discovery: _NamespaceDiscovery | None,
+) -> list[Finding]:
+    declarations = _package_data_declarations(root, metadata)
+    if not declarations:
+        return []
+    package_directories = _package_directories(
+        module_paths,
+        namespace_discovery,
+    )
+    findings = []
+    for package, targets in sorted(declarations.items()):
+        directories = package_directories.get(package, set())
+        if len(directories) != 1:
+            continue
+        package_directory = next(iter(directories))
+        for target in targets:
+            parts = _literal_package_data_parts(target)
+            if parts is None:
+                continue
+            if _package_data_target_status(
+                root,
+                package_directory,
+                parts,
+            ) != "missing":
+                continue
+            findings.append(Finding(
+                rule_id="PY-PKG-006",
+                category="package-health",
+                severity="warning",
+                confidence="high",
+                message=(
+                    f"Static package-data declaration for '{package}' names "
+                    f"missing source file '{target}'."
+                ),
+                location=Location("pyproject.toml", 1, 1),
+                remediation=(
+                    "Add the file, correct the literal path, or disable the "
+                    "rule when a documented build step generates it."
+                ),
+            ))
+    return findings
+
+
+def _package_data_declarations(
+    root: Path,
+    metadata: dict,
+) -> dict[str, tuple[str, ...]] | None:
+    tool = _table(metadata.get("tool"))
+    setuptools = _table(tool.get("setuptools"))
+    raw_declarations = setuptools.get("package-data")
+    if raw_declarations is None:
+        return {}
+    if not isinstance(raw_declarations, dict):
+        return None
+
+    build_system = _table(metadata.get("build-system"))
+    if build_system.get("build-backend") not in _SETUPTOOLS_BACKENDS:
+        return None
+    if "backend-path" in build_system:
+        return None
+    requirements = build_system.get("requires")
+    if not (
+        isinstance(requirements, list)
+        and len(requirements) == 1
+        and isinstance(requirements[0], str)
+        and _SETUPTOOLS_REQUIREMENT.fullmatch(requirements[0].strip())
+    ):
+        return None
+    if any(
+        path.exists() or path.is_symlink()
+        for path in (root / "setup.py", root / "setup.cfg")
+    ):
+        return None
+    if "cmdclass" in setuptools or "package-dir" in setuptools:
+        return None
+    if len(raw_declarations) > _PACKAGE_DATA_MAX_KEYS:
+        return None
+
+    declarations = {}
+    total_values = 0
+    for package, values in raw_declarations.items():
+        if not _valid_package_data_key(package):
+            return None
+        if not isinstance(values, list):
+            return None
+        total_values += len(values)
+        if total_values > _PACKAGE_DATA_MAX_VALUES:
+            return None
+        if any(
+            not isinstance(value, str)
+            or len(value) > _PACKAGE_DATA_MAX_TEXT
+            or _literal_package_data_parts(value) is None
+            for value in values
+        ):
+            return None
+        declarations[package] = tuple(sorted(set(values)))
+    return declarations
+
+
+def _valid_package_data_key(value) -> bool:
+    if not isinstance(value, str) or len(value) > _PACKAGE_DATA_MAX_TEXT:
+        return False
+    parts = value.split(".")
+    return bool(parts) and all(part.isidentifier() for part in parts)
+
+
+def _literal_package_data_parts(value: str) -> tuple[str, ...] | None:
+    if (
+        not value
+        or value.startswith("/")
+        or "\\" in value
+        or ":" in value
+        or any(character in value for character in "*?[]")
+    ):
+        return None
+    parts = tuple(value.split("/"))
+    if any(not part or part in {".", ".."} for part in parts):
+        return None
+    return parts
+
+
+def _package_directories(
+    module_paths: dict[str, str],
+    namespace_discovery: _NamespaceDiscovery | None,
+) -> dict[str, set[Path]]:
+    directories: dict[str, set[Path]] = {}
+    for module, path in sorted(module_paths.items()):
+        source = Path(path)
+        if source.name == "__init__.py":
+            directories.setdefault(module, set()).add(source.parent)
+        if namespace_discovery is None:
+            continue
+        _add_namespace_package_directories(
+            directories,
+            module,
+            source,
+            namespace_discovery,
+        )
+    return directories
+
+
+def _add_namespace_package_directories(
+    directories: dict[str, set[Path]],
+    module: str,
+    source: Path,
+    discovery: _NamespaceDiscovery,
+) -> None:
+    path_parts = source.parts
+    if not any(
+        path_parts[:len(root)] == root
+        for root in discovery.roots
+    ):
+        return
+    if not any(
+        module == prefix or module.startswith(f"{prefix}.")
+        for prefix in discovery.prefixes
+    ):
+        return
+
+    module_parts = module.split(".")
+    package_count = (
+        len(module_parts)
+        if source.name == "__init__.py"
+        else len(module_parts) - 1
+    )
+    if package_count <= 0:
+        return
+    root_parts = source.parent.parts[:-package_count]
+    for count in range(1, package_count + 1):
+        package = ".".join(module_parts[:count])
+        if not any(
+            package == prefix or package.startswith(f"{prefix}.")
+            for prefix in discovery.prefixes
+        ):
+            continue
+        directory = Path(*root_parts, *module_parts[:count])
+        directories.setdefault(package, set()).add(directory)
+
+
+def _package_data_target_status(
+    root: Path,
+    package_directory: Path,
+    target_parts: tuple[str, ...],
+) -> str | None:
+    current = root
+    relative_parts = package_directory.parts + target_parts
+    for index, part in enumerate(relative_parts):
+        current /= part
+        try:
+            details = current.lstat()
+        except FileNotFoundError:
+            return "missing"
+        except OSError:
+            return None
+        if stat.S_ISLNK(details.st_mode):
+            return None
+        is_target = index == len(relative_parts) - 1
+        if is_target:
+            return "present" if stat.S_ISREG(details.st_mode) else None
+        if not stat.S_ISDIR(details.st_mode):
+            return None
+    return None
 
 
 @dataclass(frozen=True, slots=True)

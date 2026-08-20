@@ -113,3 +113,24 @@ def test_literal_public_export_name_is_removed_from_anonymized_finding():
 
     assert payload["message"] == "Finding reported by PY-PKG-004."
     assert "private_export" not in str(payload)
+
+
+def test_package_data_names_are_removed_from_anonymized_finding():
+    finding = Finding(
+        rule_id="PY-PKG-006",
+        category="package-health",
+        severity="warning",
+        confidence="high",
+        message=(
+            "Static package-data declaration for 'private_package' names "
+            "missing source file 'private/schema.json'."
+        ),
+        location=Location("pyproject.toml", 1, 1),
+        remediation="Add private/schema.json.",
+    )
+
+    payload = ReportAnonymizer().finding(finding)
+
+    assert payload["message"] == "Finding reported by PY-PKG-006."
+    assert "private_package" not in str(payload)
+    assert "private/schema.json" not in str(payload)

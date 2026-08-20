@@ -331,10 +331,12 @@ Completed in the first Phase 3 vertical slice:
 - Reused shared ASTs and reason-required same-line suppressions for package public-API findings.
 - Added bounded PEP 420 namespace discovery for static setuptools roots and explicit package prefixes without executing build hooks.
 - Applied import-graph, entry-point, and public-API checks to supported namespace modules.
+- Added `PY-PKG-006` for missing literal static setuptools package-data source targets using bounded metadata-only path checks.
+- Skipped custom/generating build configurations, globs, unsafe paths, symlinks, special files, and ambiguous package mappings.
 - Made invalid package metadata participate in strict-mode analysis health.
 - Added a pinned Python 3.10 TOML compatibility dependency.
 
-Next work includes dependency declaration comparison, package-data validation, and opt-in isolated build/import checks.
+Next work includes dependency declaration comparison, broader package-data and built-artifact validation, and opt-in isolated build/import checks.
 
 **Objective:** Analyze whether a Python package is correctly structured and distributable.
 
