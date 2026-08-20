@@ -1,5 +1,7 @@
 """Passive package metadata, layout, and import-graph analysis."""
 
+import pytest
+
 from analyzer.package_intelligence import _strongly_connected_cycles
 from analyzer.scanner import CodeScanner
 
@@ -382,4 +384,177 @@ def test_literal_all_finding_order_is_deterministic(project):
         "pkg/a.py",
         "pkg/z.py",
         "pkg/z.py",
+    ]
+
+
+def _namespace_pyproject(find_config: str, backend: str = "setuptools.build_meta"):
+    return (
+        "[build-system]\n"
+        f"build-backend = '{backend}'\n\n"
+        "[project]\n"
+        "name = 'namespace-demo'\n\n"
+        "[project.scripts]\n"
+        "demo = 'acme.plugins.cli:main'\n\n"
+        f"{find_config}"
+    )
+
+
+def test_configured_flat_namespace_expands_package_analysis(project):
+    root = project({
+        "pyproject.toml": _namespace_pyproject(
+            "[tool.setuptools.packages.find]\n"
+            "include = ['acme.*']\n"
+        ),
+        "acme/plugins/cli.py": (
+            "from . import service\n"
+            "__all__ = ['main', 'missing']\n\n"
+            "def main():\n"
+            "    return service.VALUE\n"
+        ),
+        "acme/plugins/service.py": "VALUE = 1\n",
+        "tests/test_cli.py": "from acme.plugins import cli\n",
+    })
+
+    scanner = CodeScanner(root)
+    scanner.scan()
+    package = scanner.package_intelligence
+
+    assert package.layout == "flat"
+    assert package.source_roots == ["."]
+    assert package.modules == ["acme.plugins.cli", "acme.plugins.service"]
+    assert package.import_graph["acme.plugins.cli"] == [
+        "acme.plugins.service",
+    ]
+    assert not any(
+        item.rule_id == "PY-PKG-002" for item in scanner.findings
+    )
+    public_api = [
+        item for item in scanner.findings if item.rule_id == "PY-PKG-004"
+    ]
+    assert len(public_api) == 1
+    assert "missing" in public_api[0].message
+    assert public_api[0].location.path == "acme/plugins/cli.py"
+
+
+def test_custom_namespace_root_supports_cycle_detection(project):
+    root = project({
+        "pyproject.toml": _namespace_pyproject(
+            "[tool.setuptools.packages.find]\n"
+            "where = ['lib']\n"
+            "include = ['acme.plugins']\n"
+        ),
+        "lib/acme/plugins/cli.py": "from . import service\n\ndef main():\n    pass\n",
+        "lib/acme/plugins/service.py": "from . import cli\n",
+    })
+
+    first = CodeScanner(root)
+    first.scan()
+    second = CodeScanner(root)
+    second.scan()
+
+    expected_modules = ["acme.plugins.cli", "acme.plugins.service"]
+    assert first.package_intelligence.modules == expected_modules
+    assert first.package_intelligence.source_roots == ["lib"]
+    assert first.package_intelligence.circular_imports == [expected_modules]
+    cycle = next(
+        item for item in first.findings if item.rule_id == "PY-PKG-001"
+    )
+    assert cycle.location.path == "lib/acme/plugins/cli.py"
+    assert first.package_intelligence.as_dict() == (
+        second.package_intelligence.as_dict()
+    )
+    assert first.findings == second.findings
+
+
+@pytest.mark.parametrize(
+    ("find_config", "backend"),
+    [
+        ("[tool.setuptools.packages.find]\n", "setuptools.build_meta"),
+        (
+            "[tool.setuptools.packages.find]\n"
+            "include = ['acme.*']\n"
+            "namespaces = false\n",
+            "setuptools.build_meta",
+        ),
+        (
+            "[tool.setuptools.packages.find]\n"
+            "include = ['acme.*']\n",
+            "hatchling.build",
+        ),
+        (
+            "[tool.setuptools.packages.find]\n"
+            "include = ['acme*']\n",
+            "setuptools.build_meta",
+        ),
+        (
+            "[tool.setuptools.packages.find]\n"
+            "where = ['../outside']\n"
+            "include = ['acme.*']\n",
+            "setuptools.build_meta",
+        ),
+        (
+            "[tool.setuptools.packages.find]\n"
+            "include = ['acme.*']\n"
+            "exclude = ['acme.private']\n",
+            "setuptools.build_meta",
+        ),
+        (
+            "[tool.setuptools]\n"
+            "package-dir = {'' = '.'}\n"
+            "[tool.setuptools.packages.find]\n"
+            "include = ['acme.*']\n",
+            "setuptools.build_meta",
+        ),
+        (
+            "[tool.setuptools.packages.find]\n"
+            "where = ['.', 'lib']\n"
+            "include = ['acme.*']\n",
+            "setuptools.build_meta",
+        ),
+    ],
+)
+def test_ambiguous_namespace_configuration_is_skipped(
+    project,
+    find_config,
+    backend,
+):
+    root = project({
+        "pyproject.toml": _namespace_pyproject(find_config, backend),
+        "acme/plugins/cli.py": "def main():\n    pass\n",
+    })
+
+    scanner = CodeScanner(root)
+    scanner.scan()
+
+    assert scanner.package_intelligence.layout == "none"
+    assert scanner.package_intelligence.modules == []
+
+
+def test_namespace_discovery_parses_each_source_once(project, monkeypatch):
+    import ast
+
+    root = project({
+        "pyproject.toml": _namespace_pyproject(
+            "[tool.setuptools.packages.find]\n"
+            "include = ['acme.*']\n"
+        ),
+        "acme/plugins/cli.py": "from . import service\n\ndef main():\n    pass\n",
+        "acme/plugins/service.py": "VALUE = 1\n",
+    })
+    real_parse = ast.parse
+    parse_calls = 0
+
+    def counting_parse(*args, **kwargs):
+        nonlocal parse_calls
+        parse_calls += 1
+        return real_parse(*args, **kwargs)
+
+    monkeypatch.setattr(ast, "parse", counting_parse)
+    scanner = CodeScanner(root)
+    scanner.scan()
+
+    assert parse_calls == 2
+    assert scanner.package_intelligence.modules == [
+        "acme.plugins.cli",
+        "acme.plugins.service",
     ]

@@ -329,10 +329,12 @@ Completed in the first Phase 3 vertical slice:
 - Added `PY-PKG-001` for circular imports, `PY-PKG-002` for missing console-script modules, and `PY-PKG-003` for invalid TOML.
 - Added conservative literal `__all__` validation through `PY-PKG-004` for missing module bindings and `PY-PKG-005` for duplicate exports.
 - Reused shared ASTs and reason-required same-line suppressions for package public-API findings.
+- Added bounded PEP 420 namespace discovery for static setuptools roots and explicit package prefixes without executing build hooks.
+- Applied import-graph, entry-point, and public-API checks to supported namespace modules.
 - Made invalid package metadata participate in strict-mode analysis health.
 - Added a pinned Python 3.10 TOML compatibility dependency.
 
-Next work includes namespace-package coverage, dependency declaration comparison, package-data validation, and opt-in isolated build/import checks.
+Next work includes dependency declaration comparison, package-data validation, and opt-in isolated build/import checks.
 
 **Objective:** Analyze whether a Python package is correctly structured and distributable.
 

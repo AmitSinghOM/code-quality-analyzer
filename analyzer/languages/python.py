@@ -52,7 +52,7 @@ class PythonRulePack:
 
     rule_pack_id = PYTHON_RULE_PACK_ID
     language_id = "python"
-    ruleset_version = "2.10.0"
+    ruleset_version = "2.11.0"
     plugin_api_version = PLUGIN_API_VERSION
 
     def __init__(self, analyzer: PythonRuleAnalyzer | None = None) -> None:

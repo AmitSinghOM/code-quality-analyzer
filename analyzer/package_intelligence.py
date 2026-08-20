@@ -72,12 +72,19 @@ class PythonPackageAnalyzer:
 
     def analyze(self) -> PackageIntelligence:
         metadata = self._read_metadata()
-        module_paths = _module_paths(self.parsed_files)
+        namespace_discovery = _namespace_discovery(metadata)
+        module_paths = _module_paths(
+            self.parsed_files,
+            namespace_discovery,
+        )
         self.result.layout = _layout(module_paths)
         if self.result.layout == "src":
             self.result.source_roots = ["src"]
         elif self.result.layout == "flat":
-            self.result.source_roots = ["."]
+            self.result.source_roots = _flat_source_roots(
+                module_paths,
+                namespace_discovery,
+            )
         self.result.modules = sorted(module_paths)
 
         graph, locations = _build_import_graph(
@@ -428,7 +435,102 @@ def _string_list(value) -> list[str]:
     return [item for item in value if isinstance(item, str)]
 
 
-def _module_paths(parsed_files: dict[str, ast.AST]) -> dict[str, str]:
+@dataclass(frozen=True, slots=True)
+class _NamespaceDiscovery:
+    """Validated static setuptools namespace discovery configuration."""
+
+    roots: tuple[tuple[str, ...], ...]
+    prefixes: tuple[str, ...]
+
+
+def _namespace_discovery(metadata: dict | None) -> _NamespaceDiscovery | None:
+    if metadata is None:
+        return None
+    build_system = _table(metadata.get("build-system"))
+    if build_system.get("build-backend") not in {
+        "setuptools.build_meta",
+        "setuptools.build_meta:__legacy__",
+    }:
+        return None
+
+    tool = _table(metadata.get("tool"))
+    setuptools = _table(tool.get("setuptools"))
+    if not setuptools or "package-dir" in setuptools:
+        return None
+    packages = _table(setuptools.get("packages"))
+    find_config = packages.get("find")
+    if not isinstance(find_config, dict):
+        return None
+    if set(find_config) - {"where", "include", "exclude", "namespaces"}:
+        return None
+
+    namespaces = find_config.get("namespaces", True)
+    if not isinstance(namespaces, bool) or not namespaces:
+        return None
+    excluded = find_config.get("exclude", [])
+    if not isinstance(excluded, list) or excluded:
+        return None
+
+    raw_prefixes = find_config.get("include")
+    if not isinstance(raw_prefixes, list) or not raw_prefixes:
+        return None
+    prefixes = []
+    for pattern in raw_prefixes:
+        prefix = _namespace_prefix(pattern)
+        if prefix is None:
+            return None
+        prefixes.append(prefix)
+
+    raw_roots = find_config.get("where", ["."])
+    if not isinstance(raw_roots, list) or not raw_roots:
+        return None
+    roots = []
+    for value in raw_roots:
+        root = _namespace_root(value)
+        if root is None:
+            return None
+        roots.append(root)
+    roots = sorted(set(roots))
+    if _roots_overlap(roots):
+        return None
+    return _NamespaceDiscovery(
+        roots=tuple(roots),
+        prefixes=tuple(sorted(set(prefixes))),
+    )
+
+
+def _namespace_prefix(value) -> str | None:
+    if not isinstance(value, str):
+        return None
+    prefix = value[:-2] if value.endswith(".*") else value
+    parts = prefix.split(".")
+    if not parts or any(not part.isidentifier() for part in parts):
+        return None
+    return prefix
+
+
+def _namespace_root(value) -> tuple[str, ...] | None:
+    if not isinstance(value, str) or not value or "\\" in value:
+        return None
+    candidate = Path(value)
+    if candidate.is_absolute() or ".." in candidate.parts:
+        return None
+    return tuple(part for part in candidate.parts if part != ".")
+
+
+def _roots_overlap(roots: list[tuple[str, ...]]) -> bool:
+    for index, root in enumerate(roots):
+        for other in roots[index + 1:]:
+            shorter, longer = sorted((root, other), key=len)
+            if longer[:len(shorter)] == shorter:
+                return True
+    return False
+
+
+def _module_paths(
+    parsed_files: dict[str, ast.AST],
+    namespace_discovery: _NamespaceDiscovery | None = None,
+) -> dict[str, str]:
     paths = sorted(parsed_files)
     uses_src = any(Path(path).parts[:1] == ("src",) for path in paths)
     package_dirs = {
@@ -449,14 +551,70 @@ def _module_paths(parsed_files: dict[str, ast.AST]) -> dict[str, str]:
         elif len(parts) == 1 and parts[0] == "setup.py":
             continue
 
-        if not parts or not parts[-1].endswith(".py"):
-            continue
-        parts[-1] = parts[-1][:-3]
-        if parts[-1] == "__init__":
-            parts = parts[:-1]
-        if parts:
-            modules[".".join(parts)] = path
+        module = _module_name(parts)
+        if module is not None:
+            modules[module] = path
+
+    if not uses_src and namespace_discovery is not None:
+        modules.update(_namespace_module_paths(paths, namespace_discovery))
     return modules
+
+
+def _namespace_module_paths(
+    paths: list[str],
+    discovery: _NamespaceDiscovery,
+) -> dict[str, str]:
+    modules = {}
+    for path in paths:
+        path_parts = Path(path).parts
+        for root in discovery.roots:
+            if path_parts[:len(root)] != root:
+                continue
+            module = _module_name(list(path_parts[len(root):]))
+            if module is None:
+                continue
+            if any(
+                module == prefix or module.startswith(f"{prefix}.")
+                for prefix in discovery.prefixes
+            ):
+                modules[module] = path
+            break
+    return modules
+
+
+def _module_name(parts: list[str]) -> str | None:
+    if not parts or not parts[-1].endswith(".py"):
+        return None
+    parts[-1] = parts[-1][:-3]
+    if parts[-1] == "__init__":
+        parts = parts[:-1]
+    if not parts or any(not part.isidentifier() for part in parts):
+        return None
+    return ".".join(parts)
+
+
+def _flat_source_roots(
+    module_paths: dict[str, str],
+    discovery: _NamespaceDiscovery | None,
+) -> list[str]:
+    if discovery is None:
+        return ["."]
+    roots = set()
+    unmatched = False
+    for path in module_paths.values():
+        path_parts = Path(path).parts
+        matches = [
+            root
+            for root in discovery.roots
+            if path_parts[:len(root)] == root
+        ]
+        if matches:
+            roots.update("/".join(root) or "." for root in matches)
+        else:
+            unmatched = True
+    if unmatched or not roots:
+        roots.add(".")
+    return sorted(roots, key=lambda value: (value != ".", value))
 
 
 def _layout(module_paths: dict[str, str]) -> str:

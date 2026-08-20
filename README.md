@@ -351,6 +351,8 @@ code. Every normal scan now reports:
 - Parsed `pyproject.toml` name, Python requirement, build backend, dependencies,
   optional dependency groups, and console scripts
 - Detected `src` or flat package layout and source roots
+- Statically configured setuptools PEP 420 namespace modules from safe,
+  explicit discovery roots and prefixes
 - First-party modules and their local import graph
 - Circular import groups
 - Console scripts that target missing local modules
@@ -360,8 +362,12 @@ Invalid TOML produces `PY-PKG-003` and makes `--strict` fail. Circular imports
 produce `PY-PKG-001`; invalid console-script module targets produce
 `PY-PKG-002`; missing and duplicate literal public exports produce
 `PY-PKG-004` and `PY-PKG-005`. Dynamic or ambiguous `__all__` declarations are
-conservatively skipped. Test-only directories without a package initializer are
-excluded from flat-layout package modules. See
+conservatively skipped. Configured PEP 420 discovery accepts only setuptools
+metadata with namespace discovery enabled, safe project-relative `where` roots,
+and nonempty exact or `prefix.*` includes. Custom backends, remapping, excludes,
+complex globs, and ambiguous roots retain conventional discovery without
+executing build hooks. Test-only directories without a package initializer are
+excluded from unconfigured flat-layout package modules. See
 [`docs/RULES.md`](docs/RULES.md).
 
 Python 3.10 uses the pinned `tomli` compatibility parser; Python 3.11 and newer

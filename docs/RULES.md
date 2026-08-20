@@ -175,6 +175,13 @@ A function exposes more than two parameters identified as boolean by an explicit
 
 All three rules report the function definition line, where a reason-required suppression can be placed when a stable external interface cannot yet be changed.
 
+## Python package rules
+
+Package rules analyze conventional `src` and initialized flat packages plus
+PEP 420 namespaces identified by bounded static setuptools discovery metadata.
+Ambiguous configuration is skipped without executing build hooks or weakening
+strict-mode analysis health.
+
 ## PY-PKG-001: Circular local imports
 
 **Category:** Package health
