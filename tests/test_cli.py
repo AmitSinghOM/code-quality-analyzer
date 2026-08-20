@@ -42,7 +42,7 @@ def test_json_output_is_valid_and_includes_health(project):
 
     assert result.exit_code == EXIT_OK
     assert payload["schema_version"] == "1.6.0"
-    assert payload["analyzer_version"] == "2.12.0"
+    assert payload["analyzer_version"] == "2.13.0"
     assert payload["ruleset_version"] == "2.4.0"
     assert payload["language_adapters"] == {
         "go": "1.0.0",
@@ -564,3 +564,13 @@ def test_strict_fails_for_incomplete_go_source(project):
     assert result.exit_code == EXIT_COVERAGE_GAP
     assert payload["scan_health"]["languages"] == {"go": 1}
     assert payload["scan_health"]["unparsed_files"] == 1
+
+
+def test_unknown_output_format_lists_registered_reporters(project):
+    root = project({"module.py": "VALUE = 1\n"})
+
+    result = run([str(root), "--output-format", "yaml"])
+
+    assert result.exit_code != EXIT_OK
+    assert "Unknown output format 'yaml'" in result.output
+    assert "json, text" in result.output

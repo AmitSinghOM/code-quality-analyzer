@@ -435,7 +435,7 @@ Follow-up hardening includes dependency declaration synchronization, action SHA 
 
 #### Phase 6 progress (August 20, 2026)
 
-**Status:** In progress
+**Status:** Core exit criteria met; plugin ecosystem follow-ups remain
 
 Completed in the first compatibility slice:
 
@@ -448,10 +448,11 @@ Completed in the first compatibility slice:
 - Added a versioned core plugin API plus explicit required/optional capability negotiation; incompatible plugin API versions are rejected during registration.
 - Changed optional Python complexity analysis to consume the scanner's shared AST artifacts while preserving complexity-specific health limits.
 - Moved Python DSA/design detection into a registered signal provider and made core scanning consume normalized language-neutral observations.
+- Registered the built-in text and JSON renderers behind the versioned reporter contract; CLI format selection now resolves dynamically through the registry.
 - Updated package discovery so built-in language subpackages are included in wheels and source distributions.
 - Added a minimal synthetic language, rule pack, metric provider, and reporter contract test.
 
-Next work includes registering the current text/JSON reporters, adding capability negotiation, sharing parsed facts with complexity analysis, and removing remaining Python-specific architecture-signal assumptions from the core orchestration.
+The initial Phase 6 exit criteria are now met: core scanning has no Python AST or pattern-catalog dependency, Python runs through registered adapters/providers, and synthetic languages share normalized findings and signals plus both standard reporters. Follow-up work includes optional dependency loading, third-party plugin discovery, and a stable cross-language dependency-fact contract.
 
 **Objective:** Extract a stable language-neutral core before adding another language.
 

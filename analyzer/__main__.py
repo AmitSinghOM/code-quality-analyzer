@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -22,7 +21,9 @@ from .baseline import (
 from .discovery import DEFAULT_MAX_FILE_SIZE, DEFAULT_MAX_FILES
 from .offline import OfflineViolationError, enforce_offline
 from .patterns import DSA_PATTERNS, SYSTEM_DESIGN_PATTERNS
+from .plugins import create_default_registry
 from .rater import QualityRater, coverage_gap_ratio
+from .reporters import AnalysisReport
 from .scanner import CodeScanner
 
 console = Console()
@@ -54,9 +55,10 @@ EXIT_FINDINGS = 4
     "--output-format",
     "-f",
     "output_format",
-    type=click.Choice(["text", "json"]),
+    type=str,
     default="text",
-    help="Output format",
+    show_default=True,
+    help="Registered output format",
 )
 @click.option(
     "--complexity",
@@ -210,15 +212,24 @@ def _run_analysis(
     anonymizer = ReportAnonymizer() if anonymize else None
     project_label = ANONYMIZED_PROJECT if anonymize else root.name
     internal_redaction = redact_paths and not anonymize
-
-    if output_format == "text":
-        console.print(f"\n[bold blue]Analyzing:[/bold blue] {project_label}\n")
+    registry = create_default_registry()
+    try:
+        reporter = registry.negotiate_reporter(output_format)
+    except LookupError as error:
+        available = ", ".join(
+            item["format_name"]
+            for item in registry.capabilities()["reporters"]
+        )
+        raise click.UsageError(
+            f"Unknown output format {output_format!r}; choose from {available}"
+        ) from error
 
     scanner = CodeScanner(
         root,
         max_file_size=max_file_size,
         max_files=max_files,
         redact_paths=internal_redaction,
+        registry=registry,
     )
     dsa_found, design_found = scanner.scan()
     scan_health = scanner.scan_health()
@@ -270,7 +281,7 @@ def _run_analysis(
             complexity_health = dict(result.health)
 
     if output_format == "json":
-        _emit_json(
+        report = AnalysisReport(structured=_build_json_report(
             project_label,
             rating,
             rater,
@@ -287,24 +298,29 @@ def _run_analysis(
             anonymizer,
             offline,
             redact_paths,
-        )
+        ))
     else:
-        _emit_text(
-            rating,
-            rater,
-            breakdown,
-            dsa_found,
-            design_found,
-            scanner,
-            scan_health,
-            complexity_data,
-            verbose,
-            reported_findings,
-            baseline_summary,
-            anonymizer,
-            offline,
-            redact_paths,
-        )
+        with console.capture() as capture:
+            _emit_text(
+                project_label,
+                rating,
+                rater,
+                breakdown,
+                dsa_found,
+                design_found,
+                scanner,
+                scan_health,
+                complexity_data,
+                verbose,
+                reported_findings,
+                baseline_summary,
+                anonymizer,
+                offline,
+                redact_paths,
+            )
+        report = AnalysisReport(text=capture.get())
+    rendered = reporter.render(report).decode("utf-8")
+    click.echo(rendered, nl=not rendered.endswith("\n"))
 
     return _exit_code(
         scanner,
@@ -433,7 +449,7 @@ def _project_analysis_payload(scanner, anonymized: bool) -> dict:
     return payload
 
 
-def _emit_json(
+def _build_json_report(
     project_label,
     rating,
     rater,
@@ -507,10 +523,11 @@ def _emit_json(
             if anonymizer is not None
             else complexity_health
         )
-    click.echo(json.dumps(output, indent=2))
+    return output
 
 
 def _emit_text(
+    project_label,
     rating,
     rater,
     breakdown,
@@ -526,6 +543,7 @@ def _emit_text(
     offline,
     redact_paths,
 ):
+    console.print(f"\n[bold blue]Analyzing:[/bold blue] {project_label}\n")
     privacy = _privacy_payload(anonymizer, offline, redact_paths)
     console.print(
         "[dim]Privacy: "

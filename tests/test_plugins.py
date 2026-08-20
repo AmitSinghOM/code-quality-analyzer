@@ -12,6 +12,7 @@ from analyzer.registry import (
     PluginRegistrationError,
     PluginRegistry,
 )
+from analyzer.reporters import AnalysisReport
 from analyzer.scanner import CodeScanner
 
 
@@ -294,3 +295,17 @@ def test_python_complexity_provider_reuses_scanner_ast(project, monkeypatch):
 
     assert result.payload["total_functions"] == 1
     assert result.health["failed_functions"] == 0
+
+
+def test_standard_reporters_are_registered_and_negotiated():
+    registry = create_default_registry()
+    report = AnalysisReport(structured={"status": "ok"}, text="ready\n")
+
+    assert registry.negotiate_reporter("json").render(report) == (
+        b'{\n  "status": "ok"\n}'
+    )
+    assert registry.negotiate_reporter("text").render(report) == b"ready\n"
+    assert registry.capabilities()["reporters"] == [
+        {"format_name": "json", "capability_version": "1.0.0"},
+        {"format_name": "text", "capability_version": "1.0.0"},
+    ]

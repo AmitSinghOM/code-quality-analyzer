@@ -39,6 +39,7 @@ code-quality-analyzer/
 │   ├── protocols.py     # Source, parse, rule, provider, and reporter contracts
 │   ├── registry.py      # Versioned plugin and capability negotiation registry
 │   ├── plugins.py       # Built-in plugin assembly
+│   ├── reporters.py     # Registered text/JSON report renderers
 │   ├── languages/       # Built-in language adapters and rule packs
 │   ├── scanner.py       # Language-neutral orchestration through plugins
 │   ├── complexity.py    # Time/space complexity analyzer

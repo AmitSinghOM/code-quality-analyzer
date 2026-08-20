@@ -21,7 +21,9 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ### Changed
 
-- Analyzer version advanced to 2.12.0; report schema advanced to 1.6.0 and ruleset advanced to 2.4.0
+- Analyzer version advanced to 2.13.0; report schema remains 1.6.0 and ruleset remains 2.4.0
+- Built-in text and JSON reporters now implement the versioned reporter contract and are selected dynamically through the plugin registry
+- The CLI emits an immutable report envelope through negotiated reporters instead of directly serializing JSON
 - Go imports now preserve default, explicit, blank, and dot-import semantics; `GO-COR-001` follows explicit aliases without trusting blank or dot imports
 - A passive Go project provider now aggregates multi-file packages and local module import edges from shared facts and a bounded `go.mod` read
 - JSON reports expose privacy-projected project-provider results and generic project-analysis health
