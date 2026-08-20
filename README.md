@@ -329,8 +329,9 @@ location. JSON reports include both `findings` and an aggregate
 `finding_summary`; terminal reports show an **Actionable Findings** table.
 
 The built-in Python rules detect mutable function defaults, broad exception
-handlers, silently swallowed exceptions, directly unreachable statements, and
-functions above measured cyclomatic or cognitive complexity limits. Rule
+handlers, silently swallowed exceptions, directly unreachable statements,
+functions above measured cyclomatic or cognitive complexity limits, oversized
+functions, excessive parameter lists, and boolean mode proliferation. Rule
 enablement and severity can be configured, and valid same-line suppressions
 require an explicit rule ID and quoted reason. See
 [`docs/RULES.md`](docs/RULES.md) for rule behavior and remediation examples and

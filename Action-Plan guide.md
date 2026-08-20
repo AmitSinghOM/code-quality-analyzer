@@ -268,8 +268,11 @@ Completed in the configuration and suppression slice:
 - Added measured `PY-MAINT-001` cyclomatic complexity with an inclusive limit of 10.
 - Added measured `PY-MAINT-002` cognitive complexity with an inclusive limit of 15.
 - Measured nested functions independently from shared parse artifacts without another parse.
+- Added `PY-MAINT-003` for functions spanning more than 60 physical lines.
+- Added `PY-MAINT-004` for more than seven effective parameters, excluding `self`/`cls`.
+- Added `PY-MAINT-005` for more than two explicit/defaulted boolean parameters.
 
-Next work is bounded long-unit, parameter-count, async-blocking, and resource-handling rules.
+Next work is bounded async-blocking and resource-handling rules, followed by Phase 3 dependency and public-API checks.
 
 **Objective:** Provide enough value for developers to use the analyzer during daily Python development.
 

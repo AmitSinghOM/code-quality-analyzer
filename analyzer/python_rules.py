@@ -8,8 +8,11 @@ from typing import Protocol
 
 from .findings import Finding, Location
 from .maintainability import (
+    BooleanParameterRule,
     CognitiveComplexityRule,
     CyclomaticComplexityRule,
+    ExcessiveParametersRule,
+    LongFunctionRule,
 )
 
 
@@ -346,6 +349,9 @@ class PythonRuleAnalyzer:
                 UnreachableCodeRule(),
                 CyclomaticComplexityRule(),
                 CognitiveComplexityRule(),
+                LongFunctionRule(),
+                ExcessiveParametersRule(),
+                BooleanParameterRule(),
             )
         )
 

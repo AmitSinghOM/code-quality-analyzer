@@ -127,6 +127,32 @@ A function has cognitive complexity above 15. Decisions add one point plus their
 
 Flatten nested conditionals and loops, use guard clauses, and extract focused helpers. A value of exactly 15 is accepted. Nested functions and methods are measured independently, and a suppression must appear on the reported function-definition line.
 
+## PY-MAINT-003: Long function
+
+**Category:** Maintainability
+**Default severity:** Warning
+**Confidence:** High
+
+A function spans more than 60 physical source lines from its definition through its final statement. A span of exactly 60 lines is accepted. Extract cohesive responsibilities into focused helpers.
+
+## PY-MAINT-004: Excessive parameters
+
+**Category:** Maintainability
+**Default severity:** Warning
+**Confidence:** High
+
+A function declares more than seven effective parameters. The leading `self` or `cls` receiver is excluded; positional-only, positional, keyword-only, variadic positional, and variadic keyword parameters are counted. Group related inputs in a value object or split the responsibility.
+
+## PY-MAINT-005: Boolean parameter proliferation
+
+**Category:** Maintainability
+**Default severity:** Warning
+**Confidence:** High
+
+A function exposes more than two parameters identified as boolean by an explicit `bool` annotation or a `True`/`False` default. Multiple mode flags create combinatorial behavior that is hard to name and test. Prefer explicit operations, an enum, or a typed configuration object.
+
+All three rules report the function definition line, where a reason-required suppression can be placed when a stable external interface cannot yet be changed.
+
 ## PY-PKG-001: Circular local imports
 
 **Category:** Package health

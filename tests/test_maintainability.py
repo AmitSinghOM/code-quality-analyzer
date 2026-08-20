@@ -103,3 +103,68 @@ def test_complexity_findings_support_same_line_suppression(project):
     scanner.scan()
 
     assert scanner.findings == []
+
+
+def _long_function(name: str, body_lines: int) -> str:
+    lines = [f"def {name}():"]
+    lines.extend(f"    value_{index} = {index}" for index in range(body_lines))
+    return "\n".join(lines) + "\n"
+
+
+def test_long_function_rule_uses_inclusive_sixty_line_limit():
+    source = _long_function("boundary", 59)
+    source += "\n" + _long_function("too_long", 60)
+
+    findings = PythonRuleAnalyzer().analyze(ast.parse(source), "module.py")
+
+    assert [finding.rule_id for finding in findings] == ["PY-MAINT-003"]
+    assert "61 lines" in findings[0].message
+    assert "limit 60" in findings[0].message
+
+
+def test_parameter_rule_excludes_receiver_and_accepts_seven_inputs():
+    source = (
+        "class Service:\n"
+        "    def boundary(self, a, b, c, d, e, f, g):\n"
+        "        return a\n"
+        "    def excessive(cls, a, b, c, d, e, f, g, h):\n"
+        "        return a\n"
+    )
+
+    findings = PythonRuleAnalyzer().analyze(ast.parse(source), "module.py")
+
+    assert [finding.rule_id for finding in findings] == ["PY-MAINT-004"]
+    assert "8 parameters" in findings[0].message
+
+
+def test_boolean_parameter_rule_uses_annotations_and_defaults():
+    source = (
+        "def boundary(first: bool, second=False):\n"
+        "    return first or second\n"
+        "def modes(first: bool, second=False, *, third=True):\n"
+        "    return first or second or third\n"
+    )
+
+    findings = PythonRuleAnalyzer().analyze(ast.parse(source), "module.py")
+
+    assert [finding.rule_id for finding in findings] == ["PY-MAINT-005"]
+    assert "3 boolean parameters" in findings[0].message
+
+
+def test_size_and_parameter_findings_are_suppressible(project):
+    long_source = _long_function("legacy", 60).replace(
+        "def legacy():",
+        "def legacy():  # cqa: ignore=PY-MAINT-003 reason='generated shape'",
+    )
+    parameters = (
+        "def configure(a, b, c, d, e, f, g, h, first: bool, "
+        "second=False, third=True):  "
+        "# cqa: ignore=PY-MAINT-004,PY-MAINT-005 reason='public API'\n"
+        "    return a\n"
+    )
+    root = project({"module.py": long_source + "\n" + parameters})
+    scanner = CodeScanner(root)
+
+    scanner.scan()
+
+    assert scanner.findings == []

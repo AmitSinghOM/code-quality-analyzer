@@ -127,6 +127,191 @@ def _location(
     )
 
 
+class LongFunctionRule:
+    """Report functions whose physical source span exceeds the limit."""
+
+    rule_id = "PY-MAINT-003"
+    category = "maintainability"
+    severity = "warning"
+    confidence = "high"
+    limit = 60
+
+    def evaluate(
+        self,
+        tree: ast.AST,
+        path: str,
+        identity_path: str | None = None,
+    ) -> Iterable[Finding]:
+        identity_path = identity_path or path
+        for function in _functions(tree):
+            end_line = getattr(function, "end_lineno", function.lineno)
+            span = end_line - function.lineno + 1
+            if span <= self.limit:
+                continue
+            yield Finding(
+                rule_id=self.rule_id,
+                category=self.category,
+                severity=self.severity,
+                confidence=self.confidence,
+                message=(
+                    f"Function '{function.name}' spans {span} lines "
+                    f"(limit {self.limit})."
+                ),
+                location=_function_location(function, path, identity_path),
+                remediation=(
+                    "Extract cohesive responsibilities into focused helper "
+                    "functions."
+                ),
+            )
+
+
+class ExcessiveParametersRule:
+    """Report functions with more than seven effective parameters."""
+
+    rule_id = "PY-MAINT-004"
+    category = "maintainability"
+    severity = "warning"
+    confidence = "high"
+    limit = 7
+
+    def evaluate(
+        self,
+        tree: ast.AST,
+        path: str,
+        identity_path: str | None = None,
+    ) -> Iterable[Finding]:
+        identity_path = identity_path or path
+        for function in _functions(tree):
+            count = _parameter_count(function.args)
+            if count <= self.limit:
+                continue
+            yield Finding(
+                rule_id=self.rule_id,
+                category=self.category,
+                severity=self.severity,
+                confidence=self.confidence,
+                message=(
+                    f"Function '{function.name}' has {count} parameters "
+                    f"(limit {self.limit})."
+                ),
+                location=_function_location(function, path, identity_path),
+                remediation=(
+                    "Group related inputs in a cohesive value object or split "
+                    "the responsibility."
+                ),
+            )
+
+
+class BooleanParameterRule:
+    """Report functions controlled by more than two boolean parameters."""
+
+    rule_id = "PY-MAINT-005"
+    category = "maintainability"
+    severity = "warning"
+    confidence = "high"
+    limit = 2
+
+    def evaluate(
+        self,
+        tree: ast.AST,
+        path: str,
+        identity_path: str | None = None,
+    ) -> Iterable[Finding]:
+        identity_path = identity_path or path
+        for function in _functions(tree):
+            names = _boolean_parameters(function.args)
+            if len(names) <= self.limit:
+                continue
+            yield Finding(
+                rule_id=self.rule_id,
+                category=self.category,
+                severity=self.severity,
+                confidence=self.confidence,
+                message=(
+                    f"Function '{function.name}' has {len(names)} boolean "
+                    f"parameters (limit {self.limit})."
+                ),
+                location=_function_location(function, path, identity_path),
+                remediation=(
+                    "Replace mode flags with explicit operations or a typed "
+                    "configuration object."
+                ),
+            )
+
+
+def _functions(
+    tree: ast.AST,
+) -> tuple[ast.FunctionDef | ast.AsyncFunctionDef, ...]:
+    functions = (
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+    )
+    return tuple(sorted(functions, key=lambda node: (node.lineno, node.col_offset)))
+
+
+def _function_location(
+    function: ast.FunctionDef | ast.AsyncFunctionDef,
+    path: str,
+    identity_path: str,
+) -> Location:
+    return Location(
+        path=path,
+        line=function.lineno,
+        column=function.col_offset + 1,
+        identity_path=identity_path,
+    )
+
+
+def _parameter_count(arguments: ast.arguments) -> int:
+    positional = [*arguments.posonlyargs, *arguments.args]
+    if positional and positional[0].arg in {"self", "cls"}:
+        positional = positional[1:]
+    return (
+        len(positional)
+        + len(arguments.kwonlyargs)
+        + int(arguments.vararg is not None)
+        + int(arguments.kwarg is not None)
+    )
+
+
+def _boolean_parameters(arguments: ast.arguments) -> tuple[str, ...]:
+    positional = [*arguments.posonlyargs, *arguments.args]
+    positional_defaults = {
+        argument.arg: default
+        for argument, default in zip(
+            positional[-len(arguments.defaults):],
+            arguments.defaults,
+            strict=True,
+        )
+    } if arguments.defaults else {}
+    keyword_defaults = {
+        argument.arg: default
+        for argument, default in zip(
+            arguments.kwonlyargs,
+            arguments.kw_defaults,
+            strict=True,
+        )
+        if default is not None
+    }
+    names = []
+    for argument in [*positional, *arguments.kwonlyargs]:
+        default = positional_defaults.get(
+            argument.arg,
+            keyword_defaults.get(argument.arg),
+        )
+        if _is_bool_annotation(argument.annotation) or (
+            isinstance(default, ast.Constant)
+            and isinstance(default.value, bool)
+        ):
+            names.append(argument.arg)
+    return tuple(names)
+
+
+def _is_bool_annotation(annotation: ast.expr | None) -> bool:
+    return isinstance(annotation, ast.Name) and annotation.id == "bool"
+
+
 class _ComplexityCounter(ast.NodeVisitor):
     """Count decision paths and nesting pressure within one function."""
 
