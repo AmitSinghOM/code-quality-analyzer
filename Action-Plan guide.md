@@ -265,8 +265,11 @@ Completed in the configuration and suppression slice:
 - Added `PY-COR-003` for handlers that silently discard failures with `pass` or `...`.
 - Added conservative `PY-COR-004` findings for statements after direct control transfer.
 - Reused reason-required suppressions and language-neutral policy for all new rules.
+- Added measured `PY-MAINT-001` cyclomatic complexity with an inclusive limit of 10.
+- Added measured `PY-MAINT-002` cognitive complexity with an inclusive limit of 15.
+- Measured nested functions independently from shared parse artifacts without another parse.
 
-Next work is measured cyclomatic and cognitive complexity plus additional bounded maintainability rules.
+Next work is bounded long-unit, parameter-count, async-blocking, and resource-handling rules.
 
 **Objective:** Provide enough value for developers to use the analyzer during daily Python development.
 

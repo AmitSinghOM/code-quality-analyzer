@@ -7,6 +7,10 @@ from collections.abc import Iterable, Sequence
 from typing import Protocol
 
 from .findings import Finding, Location
+from .maintainability import (
+    CognitiveComplexityRule,
+    CyclomaticComplexityRule,
+)
 
 
 class PythonRule(Protocol):
@@ -340,6 +344,8 @@ class PythonRuleAnalyzer:
                 BroadExceptionRule(),
                 SwallowedExceptionRule(),
                 UnreachableCodeRule(),
+                CyclomaticComplexityRule(),
+                CognitiveComplexityRule(),
             )
         )
 

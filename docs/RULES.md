@@ -107,6 +107,26 @@ def load():
 
 The rule is intentionally conservative: it does not infer that a conditional or compound statement always transfers control.
 
+## PY-MAINT-001: High cyclomatic complexity
+
+**Category:** Maintainability
+**Default severity:** Warning
+**Confidence:** High
+
+A function has more than 10 independent control-flow paths. The measured value starts at one and counts conditionals, loops, exception handlers, conditional expressions, boolean branches, comprehensions, and match branches.
+
+The finding reports the function definition and measured value. Extract independent decisions into focused helpers. A value of exactly 10 is accepted; the first reported value is 11.
+
+## PY-MAINT-002: High cognitive complexity
+
+**Category:** Maintainability
+**Default severity:** Warning
+**Confidence:** High
+
+A function has cognitive complexity above 15. Decisions add one point plus their current control-flow nesting depth; boolean sequences and comprehensions also add bounded structural cost. The measurement is deterministic and syntax-derived rather than an estimated Big-O class.
+
+Flatten nested conditionals and loops, use guard clauses, and extract focused helpers. A value of exactly 15 is accepted. Nested functions and methods are measured independently, and a suppression must appear on the reported function-definition line.
+
 ## PY-PKG-001: Circular local imports
 
 **Category:** Package health
