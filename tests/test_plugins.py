@@ -249,3 +249,22 @@ def test_registry_negotiates_required_and_optional_capabilities():
             "complexity",
             "1.1.0",
         )
+
+
+def test_python_complexity_provider_reuses_scanner_ast(project, monkeypatch):
+    import ast
+
+    root = project({
+        "module.py": "def values(items):\n    return list(items)\n",
+    })
+    scanner = CodeScanner(root)
+    scanner.scan()
+
+    def fail_second_parse(_source):
+        raise AssertionError("complexity reparsed source")
+
+    monkeypatch.setattr(ast, "parse", fail_second_parse)
+    result = scanner.run_project_provider("python", "complexity")
+
+    assert result.payload["total_functions"] == 1
+    assert result.health["failed_functions"] == 0

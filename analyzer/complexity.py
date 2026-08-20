@@ -10,6 +10,7 @@ Features:
 """
 
 import ast
+from collections.abc import Iterable
 from pathlib import Path
 from dataclasses import dataclass, field
 from enum import Enum
@@ -849,12 +850,7 @@ class ProjectComplexityAnalyzer:
         self.failed_functions = 0
 
     def analyze(self) -> list[FunctionComplexity]:
-        """Analyze all Python files in project.
-
-        File reads go through the shared discovery layer, so size caps, symlink
-        escapes and non-regular files are handled the same way as the pattern
-        scan, and skips are counted rather than swallowed.
-        """
+        """Analyze discovered Python files for legacy direct callers."""
         for py_file, content in iter_python_files(
             self.project_path,
             max_file_size=self.max_file_size,
@@ -867,32 +863,50 @@ class ProjectComplexityAnalyzer:
                 self.discovery.skip('syntax_error', py_file)
                 continue
             except (RecursionError, MemoryError, ValueError):
-                # Deeply nested or otherwise pathological source.
                 self.discovery.skip('unparseable', py_file)
                 continue
 
-            functions = [
-                node for node in ast.walk(tree)
-                if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
-            ]
-            if len(functions) > self.MAX_FUNCTIONS_PER_FILE:
-                self.discovery.skip('too_many_functions', py_file)
-                continue
-
-            for node in functions:
-                self.analyzer.all_functions.add(node.name)
-
-            rel = display_path(py_file, self.project_path, self.redact_paths)
-            for node in functions:
-                try:
-                    result = self.analyzer.analyze_function(node, py_file)
-                except RecursionError:
-                    self.failed_functions += 1
-                    continue
-                result.file = rel
-                self.results.append(result)
-
+            self._analyze_tree(
+                tree,
+                py_file,
+                display_path(py_file, self.project_path, self.redact_paths),
+            )
         return self.results
+
+    def analyze_trees(
+        self,
+        sources: Iterable[tuple[Path, str, ast.AST]],
+    ) -> list[FunctionComplexity]:
+        """Analyze already parsed trees without reading or parsing files again."""
+        for source_path, report_path, tree in sources:
+            self._analyze_tree(tree, source_path, report_path)
+        return self.results
+
+    def _analyze_tree(
+        self,
+        tree: ast.AST,
+        source_path: Path,
+        report_path: str,
+    ) -> None:
+        functions = [
+            node for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+        ]
+        if len(functions) > self.MAX_FUNCTIONS_PER_FILE:
+            self.discovery.skip('too_many_functions', source_path)
+            return
+
+        for node in functions:
+            self.analyzer.all_functions.add(node.name)
+
+        for node in functions:
+            try:
+                result = self.analyzer.analyze_function(node, source_path)
+            except RecursionError:
+                self.failed_functions += 1
+                continue
+            result.file = report_path
+            self.results.append(result)
 
     def analysis_health(self) -> dict:
         """What was and was not analyzed."""

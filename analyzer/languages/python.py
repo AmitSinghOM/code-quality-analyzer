@@ -113,7 +113,15 @@ class PythonComplexityProvider:
             max_files=project.max_files,
             redact_paths=project.redact_paths,
         )
-        analyzer.analyze()
+        analyzer.analyze_trees(
+            (
+                parsed.source.path,
+                parsed.source.display_path,
+                parsed.artifact,
+            )
+            for _, parsed in sorted(project.parsed_files.items())
+            if isinstance(parsed.artifact, ast.AST)
+        )
         return ProviderResult(
             payload=analyzer.get_summary(),
             health=analyzer.analysis_health(),

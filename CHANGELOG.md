@@ -21,7 +21,8 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ### Changed
 
-- Analyzer version advanced to 2.9.0; report schema remains 1.5.0 and ruleset remains 2.3.0
+- Analyzer version advanced to 2.10.0; report schema remains 1.5.0 and ruleset remains 2.3.0
+- Optional Python complexity analysis now consumes the scanner's shared AST artifacts instead of discovering, reading, and parsing source again
 - Plugins now declare a core API target; project providers and reporters are resolved through explicit versioned capability negotiation
 - Python package and complexity analysis now resolve through cached project providers
 - Reports now inventory registered language adapters and analyzed language counts

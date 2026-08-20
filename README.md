@@ -285,9 +285,9 @@ The first rule is `PY-COR-001`, which detects mutable function defaults such as
 `items=[]` and `cache=dict()`. See [`docs/RULES.md`](docs/RULES.md) for rule
 behavior and remediation examples.
 
-Files are parsed once for signal extraction and actionable Python rules.
-Malformed files emit no semantic findings and remain visible through analysis
-health.
+Files are parsed once for signal extraction, actionable Python rules, package
+intelligence, and optional complexity analysis. Malformed files emit no
+semantic findings and remain visible through analysis health.
 
 ## Package Intelligence
 
