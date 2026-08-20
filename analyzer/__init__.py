@@ -1,5 +1,5 @@
 """Code Quality Analyzer package and public contract versions."""
 
-__version__ = "2.8.0"
+__version__ = "2.9.0"
 REPORT_SCHEMA_VERSION = "1.5.0"
 RULESET_VERSION = "2.3.0"

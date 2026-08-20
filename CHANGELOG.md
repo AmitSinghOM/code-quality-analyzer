@@ -21,7 +21,8 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ### Changed
 
-- Analyzer version advanced to 2.8.0; report schema remains 1.5.0 and ruleset remains 2.3.0
+- Analyzer version advanced to 2.9.0; report schema remains 1.5.0 and ruleset remains 2.3.0
+- Plugins now declare a core API target; project providers and reporters are resolved through explicit versioned capability negotiation
 - Python package and complexity analysis now resolve through cached project providers
 - Reports now inventory registered language adapters and analyzed language counts
 - Anonymized package intelligence exposes aggregate facts only

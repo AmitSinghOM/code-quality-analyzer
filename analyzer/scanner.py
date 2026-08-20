@@ -113,7 +113,11 @@ class CodeScanner:
         language_id: str,
         capability: str,
     ) -> ProviderResult | None:
-        provider = self.registry.project_provider(language_id, capability)
+        provider = self.registry.negotiate_project_provider(
+            language_id,
+            capability,
+            optional=True,
+        )
         if provider is None:
             return None
         result = provider.analyze(self._project_context(language_id))

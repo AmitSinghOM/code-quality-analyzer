@@ -9,6 +9,9 @@ from typing import Protocol, runtime_checkable
 
 from .findings import Finding
 
+PLUGIN_API_VERSION = "1.0.0"
+DEFAULT_CAPABILITY_VERSION = "1.0.0"
+
 
 @dataclass(frozen=True, slots=True)
 class SourceFile:
@@ -37,6 +40,7 @@ class LanguageAdapter(Protocol):
 
     language_id: str
     adapter_version: str
+    plugin_api_version: str
     extensions: tuple[str, ...]
 
     def parse(self, source: SourceFile) -> ParsedFile: ...
@@ -49,6 +53,7 @@ class RulePack(Protocol):
     rule_pack_id: str
     language_id: str
     ruleset_version: str
+    plugin_api_version: str
 
     def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]: ...
 
@@ -59,6 +64,8 @@ class MetricProvider(Protocol):
 
     provider_id: str
     language_id: str
+    plugin_api_version: str
+    capability_version: str
 
     def measure(self, parsed: ParsedFile) -> Mapping[str, int | float]: ...
 
@@ -68,6 +75,8 @@ class Reporter(Protocol):
     """Render a language-neutral report representation."""
 
     format_name: str
+    plugin_api_version: str
+    capability_version: str
 
     def render(self, report: object) -> bytes: ...
 
@@ -99,6 +108,8 @@ class ProjectProvider(Protocol):
     provider_id: str
     language_id: str
     capability: str
+    capability_version: str
+    plugin_api_version: str
     enabled_by_default: bool
 
     def analyze(self, project: ProjectContext) -> ProviderResult: ...

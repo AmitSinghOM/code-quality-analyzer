@@ -37,7 +37,7 @@ code-quality-analyzer/
 │   ├── patterns.py      # DSA & System Design pattern definitions
 │   ├── package_intelligence.py # Metadata, modules, imports, cycles
 │   ├── protocols.py     # Source, parse, rule, provider, and reporter contracts
-│   ├── registry.py      # Deterministic plugin and project-provider registry
+│   ├── registry.py      # Versioned plugin and capability negotiation registry
 │   ├── plugins.py       # Built-in plugin assembly
 │   ├── languages/       # Built-in language adapters and rule packs
 │   ├── scanner.py       # Python orchestration through registered plugins

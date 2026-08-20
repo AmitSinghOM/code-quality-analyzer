@@ -7,7 +7,11 @@ import pytest
 from analyzer.findings import Finding, Location
 from analyzer.plugins import create_default_registry
 from analyzer.protocols import ParsedFile, SourceFile
-from analyzer.registry import PluginRegistrationError, PluginRegistry
+from analyzer.registry import (
+    CapabilityNegotiationError,
+    PluginRegistrationError,
+    PluginRegistry,
+)
 from analyzer.scanner import CodeScanner
 
 
@@ -83,6 +87,7 @@ def test_minimal_plugins_register_and_share_normalized_models():
     assert measurements == {"lines": 1}
     assert registry.reporter("stub").render(findings) == str(findings).encode()
     assert registry.capabilities() == {
+        "plugin_api_version": "1.0.0",
         "languages": {"stub": "1.0.0"},
         "rule_packs": [{
             "language_id": "stub",
@@ -92,9 +97,13 @@ def test_minimal_plugins_register_and_share_normalized_models():
         "metric_providers": [{
             "language_id": "stub",
             "provider_id": "stub-metrics",
+            "capability_version": "1.0.0",
         }],
         "project_providers": [],
-        "reporters": ["stub"],
+        "reporters": [{
+            "format_name": "stub",
+            "capability_version": "1.0.0",
+        }],
     }
 
 
@@ -198,12 +207,45 @@ def test_python_project_providers_are_registered_and_cached(project):
             "language_id": "python",
             "capability": "complexity",
             "provider_id": "python-complexity",
+            "capability_version": "1.0.0",
             "enabled_by_default": False,
         },
         {
             "language_id": "python",
             "capability": "package",
             "provider_id": "python-package",
+            "capability_version": "1.0.0",
             "enabled_by_default": True,
         },
     ]
+
+
+def test_registry_rejects_incompatible_plugin_api():
+    class FutureAdapter(StubAdapter):
+        plugin_api_version = "2.0.0"
+
+    with pytest.raises(PluginRegistrationError, match="core provides"):
+        PluginRegistry().register_language(FutureAdapter())
+
+
+def test_registry_negotiates_required_and_optional_capabilities():
+    registry = create_default_registry()
+
+    provider = registry.negotiate_project_provider(
+        "python",
+        "complexity",
+        "1.0.0",
+    )
+
+    assert provider.provider_id == "python-complexity"
+    assert registry.negotiate_project_provider(
+        "python",
+        "missing",
+        optional=True,
+    ) is None
+    with pytest.raises(CapabilityNegotiationError, match="provides 1.0.0"):
+        registry.negotiate_project_provider(
+            "python",
+            "complexity",
+            "1.1.0",
+        )

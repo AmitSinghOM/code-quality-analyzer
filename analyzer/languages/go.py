@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from ..findings import Finding, Location
-from ..protocols import ParsedFile, SourceFile
+from ..protocols import PLUGIN_API_VERSION, ParsedFile, SourceFile
 from ..registry import PluginRegistry
 
 GO_ADAPTER_VERSION = "1.0.0"
@@ -60,6 +60,7 @@ class GoLanguageAdapter:
 
     language_id = "go"
     adapter_version = GO_ADAPTER_VERSION
+    plugin_api_version = PLUGIN_API_VERSION
     extensions = (".go",)
 
     def parse(self, source: SourceFile) -> ParsedFile:
@@ -136,6 +137,7 @@ class GoRulePack:
     rule_pack_id = GO_RULE_PACK_ID
     language_id = "go"
     ruleset_version = "2.3.0"
+    plugin_api_version = PLUGIN_API_VERSION
 
     def __init__(self) -> None:
         self.rules = (GoIgnoredErrorRule(),)

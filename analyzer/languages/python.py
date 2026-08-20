@@ -9,6 +9,8 @@ from ..complexity import ProjectComplexityAnalyzer
 from ..findings import Finding
 from ..package_intelligence import PythonPackageAnalyzer
 from ..protocols import (
+    DEFAULT_CAPABILITY_VERSION,
+    PLUGIN_API_VERSION,
     ParsedFile,
     ProjectContext,
     ProviderResult,
@@ -27,6 +29,7 @@ class PythonLanguageAdapter:
 
     language_id = "python"
     adapter_version = PYTHON_ADAPTER_VERSION
+    plugin_api_version = PLUGIN_API_VERSION
     extensions = (".py",)
 
     def parse(self, source: SourceFile) -> ParsedFile:
@@ -47,6 +50,7 @@ class PythonRulePack:
     rule_pack_id = PYTHON_RULE_PACK_ID
     language_id = "python"
     ruleset_version = "2.2.0"
+    plugin_api_version = PLUGIN_API_VERSION
 
     def __init__(self, analyzer: PythonRuleAnalyzer | None = None) -> None:
         self.analyzer = analyzer or PythonRuleAnalyzer()
@@ -69,6 +73,8 @@ class PythonPackageProvider:
     provider_id = "python-package"
     language_id = "python"
     capability = "package"
+    capability_version = DEFAULT_CAPABILITY_VERSION
+    plugin_api_version = PLUGIN_API_VERSION
     enabled_by_default = True
 
     def analyze(self, project: ProjectContext) -> ProviderResult:
@@ -96,6 +102,8 @@ class PythonComplexityProvider:
     provider_id = "python-complexity"
     language_id = "python"
     capability = "complexity"
+    capability_version = DEFAULT_CAPABILITY_VERSION
+    plugin_api_version = PLUGIN_API_VERSION
     enabled_by_default = False
 
     def analyze(self, project: ProjectContext) -> ProviderResult:
