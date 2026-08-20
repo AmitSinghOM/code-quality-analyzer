@@ -26,10 +26,11 @@ All notable changes are documented in this file. Versions follow semantic versio
 - High-confidence Python findings for broad handlers, swallowed exceptions, and unreachable statements
 - Measured Python cyclomatic and cognitive complexity findings
 - Python findings for long functions, excessive parameters, and boolean mode proliferation
+- Conservative Python findings for blocking async calls and unmanaged local resources
 
 ### Changed
 
-- Analyzer version advanced to 2.18.0; report schema remains 1.8.0 and ruleset advanced to 2.8.0
+- Analyzer version advanced to 2.19.0; report schema remains 1.8.0 and ruleset advanced to 2.9.0
 - Reports now qualify authority with source-candidate, readable-file, and successful-analysis counts, completeness ratio, and stable reason codes
 - `architecture_signal_score` replaces `rating` as the primary score name; `rating` remains a documented equal-valued 2.x compatibility alias
 - Source candidates with zero successful analyses now exit 3 even without strict mode

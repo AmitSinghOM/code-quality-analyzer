@@ -271,8 +271,11 @@ Completed in the configuration and suppression slice:
 - Added `PY-MAINT-003` for functions spanning more than 60 physical lines.
 - Added `PY-MAINT-004` for more than seven effective parameters, excluding `self`/`cls`.
 - Added `PY-MAINT-005` for more than two explicit/defaulted boolean parameters.
+- Added conservative `PY-COR-005` detection for allowlisted synchronous calls in async functions.
+- Added `PY-COR-006` for locally owned file/temporary resources without structural cleanup.
+- Resolved standard-library aliases while rejecting shadowed or ambiguous call roots.
 
-Next work is bounded async-blocking and resource-handling rules, followed by Phase 3 dependency and public-API checks.
+Next work moves to Phase 3 dependency declaration comparison and public-API/package-data checks.
 
 **Objective:** Provide enough value for developers to use the analyzer during daily Python development.
 

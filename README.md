@@ -331,8 +331,10 @@ location. JSON reports include both `findings` and an aggregate
 The built-in Python rules detect mutable function defaults, broad exception
 handlers, silently swallowed exceptions, directly unreachable statements,
 functions above measured cyclomatic or cognitive complexity limits, oversized
-functions, excessive parameter lists, and boolean mode proliferation. Rule
-enablement and severity can be configured, and valid same-line suppressions
+functions, excessive parameter lists, boolean mode proliferation, known
+blocking calls in async functions, and locally unmanaged file/temporary
+resources. Rule enablement and severity can be configured, and valid same-line
+suppressions
 require an explicit rule ID and quoted reason. See
 [`docs/RULES.md`](docs/RULES.md) for rule behavior and remediation examples and
 [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) for policy details.

@@ -107,6 +107,28 @@ def load():
 
 The rule is intentionally conservative: it does not infer that a conditional or compound statement always transfers control.
 
+## PY-COR-005: Blocking synchronous call in async code
+
+**Category:** Correctness
+**Default severity:** Warning
+**Confidence:** High
+
+A known synchronous standard-library operation is called directly inside an `async def`. The bounded allowlist covers `time.sleep`, synchronous `subprocess` helpers, `os.system`, `urllib.request.urlopen`, built-in/`io.open`, and direct `pathlib.Path` file methods. Imported aliases are resolved conservatively; shadowed or ambiguous names are ignored.
+
+Use the corresponding async API, `asyncio.create_subprocess_*`, or move unavoidable synchronous work to `asyncio.to_thread`. Calls passed as callables to `to_thread` or an executor are not reported. Generic methods and third-party clients are intentionally outside this rule.
+
+## PY-COR-006: Resource without guaranteed cleanup
+
+**Category:** Correctness
+**Default severity:** Warning
+**Confidence:** High
+
+A locally acquired file or temporary resource is not protected by `with`, `ExitStack.enter_context`, or `try...finally` cleanup. The bounded rule covers built-in/`io.open`, direct `Path(...).open()`, and standard `tempfile` context-manager factories.
+
+Directly returned, yielded, passed, or attribute-stored resources are treated as escaped ownership and are not judged locally. A plain later `close()` is not considered guaranteed when intervening work can raise. Use a context manager whenever possible.
+
+Both rules report the call location and support reason-required same-line suppressions. A bare `open()` in async code may intentionally emit both rule IDs.
+
 ## PY-MAINT-001: High cyclomatic complexity
 
 **Category:** Maintainability

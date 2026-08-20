@@ -14,6 +14,7 @@ from .maintainability import (
     ExcessiveParametersRule,
     LongFunctionRule,
 )
+from .python_resources import AsyncBlockingCallRule, UnmanagedResourceRule
 
 
 class PythonRule(Protocol):
@@ -352,6 +353,8 @@ class PythonRuleAnalyzer:
                 LongFunctionRule(),
                 ExcessiveParametersRule(),
                 BooleanParameterRule(),
+                AsyncBlockingCallRule(),
+                UnmanagedResourceRule(),
             )
         )
 
