@@ -37,6 +37,76 @@ def compatibility(cache={}):  # cqa: ignore=PY-COR-001 reason="legacy API"
 
 Malformed directives, blank or missing reasons, and directive-like strings do not suppress the finding. Reasons are not copied into reports or baselines. See [`CONFIGURATION.md`](CONFIGURATION.md) for the complete contract.
 
+## PY-COR-002: Broad exception handler
+
+**Category:** Correctness
+**Default severity:** Warning
+**Confidence:** High
+
+A bare `except` or a handler for `Exception`/`BaseException` can hide unrelated failures and, for the broadest forms, process-control exceptions. Catch only exception types the operation can recover from.
+
+```python
+# Non-compliant
+try:
+    load_order()
+except Exception:
+    recover()
+
+# Compliant
+try:
+    load_order()
+except OrderNotFoundError:
+    recover()
+```
+
+Tuples are reported when they contain `Exception` or `BaseException`. Attribute-qualified application exception types are not assumed to be broad.
+
+## PY-COR-003: Silently swallowed exception
+
+**Category:** Correctness
+**Default severity:** Warning
+**Confidence:** High
+
+An exception handler whose only statement is `pass` or `...` discards the failure without recovery, propagation, or actionable context.
+
+```python
+# Non-compliant
+try:
+    refresh()
+except RefreshError:
+    pass
+
+# Compliant
+try:
+    refresh()
+except RefreshError as error:
+    logger.warning("Refresh failed", exc_info=error)
+```
+
+If discarding a known failure is intentional, use a reason-required same-line suppression on the `except` line rather than an unrecorded empty handler.
+
+## PY-COR-004: Unreachable statement
+
+**Category:** Correctness
+**Default severity:** Warning
+**Confidence:** High
+
+A statement immediately following a direct `return`, `raise`, `break`, or `continue` in the same suite cannot execute. The rule reports the first unreachable statement in each affected suite.
+
+```python
+# Non-compliant
+def load():
+    return cached_value
+    refresh_cache()
+
+# Compliant
+def load():
+    refresh_cache()
+    return cached_value
+```
+
+The rule is intentionally conservative: it does not infer that a conditional or compound statement always transfers control.
+
 ## PY-PKG-001: Circular local imports
 
 **Category:** Package health

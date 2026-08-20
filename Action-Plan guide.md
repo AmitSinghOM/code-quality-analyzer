@@ -261,8 +261,12 @@ Completed in the configuration and suppression slice:
 - Added Python same-line suppressions that require an explicit rule ID and nonempty quoted reason.
 - Added privacy-safe effective-configuration fingerprints to report schema 1.8.0.
 - Documented config, glob, ignore, policy, suppression, validation, and baseline interactions.
+- Added `PY-COR-002` for bare, `Exception`, and `BaseException` handlers.
+- Added `PY-COR-003` for handlers that silently discard failures with `pass` or `...`.
+- Added conservative `PY-COR-004` findings for statements after direct control transfer.
+- Reused reason-required suppressions and language-neutral policy for all new rules.
 
-Next work is additional high-confidence correctness rules plus measured cyclomatic and cognitive complexity.
+Next work is measured cyclomatic and cognitive complexity plus additional bounded maintainability rules.
 
 **Objective:** Provide enough value for developers to use the analyzer during daily Python development.
 

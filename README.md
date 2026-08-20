@@ -328,11 +328,12 @@ confidence, message, remediation, and a one-based project-relative source
 location. JSON reports include both `findings` and an aggregate
 `finding_summary`; terminal reports show an **Actionable Findings** table.
 
-The first rule is `PY-COR-001`, which detects mutable function defaults such as
-`items=[]` and `cache=dict()`. Rule enablement and severity can be configured,
-and valid same-line suppressions require an explicit rule ID and quoted reason.
-See [`docs/RULES.md`](docs/RULES.md) for rule behavior and remediation examples
-and [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) for policy details.
+The built-in Python rules detect mutable function defaults, broad exception
+handlers, silently swallowed exceptions, and directly unreachable statements.
+Rule enablement and severity can be configured, and valid same-line suppressions
+require an explicit rule ID and quoted reason. See
+[`docs/RULES.md`](docs/RULES.md) for rule behavior and remediation examples and
+[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) for policy details.
 
 Files are parsed once for signal extraction, actionable Python rules, package
 intelligence, and optional complexity analysis. Malformed files emit no

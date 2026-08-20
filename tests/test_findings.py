@@ -132,3 +132,104 @@ def test_suppression_accepts_explicit_rule_list_on_multiline_default(project):
     scanner.scan()
 
     assert scanner.findings == []
+
+
+def test_broad_exception_handlers_are_reported_precisely():
+    findings = findings_for(
+        "try:\n    operation()\n"
+        "except Exception:\n    recover()\n"
+        "try:\n    other()\n"
+        "except:\n    recover()\n"
+    )
+
+    assert [finding.rule_id for finding in findings] == [
+        "PY-COR-002",
+        "PY-COR-002",
+    ]
+    assert [finding.location.line for finding in findings] == [3, 7]
+    assert "Exception" in findings[0].message
+    assert "bare except" in findings[1].message
+
+
+def test_narrow_and_specific_exception_handlers_are_not_broad():
+    findings = findings_for(
+        "try:\n    operation()\n"
+        "except (ValueError, LookupError):\n    recover()\n"
+    )
+
+    assert findings == []
+
+
+def test_pass_and_ellipsis_exception_handlers_are_swallowed():
+    findings = findings_for(
+        "try:\n    first()\nexcept ValueError:\n    pass\n"
+        "try:\n    second()\nexcept LookupError:\n    ...\n"
+    )
+
+    assert [finding.rule_id for finding in findings] == [
+        "PY-COR-003",
+        "PY-COR-003",
+    ]
+    assert [finding.location.line for finding in findings] == [3, 7]
+
+
+def test_handlers_with_recovery_or_reraise_are_not_swallowed():
+    findings = findings_for(
+        "try:\n    first()\nexcept ValueError:\n    recover()\n"
+        "try:\n    second()\nexcept LookupError:\n    raise\n"
+    )
+
+    assert findings == []
+
+
+def test_unreachable_statement_after_direct_control_transfer_is_reported():
+    findings = findings_for(
+        "def choose(value):\n"
+        "    if value:\n"
+        "        return value\n"
+        "        audit(value)\n"
+        "    while value:\n"
+        "        break\n"
+        "        value -= 1\n"
+        "    raise RuntimeError()\n"
+        "    cleanup()\n"
+    )
+
+    assert [finding.rule_id for finding in findings] == [
+        "PY-COR-004",
+        "PY-COR-004",
+        "PY-COR-004",
+    ]
+    assert [finding.location.line for finding in findings] == [4, 7, 9]
+
+
+def test_conditional_control_transfer_does_not_mark_following_code_unreachable():
+    findings = findings_for(
+        "def choose(value):\n"
+        "    if value:\n"
+        "        return value\n"
+        "    audit(value)\n"
+        "    return None\n"
+    )
+
+    assert findings == []
+
+
+def test_new_rules_use_reason_required_same_line_suppressions(project):
+    root = project({
+        "module.py": (
+            "def load():\n"
+            "    try:\n"
+            "        operation()\n"
+            "    except Exception:  # cqa: ignore=PY-COR-002,PY-COR-003 "
+            "reason='process boundary'\n"
+            "        pass\n"
+            "    return None\n"
+            "    cleanup()  # cqa: ignore=PY-COR-004 reason='dead fixture'\n"
+        ),
+    })
+    scanner = CodeScanner(root)
+
+    scanner.scan()
+
+    assert scanner.findings == []

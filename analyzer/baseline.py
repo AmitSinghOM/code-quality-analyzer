@@ -137,7 +137,7 @@ def write_baseline(path: Path, findings: list[Finding]) -> None:
         if temporary is not None:
             try:
                 temporary.unlink(missing_ok=True)
-            except OSError:
+            except OSError:  # cqa: ignore=PY-COR-003 reason="cleanup"
                 pass
         raise BaselineError("Baseline could not be written.") from error
 
