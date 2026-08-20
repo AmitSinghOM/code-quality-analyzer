@@ -480,12 +480,13 @@ Completed:
 
 - Added passive `.go` discovery through the same bounded, symlink-safe inventory used by Python.
 - Added a Go adapter with package/import facts and lexical comment/string stripping; it does not invoke Go tooling or execute project code.
-- Added `GO-COR-001` for ignored errors from a narrow set of imported standard-library calls.
+- Added `GO-COR-001` for ignored errors from a narrow set of imported standard-library calls, including explicit import aliases while conservatively excluding blank and dot imports.
+- Added passive multi-file package aggregation and local import edges using shared Go facts and a bounded `go.mod` module declaration read.
 - Reused normalized findings, severity gates, baselines, anonymization, offline enforcement, and text/JSON reporters without CLI language branches.
 - Added language counts and adapter versions to reports.
 - Added mixed Python/Go, malformed Go, false-positive boundary, location, anonymization, and registry tests.
 
-The pilot intentionally does not claim full Go parsing, package graph coverage, or broad ignored-error inference. Next work should evaluate the adapter against real Go fixtures, add import aliases and multi-file package graphs, and revise the contracts before a third language.
+The pilot intentionally does not claim full Go parsing or broad ignored-error inference. Next work should evaluate the adapter and passive package graph against real Go fixtures, improve malformed `go.mod` diagnostics, and revise the contracts before a third language.
 
 **Objective:** Prove the extension model with one useful, bounded language implementation.
 

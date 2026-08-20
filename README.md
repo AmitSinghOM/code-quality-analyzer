@@ -406,10 +406,14 @@ The confidence score indicates how reliable the complexity estimate is.
 - Configuration management
 
 Python receives actionable rules, package intelligence, architecture signals,
-and experimental complexity analysis. The Go pilot discovers `.go` files and
-emits `GO-COR-001` when code discards errors from a narrow allowlist of imported
-standard-library calls. Python and Go findings share the same report, baseline,
-privacy, offline, and CI-gate contracts. See [`docs/RULES.md`](docs/RULES.md).
+and experimental complexity analysis. The Go pilot discovers `.go` files,
+preserves import aliases, emits `GO-COR-001` for discarded errors from a
+narrow set of imported standard-library calls, and passively aggregates
+multi-file packages plus local module import edges from `go.mod`. It never
+invokes Go tooling. Python and Go findings share the same report, baseline,
+privacy, offline, and CI-gate contracts. JSON `project_analyses` entries expose
+provider results normally and health-only projections under `--anonymize`.
+See [`docs/RULES.md`](docs/RULES.md).
 
 ## Development
 

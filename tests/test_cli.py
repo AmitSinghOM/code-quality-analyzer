@@ -41,9 +41,9 @@ def test_json_output_is_valid_and_includes_health(project):
     payload = json.loads(result.output)
 
     assert result.exit_code == EXIT_OK
-    assert payload["schema_version"] == "1.5.0"
-    assert payload["analyzer_version"] == "2.11.0"
-    assert payload["ruleset_version"] == "2.3.0"
+    assert payload["schema_version"] == "1.6.0"
+    assert payload["analyzer_version"] == "2.12.0"
+    assert payload["ruleset_version"] == "2.4.0"
     assert payload["language_adapters"] == {
         "go": "1.0.0",
         "python": "1.0.0",
@@ -508,6 +508,9 @@ def test_mixed_python_go_report_uses_one_findings_contract(project):
 
     assert result.exit_code == EXIT_OK
     assert payload["scan_health"]["languages"] == {"go": 1, "python": 1}
+    go_graph = payload["project_analyses"]["go:package-graph"]
+    assert go_graph["health"]["package_count"] == 1
+    assert go_graph["result"]["packages"][0]["directory"] == "."
     assert [finding["rule_id"] for finding in payload["findings"]] == [
         "PY-COR-001",
         "GO-COR-001",
@@ -534,6 +537,14 @@ def test_anonymized_go_finding_removes_source_identifiers(project):
     assert result.exit_code == EXIT_OK
     assert payload["findings"][0]["rule_id"] == "GO-COR-001"
     assert payload["findings"][0]["location"]["path"] == "file-0001"
+    assert payload["project_analyses"]["go:package-graph"] == {
+        "health": {
+            "errors": 0,
+            "complete": True,
+            "package_count": 1,
+            "local_edge_count": 0,
+        },
+    }
     for sensitive in (
         "private/worker.go",
         "privateworker",

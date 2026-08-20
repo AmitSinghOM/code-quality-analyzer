@@ -223,6 +223,13 @@ def test_python_project_providers_are_registered_and_cached(project):
     assert first.payload["total_functions"] == 1
     assert scanner.registry.capabilities()["project_providers"] == [
         {
+            "language_id": "go",
+            "capability": "package-graph",
+            "provider_id": "go-package-graph",
+            "capability_version": "1.0.0",
+            "enabled_by_default": True,
+        },
+        {
             "language_id": "python",
             "capability": "complexity",
             "provider_id": "python-complexity",

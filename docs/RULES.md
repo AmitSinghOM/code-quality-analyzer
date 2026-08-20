@@ -83,4 +83,4 @@ if err != nil {
 }
 ```
 
-The rule requires the corresponding standard-library import, ignores comments and string literals, and reports the discarded result's one-based location. Aliased imports are not yet supported by the pilot.
+The rule requires the corresponding standard-library import, ignores comments and string literals, follows explicit import aliases, and reports the discarded result's one-based location. Blank and dot imports are recorded but intentionally do not authorize qualified-call matches.

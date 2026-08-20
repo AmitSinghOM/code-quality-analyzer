@@ -21,8 +21,10 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ### Changed
 
-- Analyzer version advanced to 2.11.0; report schema remains 1.5.0 and ruleset remains 2.3.0
-- Python architecture detection now runs through a versioned signal provider; core scanning no longer imports Python pattern catalogs or fact types
+- Analyzer version advanced to 2.12.0; report schema advanced to 1.6.0 and ruleset advanced to 2.4.0
+- Go imports now preserve default, explicit, blank, and dot-import semantics; `GO-COR-001` follows explicit aliases without trusting blank or dot imports
+- A passive Go project provider now aggregates multi-file packages and local module import edges from shared facts and a bounded `go.mod` read
+- JSON reports expose privacy-projected project-provider results and generic project-analysis health
 - Optional Python complexity analysis now consumes the scanner's shared AST artifacts instead of discovering, reading, and parsing source again
 - Plugins now declare a core API target; project providers and reporters are resolved through explicit versioned capability negotiation
 - Python package and complexity analysis now resolve through cached project providers

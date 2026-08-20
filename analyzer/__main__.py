@@ -416,6 +416,23 @@ def _privacy_payload(
     }
 
 
+def _project_analysis_payload(scanner, anonymized: bool) -> dict:
+    payload = {}
+    for (language_id, capability), result in sorted(
+        scanner.project_results.items()
+    ):
+        key = f"{language_id}:{capability}"
+        entry = {"health": dict(result.health)}
+        if not anonymized:
+            serializer = getattr(result.payload, "as_dict", None)
+            if callable(serializer):
+                entry["result"] = serializer()
+            elif isinstance(result.payload, dict):
+                entry["result"] = result.payload
+        payload[key] = entry
+    return payload
+
+
 def _emit_json(
     project_label,
     rating,
@@ -459,6 +476,10 @@ def _emit_json(
         "breakdown": breakdown,
         "scan_health": health_payload,
         "package_intelligence": package_payload,
+        "project_analyses": _project_analysis_payload(
+            scanner,
+            anonymized=anonymizer is not None,
+        ),
         "finding_summary": _finding_summary(reported_findings),
         "findings": finding_payload,
         "dsa_patterns": _pattern_payload(

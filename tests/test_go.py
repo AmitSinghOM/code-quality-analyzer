@@ -2,7 +2,13 @@
 
 from pathlib import Path
 
-from analyzer.languages.go import GoFacts, GoLanguageAdapter, GoRulePack
+from analyzer.languages.go import (
+    GoFacts,
+    GoImport,
+    GoLanguageAdapter,
+    GoPackageGraph,
+    GoRulePack,
+)
 from analyzer.protocols import SourceFile
 from analyzer.scanner import CodeScanner
 
@@ -26,7 +32,10 @@ def test_go_adapter_extracts_package_and_import_facts():
     assert parsed.line_count == 6
     assert isinstance(parsed.facts, GoFacts)
     assert parsed.facts.package_name == "service"
-    assert parsed.facts.imports == ("encoding/json", "os")
+    assert parsed.facts.imports == (
+        GoImport("encoding/json", "json", "default"),
+        GoImport("os", "os", "default"),
+    )
 
 
 def test_go_rule_reports_ignored_known_standard_library_errors():
@@ -113,3 +122,76 @@ def test_scanner_handles_mixed_python_and_go_findings(project):
         "PY-COR-001",
         "GO-COR-001",
     ]
+
+
+def test_go_rule_respects_explicit_blank_and_dot_import_aliases():
+    parsed = parse_go(
+        "package service\n\n"
+        "import (\n"
+        '    codec "encoding/json"\n'
+        '    _ "os"\n'
+        '    . "strconv"\n'
+        ")\n\n"
+        "func encode(value any) []byte {\n"
+        "    encoded, _ := codec.Marshal(value)\n"
+        "    data, _ := os.ReadFile(\"ignored\")\n"
+        "    parsed, _ := strconv.Atoi(\"1\")\n"
+        "    _, _ = data, parsed\n"
+        "    return encoded\n"
+        "}\n"
+    )
+
+    assert parsed.facts.imports == (
+        GoImport("encoding/json", "codec", "alias"),
+        GoImport("os", None, "blank"),
+        GoImport("strconv", None, "dot"),
+    )
+    findings = list(GoRulePack().evaluate(parsed))
+    assert len(findings) == 1
+    assert "codec.Marshal" in findings[0].message
+
+
+def test_go_package_graph_aggregates_files_and_local_imports(project):
+    root = project({
+        "go.mod": "module example.com/demo\n\ngo 1.22\n",
+        "cmd/app/main.go": (
+            "package main\n\n"
+            'import "example.com/demo/internal/store"\n'
+        ),
+        "internal/store/read.go": "package store\n",
+        "internal/store/write.go": "package store\n",
+    })
+    scanner = CodeScanner(root)
+
+    scanner.scan()
+    result = scanner.project_results[("go", "package-graph")]
+
+    assert isinstance(result.payload, GoPackageGraph)
+    assert result.payload.module_path == "example.com/demo"
+    assert [package.directory for package in result.payload.packages] == [
+        "cmd/app",
+        "internal/store",
+    ]
+    assert result.payload.local_edges == (("cmd/app", "internal/store"),)
+    assert result.health == {
+        "errors": 0,
+        "complete": True,
+        "package_count": 2,
+        "local_edge_count": 1,
+    }
+
+
+def test_go_package_graph_reports_conflicting_packages(project):
+    root = project({
+        "go.mod": "module example.com/demo\n",
+        "pkg/first.go": "package first\n",
+        "pkg/second.go": "package second\n",
+    })
+    scanner = CodeScanner(root)
+
+    scanner.scan()
+    result = scanner.project_results[("go", "package-graph")]
+
+    assert result.payload.conflicts == ("pkg",)
+    assert result.health["complete"] is False
+    assert scanner.has_coverage_gaps is True

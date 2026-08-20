@@ -231,6 +231,12 @@ class CodeScanner:
         health["unparsed_files"] = self.unparsed_files
         health["languages"] = dict(sorted(self.language_counts.items()))
         health["package_analysis"] = self.package_health
+        health["project_analysis"] = {
+            f"{language_id}:{capability}": dict(result.health)
+            for (language_id, capability), result in sorted(
+                self.project_results.items()
+            )
+        }
         return health
 
     @property
@@ -241,4 +247,9 @@ class CodeScanner:
             or self.discovery.truncated
             or self.unparsed_files > 0
             or self.package_health.get("errors", 0) > 0
+            or any(
+                not result.health.get("complete", True)
+                or bool(result.health.get("errors", 0))
+                for result in self.project_results.values()
+            )
         )

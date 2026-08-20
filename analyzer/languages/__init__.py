@@ -1,6 +1,13 @@
 """Built-in language adapters."""
 
-from .go import GoLanguageAdapter, GoRulePack, register_go_plugins
+from .go import (
+    GoImport,
+    GoLanguageAdapter,
+    GoPackageGraph,
+    GoPackageGraphProvider,
+    GoRulePack,
+    register_go_plugins,
+)
 from .python import (
     PythonComplexityProvider,
     PythonArchitectureSignalProvider,
@@ -11,7 +18,10 @@ from .python import (
 )
 
 __all__ = [
+    "GoImport",
     "GoLanguageAdapter",
+    "GoPackageGraph",
+    "GoPackageGraphProvider",
     "GoRulePack",
     "PythonArchitectureSignalProvider",
     "PythonComplexityProvider",
