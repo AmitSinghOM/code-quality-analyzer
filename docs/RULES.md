@@ -28,6 +28,15 @@ def add_item(item, items=None):
 
 The rule reports the default expression with a one-based file, line, and column location. It currently recognizes list, dictionary, and set literals; list, dictionary, and set comprehensions; and direct calls to `list()`, `dict()`, `set()`, and `bytearray()`.
 
+A same-line suppression is accepted only when it names the rule and includes a nonempty quoted reason:
+
+```python
+def compatibility(cache={}):  # cqa: ignore=PY-COR-001 reason="legacy API"
+    return cache
+```
+
+Malformed directives, blank or missing reasons, and directive-like strings do not suppress the finding. Reasons are not copied into reports or baselines. See [`CONFIGURATION.md`](CONFIGURATION.md) for the complete contract.
+
 ## PY-PKG-001: Circular local imports
 
 **Category:** Package health

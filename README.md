@@ -30,6 +30,7 @@ code-quality-analyzer/
 │   ├── __init__.py
 │   ├── __main__.py      # CLI entry point
 │   ├── baseline.py      # Hashed finding baselines and comparison
+│   ├── config.py        # Bounded configuration, path, and rule policy
 │   ├── discovery.py     # Safe file discovery (limits, symlink guard)
 │   ├── findings.py      # Language-neutral actionable finding model
 │   ├── signals.py       # Per-file signal extraction + pattern matching
@@ -90,6 +91,33 @@ code-quality-analyzer /path/to/project -c
 `PROJECT_PATH` must be a directory. Pointing at a single file is rejected
 rather than silently returning an architecture signal score of 1.
 
+## Project configuration
+
+Place `.code-quality.toml` in the analyzed project root to define deterministic
+source and rule policy:
+
+```toml
+[analysis]
+include = ["src/**/*.py", "cmd/**/*.go"]
+exclude = ["src/generated/**"]
+respect_gitignore = true
+
+[rules."PY-COR-001"]
+enabled = true
+severity = "error"
+```
+
+Filters are project-relative, exclusion wins, and filtered files do not consume
+candidate or file-limit accounting. The root `.gitignore` is respected by
+default. Python findings can be suppressed on their reported line only with an
+explicit rule ID and nonempty quoted reason, for example
+`# cqa: ignore=PY-COR-001 reason="legacy API"`. Suppression reasons never enter
+reports or baselines. JSON reports identify the validated effective policy with
+a privacy-safe `configuration_fingerprint`.
+
+See [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) for glob semantics,
+validation limits, rule policy, suppressions, and compatibility boundaries.
+
 ## Privacy and offline options
 
 Use `--anonymize` when a report may leave the trusted development environment:
@@ -139,9 +167,9 @@ identities, so changing either presentation option does not change CI identity.
 
 `-f` was `--format` in 1.x. It is now `--output-format` so it no longer shadows
 the `format` builtin. JSON reports include schema, analyzer, and ruleset versions
-plus explicit privacy state, scoring-policy version, and analysis authority so
-consumers can identify the contract, protections, and completeness that
-produced a result. `architecture_signal_score` is the primary score field;
+plus explicit privacy state, scoring-policy version, effective-configuration
+fingerprint, and analysis authority so consumers can identify the contract,
+protections, and completeness that produced a result. `architecture_signal_score` is the primary score field;
 `rating` is a transitional equal-valued 2.x compatibility alias.
 
 ## Exit Codes
@@ -165,7 +193,7 @@ No source candidates exit with code 2. If candidates exist but none can be
 successfully parsed, analysis exits with code 3 even without `--strict`.
 Partial non-strict analysis may exit successfully for inspection, but it is
 always marked non-authoritative. See the versioned schema in
-[`docs/report-schema-1.7.0.json`](docs/report-schema-1.7.0.json) and the decision
+[`docs/report-schema-1.8.0.json`](docs/report-schema-1.8.0.json) and the decision
 record in
 [`docs/adr/001-analysis-authority-and-score-migration.md`](docs/adr/001-analysis-authority-and-score-migration.md).
 
@@ -301,8 +329,10 @@ location. JSON reports include both `findings` and an aggregate
 `finding_summary`; terminal reports show an **Actionable Findings** table.
 
 The first rule is `PY-COR-001`, which detects mutable function defaults such as
-`items=[]` and `cache=dict()`. See [`docs/RULES.md`](docs/RULES.md) for rule
-behavior and remediation examples.
+`items=[]` and `cache=dict()`. Rule enablement and severity can be configured,
+and valid same-line suppressions require an explicit rule ID and quoted reason.
+See [`docs/RULES.md`](docs/RULES.md) for rule behavior and remediation examples
+and [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) for policy details.
 
 Files are parsed once for signal extraction, actionable Python rules, package
 intelligence, and optional complexity analysis. Malformed files emit no

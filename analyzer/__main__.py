@@ -23,6 +23,7 @@ from .baseline import (
     load_baseline,
     write_baseline,
 )
+from .config import ConfigError, load_config
 from .discovery import DEFAULT_MAX_FILE_SIZE, DEFAULT_MAX_FILES
 from .offline import OfflineViolationError, enforce_offline
 from .patterns import DSA_PATTERNS, SYSTEM_DESIGN_PATTERNS
@@ -209,6 +210,12 @@ def _run_analysis(
     new_findings_only: bool,
     strict: bool,
 ) -> int:
+    root = Path(project_path).resolve()
+    try:
+        configuration = load_config(root)
+    except ConfigError as error:
+        raise click.ClickException(str(error)) from error
+
     known_fingerprints = None
     if baseline_path is not None:
         try:
@@ -216,7 +223,6 @@ def _run_analysis(
         except BaselineError as error:
             raise click.ClickException(str(error)) from error
 
-    root = Path(project_path).resolve()
     anonymizer = ReportAnonymizer() if anonymize else None
     project_label = ANONYMIZED_PROJECT if anonymize else root.name
     internal_redaction = redact_paths and not anonymize
@@ -238,6 +244,7 @@ def _run_analysis(
         max_files=max_files,
         redact_paths=internal_redaction,
         registry=registry,
+        configuration=configuration,
     )
     dsa_found, design_found = scanner.scan()
     scan_health = scanner.scan_health()
@@ -501,6 +508,7 @@ def _build_json_report(
         "analyzer_version": __version__,
         "ruleset_version": RULESET_VERSION,
         "scoring_policy_version": SCORING_POLICY_VERSION,
+        "configuration_fingerprint": scanner.configuration.fingerprint,
         "language_adapters": scanner.registry.capabilities()["languages"],
         "project": project_label,
         "privacy": _privacy_payload(anonymizer, offline, redact_paths),
@@ -572,6 +580,10 @@ def _emit_text(
         f"paths redacted={'yes' if privacy['paths_redacted'] else 'no'} | "
         f"offline enforced={'yes' if privacy['offline_enforced'] else 'no'}"
         "[/dim]\n"
+    )
+
+    console.print(
+        f"[dim]Configuration: {scanner.configuration.fingerprint}[/dim]\n"
     )
 
     authority_label = "yes" if analysis_health["authoritative"] else "no"

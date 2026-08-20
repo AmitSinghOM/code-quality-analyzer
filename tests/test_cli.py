@@ -41,10 +41,11 @@ def test_json_output_is_valid_and_includes_health(project):
     payload = json.loads(result.output)
 
     assert result.exit_code == EXIT_OK
-    assert payload["schema_version"] == "1.7.0"
-    assert payload["analyzer_version"] == "2.14.0"
-    assert payload["ruleset_version"] == "2.4.0"
+    assert payload["schema_version"] == "1.8.0"
+    assert payload["analyzer_version"] == "2.15.0"
+    assert payload["ruleset_version"] == "2.5.0"
     assert payload["scoring_policy_version"] == "1.0.0"
+    assert len(payload["configuration_fingerprint"]) == 64
     assert payload["language_adapters"] == {
         "go": "1.0.0",
         "python": "1.0.0",

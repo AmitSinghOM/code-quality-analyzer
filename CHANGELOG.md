@@ -19,10 +19,14 @@ All notable changes are documented in this file. Versions follow semantic versio
 - Source-located actionable Python findings
 - Versioned JSON report metadata
 - Versioned analysis-authority schema, score-migration ADR, and golden contract fixtures
+- Bounded `.code-quality.toml` source selection and per-rule policy
+- Root `.gitignore`-aware inventory with deterministic negation handling
+- Reason-required Python inline suppressions that never expose reason text
+- Privacy-safe effective-configuration fingerprints in JSON reports
 
 ### Changed
 
-- Analyzer version advanced to 2.14.0; report schema advanced to 1.7.0 and ruleset remains 2.4.0
+- Analyzer version advanced to 2.15.0; report schema advanced to 1.8.0 and ruleset advanced to 2.5.0
 - Reports now qualify authority with source-candidate, readable-file, and successful-analysis counts, completeness ratio, and stable reason codes
 - `architecture_signal_score` replaces `rating` as the primary score name; `rating` remains a documented equal-valued 2.x compatibility alias
 - Source candidates with zero successful analyses now exit 3 even without strict mode

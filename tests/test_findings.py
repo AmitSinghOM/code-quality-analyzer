@@ -71,3 +71,64 @@ def test_findings_are_deterministic_by_location():
     )
 
     assert [finding.location.line for finding in findings] == [1, 4]
+
+
+def test_inline_suppression_requires_same_line_and_nonempty_reason(project):
+    root = project({
+        "valid.py": (
+            "def valid(cache={}):  # cqa: ignore=PY-COR-001 "
+            "reason=\"legacy API\"\n    return cache\n"
+        ),
+        "missing.py": (
+            "def missing(cache={}):  # cqa: ignore=PY-COR-001\n"
+            "    return cache\n"
+        ),
+        "blank.py": (
+            "def blank(cache={}):  # cqa: ignore=PY-COR-001 reason='   '\n"
+            "    return cache\n"
+        ),
+        "wrong_line.py": (
+            "# cqa: ignore=PY-COR-001 reason='not same line'\n"
+            "def wrong_line(cache={}):\n    return cache\n"
+        ),
+    })
+    scanner = CodeScanner(root)
+
+    scanner.scan()
+
+    assert [finding.location.path for finding in scanner.findings] == [
+        "blank.py",
+        "missing.py",
+        "wrong_line.py",
+    ]
+
+
+def test_suppression_directive_inside_string_is_ignored(project):
+    root = project({
+        "module.py": (
+            "DIRECTIVE = '# cqa: ignore=PY-COR-001 reason=\"not a comment\"'\n"
+            "def f(cache={}):\n    return cache\n"
+        ),
+    })
+    scanner = CodeScanner(root)
+
+    scanner.scan()
+
+    assert len(scanner.findings) == 1
+
+
+def test_suppression_accepts_explicit_rule_list_on_multiline_default(project):
+    root = project({
+        "module.py": (
+            "def f(\n"
+            "    cache={}  # cqa: ignore=PY-COR-001,PY-COR-999 "
+            "reason='reviewed compatibility'\n"
+            "):\n"
+            "    return cache\n"
+        ),
+    })
+    scanner = CodeScanner(root)
+
+    scanner.scan()
+
+    assert scanner.findings == []

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
+
+from .config import AnalyzerConfig
 
 from .discovery import (
     DEFAULT_MAX_FILE_SIZE,
@@ -43,12 +45,14 @@ class CodeScanner:
         max_files: int = DEFAULT_MAX_FILES,
         redact_paths: bool = False,
         registry: PluginRegistry | None = None,
+        configuration: AnalyzerConfig | None = None,
     ):
         self.project_path = Path(project_path).resolve()
         self.max_file_size = max_file_size
         self.max_files = max_files
         self.redact_paths = redact_paths
         self.registry = registry or create_default_registry()
+        self.configuration = configuration or AnalyzerConfig()
         self.language_counts: dict[str, int] = {}
 
         self.files_scanned = 0
@@ -79,6 +83,7 @@ class CodeScanner:
             max_file_size=self.max_file_size,
             max_files=self.max_files,
             report=self.discovery,
+            analysis=self.configuration.analysis,
         ):
             self._scan_file(path, content)
         self._run_default_project_providers()
@@ -128,7 +133,7 @@ class CodeScanner:
             return None
         result = provider.analyze(self._project_context(language_id))
         self.project_results[(language_id, capability)] = result
-        self.findings.extend(result.findings)
+        self._add_findings(result.findings)
         if capability == "package" and isinstance(
             result.payload,
             PackageIntelligence,
@@ -136,6 +141,16 @@ class CodeScanner:
             self.package_intelligence = result.payload
             self.package_health = dict(result.health)
         return result
+
+    def _add_findings(self, findings) -> None:
+        """Apply language-neutral rule policy before storing findings."""
+        for finding in findings:
+            policy = self.configuration.policy_for(finding.rule_id)
+            if not policy.enabled:
+                continue
+            if policy.severity is not None:
+                finding = replace(finding, severity=policy.severity)
+            self.findings.append(finding)
 
     def _sort_findings(self) -> None:
         self.findings.sort(
@@ -179,7 +194,7 @@ class CodeScanner:
             internal_path
         ] = parsed
         for rule_pack in self.registry.rule_packs_for(adapter.language_id):
-            self.findings.extend(rule_pack.evaluate(parsed))
+            self._add_findings(rule_pack.evaluate(parsed))
 
         for provider in self.registry.signal_providers_for(
             adapter.language_id,

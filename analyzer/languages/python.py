@@ -19,6 +19,7 @@ from ..protocols import (
     SourceFile,
 )
 from ..python_rules import PythonRuleAnalyzer
+from ..python_suppressions import suppression_lines
 from ..registry import PluginRegistry
 from ..signals import FileSignals, extract_signals, pattern_is_present
 
@@ -51,7 +52,7 @@ class PythonRulePack:
 
     rule_pack_id = PYTHON_RULE_PACK_ID
     language_id = "python"
-    ruleset_version = "2.2.0"
+    ruleset_version = "2.5.0"
     plugin_api_version = PLUGIN_API_VERSION
 
     def __init__(self, analyzer: PythonRuleAnalyzer | None = None) -> None:
@@ -62,10 +63,16 @@ class PythonRulePack:
             return ()
         if not isinstance(parsed.artifact, ast.AST):
             raise TypeError("Python rule pack requires a Python AST artifact")
-        return self.analyzer.analyze(
+        findings = self.analyzer.analyze(
             parsed.artifact,
             parsed.source.display_path,
             identity_path=parsed.source.identity_path,
+        )
+        suppressed = suppression_lines(parsed.source.content)
+        return tuple(
+            finding
+            for finding in findings
+            if (finding.location.line, finding.rule_id) not in suppressed
         )
 
 

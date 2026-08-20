@@ -253,7 +253,16 @@ Completed in the first Phase 2 vertical slice:
 - Added positive, negative, determinism, location, parse-once, and report integration tests.
 - Added the initial rule reference in `docs/RULES.md`.
 
-Next work is `.code-quality.toml`, ignore/suppression support, severity-based gates, and additional high-confidence correctness rules.
+Completed in the configuration and suppression slice:
+
+- Added bounded project-root `.code-quality.toml` loading with strict schema and type validation.
+- Added deterministic include/exclude globs and root `.gitignore` selection before candidate and file-limit accounting.
+- Added language-neutral per-rule enablement and warning/error severity overrides before baselines, reports, and gates.
+- Added Python same-line suppressions that require an explicit rule ID and nonempty quoted reason.
+- Added privacy-safe effective-configuration fingerprints to report schema 1.8.0.
+- Documented config, glob, ignore, policy, suppression, validation, and baseline interactions.
+
+Next work is additional high-confidence correctness rules plus measured cyclomatic and cognitive complexity.
 
 **Objective:** Provide enough value for developers to use the analyzer during daily Python development.
 

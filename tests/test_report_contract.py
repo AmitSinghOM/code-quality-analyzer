@@ -8,7 +8,7 @@ from click.testing import CliRunner
 from analyzer.__main__ import main
 
 FIXTURES = Path(__file__).parent / "fixtures"
-SCHEMA = Path(__file__).parents[1] / "docs" / "report-schema-1.7.0.json"
+SCHEMA = Path(__file__).parents[1] / "docs" / "report-schema-1.8.0.json"
 
 
 def test_json_authority_contract_matches_schema_and_golden(project):
@@ -27,6 +27,7 @@ def test_json_authority_contract_matches_schema_and_golden(project):
     ]["const"]
     assert {
         "scoring_policy_version": payload["scoring_policy_version"],
+        "configuration_fingerprint": payload["configuration_fingerprint"],
         "analysis_health": payload["analysis_health"],
     } == golden
 

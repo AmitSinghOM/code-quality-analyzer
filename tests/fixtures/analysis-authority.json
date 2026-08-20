@@ -1,5 +1,6 @@
 {
   "scoring_policy_version": "1.0.0",
+  "configuration_fingerprint": "7f2042db6205d44e3ce413ff9080011ffc8edd6904b18c87b1268e1331ccdf62",
   "analysis_health": {
     "complete": true,
     "authoritative": true,

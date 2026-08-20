@@ -270,7 +270,7 @@ class GoRulePack:
 
     rule_pack_id = GO_RULE_PACK_ID
     language_id = "go"
-    ruleset_version = "2.4.0"
+    ruleset_version = "2.5.0"
     plugin_api_version = PLUGIN_API_VERSION
 
     def __init__(self) -> None:

@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from collections.abc import Iterator
 
+from .config import AnalysisConfig, path_is_selected
+
 # Directories that never contain first-party source worth rating.
 SKIP_DIRS = frozenset({
     '.git', '.hg', '.svn',
@@ -79,10 +81,12 @@ def iter_source_files(
     max_file_size: int = DEFAULT_MAX_FILE_SIZE,
     max_files: int = DEFAULT_MAX_FILES,
     report: DiscoveryReport | None = None,
+    analysis: AnalysisConfig | None = None,
 ) -> Iterator[tuple[Path, str]]:
     """Yield safe UTF-8 source files matching registered extensions."""
     root = Path(root).resolve()
     report = report if report is not None else DiscoveryReport()
+    analysis = analysis or AnalysisConfig()
     if report.root is None:
         report.root = root
 
@@ -92,7 +96,13 @@ def iter_source_files(
         else f".{extension.lower()}"
         for extension in extensions
     )
-    for path in _candidate_paths(root, normalized, max_files, report):
+    for path in _candidate_paths(
+        root,
+        normalized,
+        max_files,
+        report,
+        analysis,
+    ):
         text = read_source(path, root, max_file_size, report)
         if text is None:
             continue
@@ -105,6 +115,7 @@ def iter_python_files(
     max_file_size: int = DEFAULT_MAX_FILE_SIZE,
     max_files: int = DEFAULT_MAX_FILES,
     report: DiscoveryReport | None = None,
+    analysis: AnalysisConfig | None = None,
 ) -> Iterator[tuple[Path, str]]:
     """Compatibility wrapper for bounded Python-only discovery."""
     yield from iter_source_files(
@@ -113,6 +124,7 @@ def iter_python_files(
         max_file_size=max_file_size,
         max_files=max_files,
         report=report,
+        analysis=analysis,
     )
 
 
@@ -121,6 +133,7 @@ def _candidate_paths(
     extensions: tuple[str, ...],
     max_files: int,
     report: DiscoveryReport,
+    analysis: AnalysisConfig,
 ) -> Iterator[Path]:
     seen = 0
     # followlinks=False: symlinked directories are not descended into.
@@ -129,12 +142,16 @@ def _candidate_paths(
         for name in sorted(filenames):
             if not name.lower().endswith(extensions):
                 continue
+            path = Path(dirpath) / name
+            relative_path = path.relative_to(root).as_posix()
+            if not path_is_selected(relative_path, analysis):
+                continue
             if seen >= max_files:
                 report.truncated = True
                 return
             seen += 1
             report.source_candidates += 1
-            yield Path(dirpath) / name
+            yield path
 
 
 def read_source(
