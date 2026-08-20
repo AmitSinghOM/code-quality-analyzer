@@ -175,3 +175,24 @@ def test_scanner_is_deterministic(project):
     second = CodeScanner(root).scan()
 
     assert first == second
+
+
+def test_analysis_authority_distinguishes_candidates_read_and_parsed(project):
+    root = project({
+        "good.py": "VALUE = 1\n",
+        "broken.py": "def broken(:\n",
+        "large.py": "VALUE = '" + ("x" * 100) + "'\n",
+    })
+    scanner = CodeScanner(root, max_file_size=32)
+
+    scanner.scan()
+
+    assert scanner.analysis_authority() == {
+        "complete": False,
+        "authoritative": False,
+        "source_candidates": 3,
+        "files_read": 2,
+        "files_successfully_analyzed": 1,
+        "completeness_ratio": 0.333,
+        "reasons": ["source_files_skipped", "parse_failures"],
+    }

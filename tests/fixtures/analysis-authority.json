@@ -1,0 +1,12 @@
+{
+  "scoring_policy_version": "1.0.0",
+  "analysis_health": {
+    "complete": true,
+    "authoritative": true,
+    "source_candidates": 1,
+    "files_read": 1,
+    "files_successfully_analyzed": 1,
+    "completeness_ratio": 1.0,
+    "reasons": []
+  }
+}

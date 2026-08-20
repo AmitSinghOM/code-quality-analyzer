@@ -151,9 +151,15 @@ class PythonComplexityProvider:
             for _, parsed in sorted(project.parsed_files.items())
             if isinstance(parsed.artifact, ast.AST)
         )
+        health = analyzer.analysis_health()
+        health["complete"] = not bool(
+            health.get("total_skipped", 0)
+            or health.get("truncated", False)
+            or health.get("failed_functions", 0)
+        )
         return ProviderResult(
             payload=analyzer.get_summary(),
-            health=analyzer.analysis_health(),
+            health=health,
         )
 
 

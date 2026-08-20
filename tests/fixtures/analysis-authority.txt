@@ -1,0 +1,2 @@
+Analysis: authoritative=yes | complete=yes | successful=1/1
+Architecture Signal Score

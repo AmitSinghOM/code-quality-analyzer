@@ -52,6 +52,7 @@ class CodeScanner:
         self.language_counts: dict[str, int] = {}
 
         self.files_scanned = 0
+        self.files_successfully_analyzed = 0
         self.total_lines = 0
         self.unparsed_files = 0
         self.discovery = DiscoveryReport(
@@ -173,6 +174,7 @@ class CodeScanner:
             self.unparsed_files += 1
             return
 
+        self.files_successfully_analyzed += 1
         self.parsed_files.setdefault(adapter.language_id, {})[
             internal_path
         ] = parsed
@@ -228,6 +230,9 @@ class CodeScanner:
         """Describe what was and was not analyzed."""
         health = self.discovery.as_dict()
         health["files_scanned"] = self.files_scanned
+        health["files_successfully_analyzed"] = (
+            self.files_successfully_analyzed
+        )
         health["unparsed_files"] = self.unparsed_files
         health["languages"] = dict(sorted(self.language_counts.items()))
         health["package_analysis"] = self.package_health
@@ -238,6 +243,46 @@ class CodeScanner:
             )
         }
         return health
+
+    def analysis_authority(self) -> dict:
+        """Return deterministic qualification for the analysis result."""
+        candidates = self.discovery.source_candidates
+        reasons = []
+        if candidates == 0:
+            reasons.append("no_source_candidates")
+        if self.discovery.total_skipped:
+            reasons.append("source_files_skipped")
+        if self.unparsed_files:
+            reasons.append("parse_failures")
+        if self.discovery.truncated:
+            reasons.append("discovery_truncated")
+        if any(
+            not result.health.get("complete", True)
+            or bool(result.health.get("errors", 0))
+            for result in self.project_results.values()
+        ):
+            reasons.append("project_analysis_incomplete")
+        if candidates > 0 and self.files_successfully_analyzed == 0:
+            reasons.append("no_successful_analysis")
+
+        complete = not reasons
+        ratio = (
+            self.files_successfully_analyzed / candidates
+            if candidates
+            else 0.0
+        )
+        return {
+            "complete": complete,
+            "authoritative": complete
+            and self.files_successfully_analyzed > 0,
+            "source_candidates": candidates,
+            "files_read": self.files_scanned,
+            "files_successfully_analyzed": (
+                self.files_successfully_analyzed
+            ),
+            "completeness_ratio": round(ratio, 3),
+            "reasons": reasons,
+        }
 
     @property
     def has_coverage_gaps(self) -> bool:

@@ -55,7 +55,10 @@ class QualityRater:
                 "files_scanned": 0,
                 "total_lines": 0,
                 "coverage_gap_ratio": self.coverage_gap_ratio,
-                "warnings": ["No Python files were analyzed — rating is not meaningful"],
+                "warnings": [
+                    "No source files were analyzed — architecture signal "
+                    "score is not meaningful"
+                ],
             }
 
         dsa_score = self._score(self.dsa_found, DSA_PATTERNS, self._DSA_CURVE)
@@ -71,7 +74,7 @@ class QualityRater:
             raw_score *= 1.0 - min(0.3, self.coverage_gap_ratio)
             warnings.append(
                 f"{self.coverage_gap_ratio:.0%} of discovered files could not be "
-                f"analyzed — rating is a lower bound"
+                f"analyzed — architecture signal score is a lower bound"
             )
         if self.total_lines < 200:
             warnings.append("Project is very small; pattern-based rating is noisy")

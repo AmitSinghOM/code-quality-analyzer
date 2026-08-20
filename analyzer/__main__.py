@@ -10,7 +10,12 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from . import REPORT_SCHEMA_VERSION, RULESET_VERSION, __version__
+from . import (
+    REPORT_SCHEMA_VERSION,
+    RULESET_VERSION,
+    SCORING_POLICY_VERSION,
+    __version__,
+)
 from .anonymize import ANONYMIZED_PROJECT, ReportAnonymizer
 from .baseline import (
     BaselineError,
@@ -99,7 +104,10 @@ EXIT_FINDINGS = 4
     "--fail-under",
     type=click.FloatRange(min=1.0, max=10.0),
     default=None,
-    help="Exit non-zero if the rating is below this value (for CI)",
+    help=(
+        "Exit non-zero if the compatibility architecture signal score is "
+        "below this value (for CI)"
+    ),
 )
 @click.option(
     "--fail-on",
@@ -280,6 +288,9 @@ def _run_analysis(
             complexity_data = result.payload
             complexity_health = dict(result.health)
 
+    scan_health = scanner.scan_health()
+    analysis_health = scanner.analysis_authority()
+
     if output_format == "json":
         report = AnalysisReport(structured=_build_json_report(
             project_label,
@@ -290,6 +301,7 @@ def _run_analysis(
             design_found,
             scanner,
             scan_health,
+            analysis_health,
             complexity_data,
             complexity_health,
             verbose,
@@ -310,6 +322,7 @@ def _run_analysis(
                 design_found,
                 scanner,
                 scan_health,
+                analysis_health,
                 complexity_data,
                 verbose,
                 reported_findings,
@@ -342,8 +355,10 @@ def _exit_code(
     findings=None,
     fail_on: str | None = None,
 ) -> int:
-    if scanner.files_scanned == 0:
+    if scanner.discovery.source_candidates == 0:
         return EXIT_NOTHING_ANALYZED
+    if scanner.files_successfully_analyzed == 0:
+        return EXIT_COVERAGE_GAP
     if strict and (
         scanner.has_coverage_gaps or _health_has_gaps(complexity_health)
     ):
@@ -458,6 +473,7 @@ def _build_json_report(
     design_found,
     scanner,
     scan_health,
+    analysis_health,
     complexity_data,
     complexity_health,
     verbose,
@@ -484,12 +500,16 @@ def _build_json_report(
         "schema_version": REPORT_SCHEMA_VERSION,
         "analyzer_version": __version__,
         "ruleset_version": RULESET_VERSION,
+        "scoring_policy_version": SCORING_POLICY_VERSION,
         "language_adapters": scanner.registry.capabilities()["languages"],
         "project": project_label,
         "privacy": _privacy_payload(anonymizer, offline, redact_paths),
+        "architecture_signal_score": rating,
+        "architecture_signal_label": rater.get_rating_label(rating),
         "rating": rating,
         "label": rater.get_rating_label(rating),
         "breakdown": breakdown,
+        "analysis_health": analysis_health,
         "scan_health": health_payload,
         "package_intelligence": package_payload,
         "project_analyses": _project_analysis_payload(
@@ -535,6 +555,7 @@ def _emit_text(
     design_found,
     scanner,
     scan_health,
+    analysis_health,
     complexity_data,
     verbose,
     reported_findings,
@@ -553,11 +574,26 @@ def _emit_text(
         "[/dim]\n"
     )
 
+    authority_label = "yes" if analysis_health["authoritative"] else "no"
+    complete_label = "yes" if analysis_health["complete"] else "no"
+    console.print(
+        "[dim]Analysis: "
+        f"authoritative={authority_label} | "
+        f"complete={complete_label} | "
+        f"successful={analysis_health['files_successfully_analyzed']}/"
+        f"{analysis_health['source_candidates']}[/dim]\n"
+    )
+    if analysis_health["reasons"]:
+        console.print(
+            "[yellow]![/yellow] Analysis is non-authoritative: "
+            + ", ".join(analysis_health["reasons"])
+        )
+
     rating_color = "red" if rating < 4 else "yellow" if rating < 7 else "green"
     console.print(Panel(
         f"[bold {rating_color}]{rating}/10[/bold {rating_color}]\n"
         f"{rater.get_rating_label(rating)}",
-        title="[bold]Quality Rating[/bold]",
+        title="[bold]Architecture Signal Score[/bold]",
         expand=False,
     ))
 

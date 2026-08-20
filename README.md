@@ -6,20 +6,20 @@ Go pilot. It detects:
 - **Actionable correctness and package findings** with normalized locations
 - **Data Structures & Algorithms (DSA)** patterns in Python
 - **System Design** principles implemented in Python
-- A compatibility **quality rating from 1-10**
+- A compatibility **architecture signal score from 1-10**
 
-## Rating Scale
+## Architecture Signal Score Scale
 
-| Rating | Description |
-|--------|-------------|
-| 1-2 | Poor: No meaningful DSA/design, wasteful code |
-| 3-4 | Basic: Simple structures, minimal design thought |
-| 5-6 | Average: Some DSA usage, basic patterns |
-| 7-8 | Good: Strategic DSA, clear design patterns |
-| 9-10 | Excellent: Optimal DSA, comprehensive system design |
+| Score | Architecture-signal breadth |
+|-------|-----------------------------|
+| 1-2 | Very few recognized DSA or design signals |
+| 3-4 | A small set of recognized signals |
+| 5-6 | Moderate signal breadth |
+| 7-8 | Broad signal coverage across multiple files |
+| 9-10 | Very broad recognized DSA and design signals |
 
-Ratings from 2.x are **not comparable** to 1.x ratings. Detection got stricter
-and project size no longer adds score, so most projects will rate lower than
+Architecture signal scores from 2.x are **not comparable** to 1.x ratings. Detection got stricter
+and project size no longer adds score, so most projects will score lower than
 they did before. See [Scoring](#scoring).
 
 ## Project Structure
@@ -88,7 +88,7 @@ code-quality-analyzer /path/to/project -c
 ```
 
 `PROJECT_PATH` must be a directory. Pointing at a single file is rejected
-rather than silently returning a rating of 1.
+rather than silently returning an architecture signal score of 1.
 
 ## Privacy and offline options
 
@@ -103,7 +103,7 @@ Anonymized reports replace project, file, and function identities with opaque
 report-local tokens; remove package/module/dependency/script names; replace
 finding messages and remediation; reduce package intelligence to aggregate
 counts; and remove source-derived pattern signals and complexity reasoning.
-Rule IDs, locations, counts, ratings, pattern names, complexity classes, and
+Rule IDs, locations, counts, scores, pattern names, complexity classes, and
 line numbers remain so the report is still useful.
 
 `--offline` adds runtime enforcement by denying socket connection and
@@ -122,11 +122,11 @@ remaining disclosure considerations.
 | `-f, --output-format` | `text` | `text` or versioned `json` |
 | `-c, --complexity` | off | Add experimental time/space complexity estimates |
 | `--max-file-size` | 2 MB | Skip files larger than this positive byte count |
-| `--max-files` | 20000 | Stop after this positive number of Python files |
+| `--max-files` | 20000 | Stop after this positive number of registered source files |
 | `--redact-paths` | off | Report file names only, no directory structure |
 | `--anonymize` | off | Remove project paths, metadata, and source identifiers |
 | `--offline` | off | Deny socket operations while analysis runs |
-| `--fail-under` | none | Exit non-zero when the rating is below a value from 1 to 10 |
+| `--fail-under` | none | Exit non-zero when the compatibility architecture signal score is below 1–10 |
 | `--fail-on` | none | Exit 4 for reported findings at `warning` or `error` severity |
 | `--baseline` | none | Compare findings with an existing hashed baseline |
 | `--write-baseline` | none | Atomically write current finding fingerprints |
@@ -139,18 +139,35 @@ identities, so changing either presentation option does not change CI identity.
 
 `-f` was `--format` in 1.x. It is now `--output-format` so it no longer shadows
 the `format` builtin. JSON reports include schema, analyzer, and ruleset versions
-plus explicit privacy state so consumers can identify the contract and
-protections that produced a result.
+plus explicit privacy state, scoring-policy version, and analysis authority so
+consumers can identify the contract, protections, and completeness that
+produced a result. `architecture_signal_score` is the primary score field;
+`rating` is a transitional equal-valued 2.x compatibility alias.
 
 ## Exit Codes
 
 | Code | Meaning |
 |------|---------|
 | 0 | Analysis completed and any threshold was met |
-| 1 | Rating below `--fail-under` |
-| 2 | No Python files were analyzed |
-| 3 | `--strict` and the pattern or requested complexity analysis was incomplete |
+| 1 | Architecture signal score below `--fail-under` |
+| 2 | No registered-language source candidates were discovered |
+| 3 | Source candidates produced no successful analysis, or `--strict` found incomplete analysis |
 | 4 | A reported finding met the `--fail-on` severity threshold |
+
+## Analysis Authority
+
+Every JSON report includes `analysis_health` with source-candidate, readable,
+and successfully analyzed counts; a completeness ratio; stable reason codes;
+and `complete`/`authoritative` booleans. Text reports show the same
+qualification before the architecture signal score.
+
+No source candidates exit with code 2. If candidates exist but none can be
+successfully parsed, analysis exits with code 3 even without `--strict`.
+Partial non-strict analysis may exit successfully for inspection, but it is
+always marked non-authoritative. See the versioned schema in
+[`docs/report-schema-1.7.0.json`](docs/report-schema-1.7.0.json) and the decision
+record in
+[`docs/adr/001-analysis-authority-and-score-migration.md`](docs/adr/001-analysis-authority-and-score-migration.md).
 
 ## Use in CI
 
@@ -176,9 +193,10 @@ Baseline writes are atomic, malformed or oversized baselines are rejected, and
 fingerprints remain stable when `--redact-paths` changes report presentation.
 See [`docs/BASELINES.md`](docs/BASELINES.md) for workflow and review guidance.
 
-`--fail-under` remains available as a rating ratchet, but actionable finding
-gates are more explicit. `--strict` fails when files cannot be read or parsed,
-discovery is truncated, package metadata is invalid, or requested complexity
+`--fail-under` remains available as an architecture-signal compatibility
+ratchet, but actionable finding gates are more explicit. Treat the score as
+usable only when `analysis_health.authoritative` is true. `--strict` fails when
+files cannot be read or parsed, discovery is truncated, package metadata is invalid, or requested complexity
 analysis has a coverage gap. Incomplete analysis therefore cannot silently
 pass as a green build.
 

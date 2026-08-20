@@ -187,7 +187,7 @@ Do not force every language into one universal AST. Normalize only shared facts 
 
 #### Phase 1 progress (August 20, 2026)
 
-**Status:** In progress
+**Status:** Core exit criteria met; scoring migration follow-ups remain
 
 Completed in the first trust slice:
 
@@ -199,9 +199,12 @@ Completed in the first trust slice:
 - Strict mode now covers truncation and requested complexity-analysis gaps.
 - JSON evidence now follows `--verbose` consistently.
 - Complexity output is explicitly labeled experimental.
+- Added scoring-policy metadata and renamed the primary result to `architecture_signal_score`, retaining `rating` as a documented 2.x compatibility alias.
+- Added deterministic analysis authority with candidate/read/success counts, completeness ratio, stable reason codes, and distinct zero-source versus zero-success exits.
+- Added report schema 1.7.0, a score-migration ADR, and JSON/text golden authority fixtures.
 - Privacy, malformed-source, strict-mode, metadata, and option-boundary regressions are covered by tests.
 
-Remaining Phase 1 work includes anonymized stable file identifiers, duplicate-basename-safe redaction, scoring-policy metadata, complete/incomplete confidence semantics, and zero-source versus zero-success distinction.
+Remaining Phase 1 follow-up is removing the deprecated `rating` alias in a future report-schema major version and replacing architecture-signal CI gating with finding-derived policy.
 
 **Objective:** Make every report safe and make incomplete analysis explicit.
 

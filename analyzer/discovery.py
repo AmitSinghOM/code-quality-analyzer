@@ -41,6 +41,7 @@ class DiscoveryReport:
 
     root: Path | None = field(default=None, repr=False)
     redact_paths: bool = field(default=False, repr=False)
+    source_candidates: int = 0
     files_found: int = 0
     skipped: dict[str, int] = field(default_factory=dict)
     skipped_examples: dict[str, list[str]] = field(default_factory=dict)
@@ -63,6 +64,7 @@ class DiscoveryReport:
 
     def as_dict(self) -> dict:
         return {
+            "source_candidates": self.source_candidates,
             "files_found": self.files_found,
             "total_skipped": self.total_skipped,
             "skipped_by_reason": dict(sorted(self.skipped.items())),
@@ -131,6 +133,7 @@ def _candidate_paths(
                 report.truncated = True
                 return
             seen += 1
+            report.source_candidates += 1
             yield Path(dirpath) / name
 
 

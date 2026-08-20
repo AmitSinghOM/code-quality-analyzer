@@ -41,15 +41,26 @@ def test_json_output_is_valid_and_includes_health(project):
     payload = json.loads(result.output)
 
     assert result.exit_code == EXIT_OK
-    assert payload["schema_version"] == "1.6.0"
-    assert payload["analyzer_version"] == "2.13.0"
+    assert payload["schema_version"] == "1.7.0"
+    assert payload["analyzer_version"] == "2.14.0"
     assert payload["ruleset_version"] == "2.4.0"
+    assert payload["scoring_policy_version"] == "1.0.0"
     assert payload["language_adapters"] == {
         "go": "1.0.0",
         "python": "1.0.0",
     }
     assert payload["project"] == root.name
-    assert 1.0 <= payload["rating"] <= 10.0
+    assert 1.0 <= payload["architecture_signal_score"] <= 10.0
+    assert payload["rating"] == payload["architecture_signal_score"]
+    assert payload["analysis_health"] == {
+        "complete": True,
+        "authoritative": True,
+        "source_candidates": 1,
+        "files_read": 1,
+        "files_successfully_analyzed": 1,
+        "completeness_ratio": 1.0,
+        "reasons": [],
+    }
     assert payload["scan_health"]["files_scanned"] == 1
     assert "evidence" not in payload["dsa_patterns"]["dynamic_programming"]
 
@@ -162,9 +173,16 @@ def test_strict_includes_complexity_health(project, monkeypatch):
     root = project({"lib.py": "def f():\n    return 1\n"})
     monkeypatch.setattr(ProjectComplexityAnalyzer, "MAX_FUNCTIONS_PER_FILE", 0)
 
-    result = run([str(root), "--strict", "--complexity"])
+    result = run([
+        str(root), "--strict", "--complexity", "--output-format", "json",
+    ])
+    payload = json.loads(result.output)
 
     assert result.exit_code == EXIT_COVERAGE_GAP
+    assert payload["analysis_health"]["authoritative"] is False
+    assert payload["analysis_health"]["reasons"] == [
+        "project_analysis_incomplete"
+    ]
 
 
 def test_numeric_options_reject_out_of_range_values(project):
@@ -574,3 +592,75 @@ def test_unknown_output_format_lists_registered_reporters(project):
     assert result.exit_code != EXIT_OK
     assert "Unknown output format 'yaml'" in result.output
     assert "json, text" in result.output
+
+
+def test_all_skipped_sources_exit_three_and_are_non_authoritative(project):
+    root = project({"large.py": "VALUE = '" + ("x" * 100) + "'\n"})
+
+    result = run([
+        str(root), "--output-format", "json", "--max-file-size", "8",
+    ])
+    payload = json.loads(result.output)
+
+    assert result.exit_code == EXIT_COVERAGE_GAP
+    assert payload["analysis_health"] == {
+        "complete": False,
+        "authoritative": False,
+        "source_candidates": 1,
+        "files_read": 0,
+        "files_successfully_analyzed": 0,
+        "completeness_ratio": 0.0,
+        "reasons": ["source_files_skipped", "no_successful_analysis"],
+    }
+
+
+def test_all_malformed_sources_exit_three_without_strict(project):
+    root = project({"broken.py": "def broken(:\n"})
+
+    result = run([str(root), "--output-format", "json"])
+    payload = json.loads(result.output)
+
+    assert result.exit_code == EXIT_COVERAGE_GAP
+    assert payload["analysis_health"]["files_read"] == 1
+    assert payload["analysis_health"]["files_successfully_analyzed"] == 0
+    assert payload["analysis_health"]["reasons"] == [
+        "parse_failures",
+        "no_successful_analysis",
+    ]
+
+
+def test_partial_analysis_is_qualified_without_forcing_non_strict_failure(project):
+    root = project({
+        "good.py": "VALUE = 1\n",
+        "broken.py": "def broken(:\n",
+    })
+
+    result = run([str(root), "--output-format", "json"])
+    payload = json.loads(result.output)
+
+    assert result.exit_code == EXIT_OK
+    assert payload["analysis_health"] == {
+        "complete": False,
+        "authoritative": False,
+        "source_candidates": 2,
+        "files_read": 2,
+        "files_successfully_analyzed": 1,
+        "completeness_ratio": 0.5,
+        "reasons": ["parse_failures"],
+    }
+
+
+def test_anonymization_preserves_analysis_authority_contract(project):
+    root = project({
+        "private/good.py": "VALUE = 1\n",
+        "private/broken.py": "def broken(:\n",
+    })
+
+    normal = run([str(root), "--output-format", "json"])
+    anonymous = run([
+        str(root), "--output-format", "json", "--anonymize", "--offline",
+    ])
+
+    assert json.loads(normal.output)["analysis_health"] == (
+        json.loads(anonymous.output)["analysis_health"]
+    )
