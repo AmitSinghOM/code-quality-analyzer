@@ -12,6 +12,7 @@ from .protocols import (
     ProjectProvider,
     Reporter,
     RulePack,
+    SignalProvider,
 )
 
 
@@ -30,6 +31,7 @@ class PluginRegistry:
         self._languages: dict[str, LanguageAdapter] = {}
         self._extensions: dict[str, str] = {}
         self._rule_packs: dict[tuple[str, str], RulePack] = {}
+        self._signals: dict[tuple[str, str], SignalProvider] = {}
         self._metrics: dict[tuple[str, str], MetricProvider] = {}
         self._project_providers: dict[
             tuple[str, str], ProjectProvider
@@ -87,6 +89,33 @@ class PluginRegistry:
         return tuple(
             plugin
             for (owner, _), plugin in sorted(self._rule_packs.items())
+            if owner == language_id
+        )
+
+    def register_signal_provider(self, provider: SignalProvider) -> None:
+        _validate_plugin_api(provider)
+        _validate_version(
+            getattr(provider, "capability_version", DEFAULT_CAPABILITY_VERSION),
+            "capability version",
+        )
+        if provider.language_id not in self._languages:
+            raise PluginRegistrationError(
+                "Register a language adapter before its signal providers"
+            )
+        key = (provider.language_id, provider.provider_id)
+        if key in self._signals:
+            raise PluginRegistrationError(
+                f"Signal provider already registered: {provider.provider_id}"
+            )
+        self._signals[key] = provider
+
+    def signal_providers_for(
+        self,
+        language_id: str,
+    ) -> tuple[SignalProvider, ...]:
+        return tuple(
+            plugin
+            for (owner, _), plugin in sorted(self._signals.items())
             if owner == language_id
         )
 
@@ -239,6 +268,18 @@ class PluginRegistry:
                 for (language_id, rule_pack_id), plugin in sorted(
                     self._rule_packs.items()
                 )
+            ],
+            "signal_providers": [
+                {
+                    "language_id": language_id,
+                    "provider_id": provider_id,
+                    "capability_version": getattr(
+                        self._signals[(language_id, provider_id)],
+                        "capability_version",
+                        DEFAULT_CAPABILITY_VERSION,
+                    ),
+                }
+                for language_id, provider_id in sorted(self._signals)
             ],
             "metric_providers": [
                 {

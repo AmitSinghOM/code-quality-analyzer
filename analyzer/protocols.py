@@ -58,6 +58,29 @@ class RulePack(Protocol):
     def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]: ...
 
 
+@dataclass(frozen=True, slots=True)
+class SignalObservation:
+    """One descriptive, non-finding observation emitted by a language."""
+
+    category: str
+    signal_id: str
+    description: str
+    path: str
+    evidence: tuple[str, ...] = ()
+
+
+@runtime_checkable
+class SignalProvider(Protocol):
+    """Extract descriptive observations from one parsed source file."""
+
+    provider_id: str
+    language_id: str
+    plugin_api_version: str
+    capability_version: str
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[SignalObservation]: ...
+
+
 @runtime_checkable
 class MetricProvider(Protocol):
     """Measure language-specific facts without changing the report model."""

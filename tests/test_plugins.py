@@ -6,7 +6,7 @@ import pytest
 
 from analyzer.findings import Finding, Location
 from analyzer.plugins import create_default_registry
-from analyzer.protocols import ParsedFile, SourceFile
+from analyzer.protocols import ParsedFile, SignalObservation, SourceFile
 from analyzer.registry import (
     CapabilityNegotiationError,
     PluginRegistrationError,
@@ -38,6 +38,22 @@ class StubRulePack:
             message="Stub finding.",
             location=Location(parsed.source.display_path, 1, 1),
             remediation="Use the fixture remediation.",
+        )
+
+
+class StubSignalProvider:
+    provider_id = "stub-signals"
+    language_id = "stub"
+    capability_version = "1.0.0"
+    plugin_api_version = "1.0.0"
+
+    def evaluate(self, parsed: ParsedFile):
+        yield SignalObservation(
+            category="architecture.dsa",
+            signal_id="stub-pattern",
+            description="Synthetic language signal",
+            path=parsed.source.display_path,
+            evidence=("stub:value",),
         )
 
 
@@ -94,6 +110,7 @@ def test_minimal_plugins_register_and_share_normalized_models():
             "rule_pack_id": "stub-rules",
             "ruleset_version": "1.0.0",
         }],
+        "signal_providers": [],
         "metric_providers": [{
             "language_id": "stub",
             "provider_id": "stub-metrics",
@@ -169,6 +186,7 @@ def test_scanner_discovers_registered_extension_without_branching(
     registry = PluginRegistry()
     registry.register_language(StubAdapter())
     registry.register_rule_pack(StubRulePack())
+    registry.register_signal_provider(StubSignalProvider())
 
     scanner = CodeScanner(root, registry=registry)
     dsa, design = scanner.scan()
@@ -176,7 +194,8 @@ def test_scanner_discovers_registered_extension_without_branching(
     assert scanner.files_scanned == 1
     assert scanner.language_counts == {"stub": 1}
     assert [finding.rule_id for finding in scanner.findings] == ["STUB-001"]
-    assert dsa == {}
+    assert dsa == {"stub-pattern": ["src/example.stub"]}
+    assert scanner.signal_observations[0].evidence == ("stub:value",)
     assert design == {}
 
 

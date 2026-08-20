@@ -8,17 +8,19 @@ from collections.abc import Iterable
 from ..complexity import ProjectComplexityAnalyzer
 from ..findings import Finding
 from ..package_intelligence import PythonPackageAnalyzer
+from ..patterns import DSA_PATTERNS, SYSTEM_DESIGN_PATTERNS
 from ..protocols import (
     DEFAULT_CAPABILITY_VERSION,
     PLUGIN_API_VERSION,
     ParsedFile,
     ProjectContext,
     ProviderResult,
+    SignalObservation,
     SourceFile,
 )
 from ..python_rules import PythonRuleAnalyzer
 from ..registry import PluginRegistry
-from ..signals import extract_signals
+from ..signals import FileSignals, extract_signals, pattern_is_present
 
 PYTHON_ADAPTER_VERSION = "1.0.0"
 PYTHON_RULE_PACK_ID = "python-core"
@@ -65,6 +67,33 @@ class PythonRulePack:
             parsed.source.display_path,
             identity_path=parsed.source.identity_path,
         )
+
+
+class PythonArchitectureSignalProvider:
+    """Extract the compatibility DSA and design signal inventory."""
+
+    provider_id = "python-architecture-signals"
+    language_id = "python"
+    capability_version = DEFAULT_CAPABILITY_VERSION
+    plugin_api_version = PLUGIN_API_VERSION
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[SignalObservation]:
+        if not isinstance(parsed.facts, FileSignals):
+            raise TypeError("Python signal provider requires FileSignals facts")
+        for category, definitions in (
+            ("architecture.dsa", DSA_PATTERNS),
+            ("architecture.design", SYSTEM_DESIGN_PATTERNS),
+        ):
+            for signal_id, definition in definitions.items():
+                present, matched = pattern_is_present(parsed.facts, definition)
+                if present:
+                    yield SignalObservation(
+                        category=category,
+                        signal_id=signal_id,
+                        description=definition["description"],
+                        path=parsed.source.display_path,
+                        evidence=tuple(matched),
+                    )
 
 
 class PythonPackageProvider:
@@ -132,6 +161,7 @@ def register_python_plugins(registry: PluginRegistry) -> PluginRegistry:
     """Register the built-in Python adapter and analysis providers."""
     registry.register_language(PythonLanguageAdapter())
     registry.register_rule_pack(PythonRulePack())
+    registry.register_signal_provider(PythonArchitectureSignalProvider())
     registry.register_project_provider(PythonPackageProvider())
     registry.register_project_provider(PythonComplexityProvider())
     return registry

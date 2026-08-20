@@ -447,6 +447,7 @@ Completed in the first compatibility slice:
 - Added cached project-provider execution and deterministic capability metadata for default and optional analyses.
 - Added a versioned core plugin API plus explicit required/optional capability negotiation; incompatible plugin API versions are rejected during registration.
 - Changed optional Python complexity analysis to consume the scanner's shared AST artifacts while preserving complexity-specific health limits.
+- Moved Python DSA/design detection into a registered signal provider and made core scanning consume normalized language-neutral observations.
 - Updated package discovery so built-in language subpackages are included in wheels and source distributions.
 - Added a minimal synthetic language, rule pack, metric provider, and reporter contract test.
 

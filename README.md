@@ -40,7 +40,7 @@ code-quality-analyzer/
 │   ├── registry.py      # Versioned plugin and capability negotiation registry
 │   ├── plugins.py       # Built-in plugin assembly
 │   ├── languages/       # Built-in language adapters and rule packs
-│   ├── scanner.py       # Python orchestration through registered plugins
+│   ├── scanner.py       # Language-neutral orchestration through plugins
 │   ├── complexity.py    # Time/space complexity analyzer
 │   └── rater.py         # Rating calculator (1-10)
 ├── tests/               # Regression tests

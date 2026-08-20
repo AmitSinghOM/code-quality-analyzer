@@ -3,6 +3,7 @@
 from .go import GoLanguageAdapter, GoRulePack, register_go_plugins
 from .python import (
     PythonComplexityProvider,
+    PythonArchitectureSignalProvider,
     PythonLanguageAdapter,
     PythonPackageProvider,
     PythonRulePack,
@@ -12,6 +13,7 @@ from .python import (
 __all__ = [
     "GoLanguageAdapter",
     "GoRulePack",
+    "PythonArchitectureSignalProvider",
     "PythonComplexityProvider",
     "PythonLanguageAdapter",
     "PythonPackageProvider",

@@ -42,7 +42,7 @@ def test_json_output_is_valid_and_includes_health(project):
 
     assert result.exit_code == EXIT_OK
     assert payload["schema_version"] == "1.5.0"
-    assert payload["analyzer_version"] == "2.10.0"
+    assert payload["analyzer_version"] == "2.11.0"
     assert payload["ruleset_version"] == "2.3.0"
     assert payload["language_adapters"] == {
         "go": "1.0.0",

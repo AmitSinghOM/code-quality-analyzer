@@ -14,11 +14,15 @@ from .discovery import (
 )
 from .findings import Finding
 from .package_intelligence import PackageIntelligence
-from .patterns import DSA_PATTERNS, SYSTEM_DESIGN_PATTERNS
 from .plugins import create_default_registry
-from .protocols import ParsedFile, ProjectContext, ProviderResult, SourceFile
+from .protocols import (
+    ParsedFile,
+    ProjectContext,
+    ProviderResult,
+    SignalObservation,
+    SourceFile,
+)
 from .registry import PluginRegistry
-from .signals import FileSignals, pattern_is_present
 
 
 @dataclass
@@ -59,6 +63,7 @@ class CodeScanner:
         self.design_found: dict[str, list[str]] = {}
         self.dsa_evidence: dict[str, list[PatternHit]] = {}
         self.design_evidence: dict[str, list[PatternHit]] = {}
+        self.signal_observations: list[SignalObservation] = []
         self.findings: list[Finding] = []
         self.parsed_files: dict[str, dict[str, ParsedFile]] = {}
         self.project_results: dict[tuple[str, str], ProviderResult] = {}
@@ -174,33 +179,29 @@ class CodeScanner:
         for rule_pack in self.registry.rule_packs_for(adapter.language_id):
             self.findings.extend(rule_pack.evaluate(parsed))
 
-        if adapter.language_id != "python":
-            return
-        if not isinstance(parsed.facts, FileSignals):
-            raise TypeError("Python adapter must provide FileSignals facts")
-
-        signals = parsed.facts
-        for name, definition in DSA_PATTERNS.items():
-            present, matched = pattern_is_present(signals, definition)
-            if present:
-                self._record(
-                    self.dsa_found,
-                    self.dsa_evidence,
-                    name,
-                    report_path,
-                    matched,
-                )
-
-        for name, definition in SYSTEM_DESIGN_PATTERNS.items():
-            present, matched = pattern_is_present(signals, definition)
-            if present:
-                self._record(
-                    self.design_found,
-                    self.design_evidence,
-                    name,
-                    report_path,
-                    matched,
-                )
+        for provider in self.registry.signal_providers_for(
+            adapter.language_id,
+        ):
+            for observation in provider.evaluate(parsed):
+                self.signal_observations.append(observation)
+                target = {
+                    "architecture.dsa": (
+                        self.dsa_found,
+                        self.dsa_evidence,
+                    ),
+                    "architecture.design": (
+                        self.design_found,
+                        self.design_evidence,
+                    ),
+                }.get(observation.category)
+                if target is not None:
+                    self._record(
+                        target[0],
+                        target[1],
+                        observation.signal_id,
+                        observation.path,
+                        observation.evidence,
+                    )
 
     @staticmethod
     def _record(
