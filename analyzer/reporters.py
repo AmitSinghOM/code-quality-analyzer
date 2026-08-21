@@ -35,6 +35,7 @@ class SarifRun:
     analysis_health: Mapping[str, object]
     privacy: Mapping[str, object]
     baseline_selection: Mapping[str, object]
+    changed_line_selection: Mapping[str, object] | None = None
     findings: tuple[Mapping[str, object], ...] = ()
 
 
@@ -111,15 +112,24 @@ def _sarif_payload(run: SarifRun) -> dict:
                 },
             },
             "results": [_result(item, indexes) for item in findings],
-            "properties": {
-                "analysisHealth": dict(run.analysis_health),
-                "baselineSelection": dict(run.baseline_selection),
-                "configurationFingerprint": run.configuration_fingerprint,
-                "privacy": dict(run.privacy),
-            },
+            "properties": _sarif_properties(run),
         }],
         "version": SARIF_VERSION,
     }
+
+
+def _sarif_properties(run: SarifRun) -> dict:
+    properties = {
+        "analysisHealth": dict(run.analysis_health),
+        "baselineSelection": dict(run.baseline_selection),
+        "configurationFingerprint": run.configuration_fingerprint,
+        "privacy": dict(run.privacy),
+    }
+    if run.changed_line_selection is not None:
+        properties["changedLineSelection"] = dict(
+            run.changed_line_selection
+        )
+    return properties
 
 
 def _rule_descriptor(metadata: RuleMetadata) -> dict:

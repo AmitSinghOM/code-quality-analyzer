@@ -31,10 +31,11 @@ All notable changes are documented in this file. Versions follow semantic versio
 - Bounded setuptools PEP 420 namespace discovery using shared parsed artifacts
 - `PY-PKG-006` for missing literal static setuptools package-data targets
 - Deterministic, privacy-bounded SARIF 2.1.0 output with a stable built-in rule catalog
+- Bounded changed-line manifests with aggregate-only text, JSON, and SARIF selection metadata
 
 ### Changed
 
-- Analyzer version advanced to 2.23.0; report schema remains 1.8.0 and ruleset remains 2.12.0
+- Analyzer version advanced to 2.24.0; report schema advanced to 1.9.0 and ruleset remains 2.12.0
 - Reports now qualify authority with source-candidate, readable-file, and successful-analysis counts, completeness ratio, and stable reason codes
 - `architecture_signal_score` replaces `rating` as the primary score name; `rating` remains a documented equal-valued 2.x compatibility alias
 - Source candidates with zero successful analyses now exit 3 even without strict mode
@@ -58,4 +59,5 @@ All notable changes are documented in this file. Versions follow semantic versio
 - Offline mode blocks connection and name-resolution socket entry points
 - Baselines retain stable private identities without exposing them in reports
 - Baselines store bounded SHA-256 fingerprints rather than source identifiers
+- Changed-line manifests are strictly bounded and reports retain aggregate selection metadata only
 - Skipped-file examples no longer expose absolute paths

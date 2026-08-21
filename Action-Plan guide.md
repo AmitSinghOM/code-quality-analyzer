@@ -395,7 +395,17 @@ Completed in the SARIF vertical slice:
 - Kept JSON report schema 1.8.0 and ruleset 2.12.0 unchanged.
 - Added unit, CLI, mixed-language, determinism, privacy, offline, baseline, and adversarial path tests.
 
-Next work includes changed-line awareness, pre-commit integration, content-hash caching, and richer category/rule-specific policies.
+Completed in the changed-line awareness vertical slice:
+
+- Added a strict, bounded changed-lines manifest schema with project-relative POSIX identities and inclusive ranges.
+- Canonicalized unordered, overlapping, and adjacent ranges without invoking Git, a shell, or project code.
+- Intersected changed lines after baseline/new-only comparison and before text, JSON, SARIF, and `--fail-on` projection.
+- Kept full-project scoring, authority, strictness, complexity, and baseline writes unchanged.
+- Added aggregate-only text, JSON, and SARIF selection metadata with no manifest paths, source paths, or raw ranges.
+- Advanced analyzer version to 2.24.0 and JSON report schema to 1.9.0 while retaining ruleset 2.12.0.
+- Added canonicalization, overlap, path-adversarial, privacy, baseline, gate, and deterministic SARIF tests.
+
+Next work includes pre-commit integration, content-hash caching, and richer category/rule-specific policies.
 
 **Objective:** Make adoption practical without forcing teams to fix all historical findings immediately.
 
@@ -418,6 +428,7 @@ Next work includes changed-line awareness, pre-commit integration, content-hash 
 code-quality-analyzer . \
   --baseline .code-quality-baseline.json \
   --new-findings-only \
+  --changed-lines-manifest changed-lines.json \
   --fail-on error \
   --output-format sarif
 ```

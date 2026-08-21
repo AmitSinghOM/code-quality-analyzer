@@ -8,7 +8,7 @@ The analyzer processes source locally. Runtime analysis does not require an acco
 
 ## Data read
 
-Default analysis reads bounded regular Python files under the selected project root and, when present, `pyproject.toml`. It does not follow directory symlinks, read symlink targets outside the project, read non-regular files, import the project, run build hooks, or execute project code.
+Default analysis reads bounded regular Python files under the selected project root and, when present, `pyproject.toml`. When explicitly requested, it also reads one bounded regular UTF-8 changed-lines manifest, which may be outside the project root. It does not follow directory symlinks, read symlink targets outside the project, read non-regular files, import the project, run build hooks, or execute project code.
 
 ## Normal report data
 
@@ -28,6 +28,13 @@ intelligence, complexity data, source snippets, command lines, environment
 variables, timestamps, fixes, finding fingerprints, and repository metadata.
 Artifact locations are percent-encoded project-relative URIs, never absolute or
 `file://` URIs.
+
+When changed-line selection is enabled, every format adds only its schema
+version and aggregate file, canonical-range, input-finding, and selected-finding
+counts. That selection metadata omits the manifest path, manifest source paths,
+raw ranges, content, and hash. Selected findings retain the format's normal or
+anonymized path behavior. Selection uses hidden project-relative identities
+before any path redaction or anonymization.
 
 `--redact-paths` removes directory components from report paths, but it is not full anonymization. Basenames, identifiers, messages, package metadata, and architecture signals can still be sensitive.
 

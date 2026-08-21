@@ -23,6 +23,7 @@ from .baseline import (
     load_baseline,
     write_baseline,
 )
+from .changed_lines import ChangedLinesError, load_changed_lines
 from .config import ConfigError, load_config
 from .discovery import DEFAULT_MAX_FILE_SIZE, DEFAULT_MAX_FILES
 from .offline import OfflineViolationError, enforce_offline
@@ -142,6 +143,12 @@ EXIT_FINDINGS = 4
     help="Report and gate only findings absent from --baseline",
 )
 @click.option(
+    "--changed-lines-manifest",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Report and gate findings overlapping a bounded line manifest",
+)
+@click.option(
     "--strict",
     is_flag=True,
     help="Exit non-zero if any requested analysis is incomplete",
@@ -161,6 +168,7 @@ def main(
     baseline_path: Path | None,
     write_baseline_path: Path | None,
     new_findings_only: bool,
+    changed_lines_manifest: Path | None,
     strict: bool,
 ):
     """Analyze a project without sending source outside the machine."""
@@ -184,6 +192,7 @@ def main(
                 baseline_path=baseline_path,
                 write_baseline_path=write_baseline_path,
                 new_findings_only=new_findings_only,
+                changed_lines_manifest=changed_lines_manifest,
                 strict=strict,
             )
     except OfflineViolationError as error:
@@ -208,6 +217,7 @@ def _run_analysis(
     baseline_path: Path | None,
     write_baseline_path: Path | None,
     new_findings_only: bool,
+    changed_lines_manifest: Path | None,
     strict: bool,
 ) -> int:
     root = Path(project_path).resolve()
@@ -215,6 +225,15 @@ def _run_analysis(
         configuration = load_config(root)
     except ConfigError as error:
         raise click.ClickException(str(error)) from error
+
+    changed_line_selection = None
+    if changed_lines_manifest is not None:
+        try:
+            changed_line_selection = load_changed_lines(
+                changed_lines_manifest
+            )
+        except ChangedLinesError as error:
+            raise click.ClickException(str(error)) from error
 
     known_fingerprints = None
     if baseline_path is not None:
@@ -276,11 +295,25 @@ def _run_analysis(
         known_fingerprints,
         written=baseline_written,
     )
-    reported_findings = (
+    baseline_selected_findings = (
         list(comparison.new_findings)
         if new_findings_only
         else scanner.findings
     )
+    changed_lines_summary = None
+    if changed_line_selection is None:
+        reported_findings = baseline_selected_findings
+    else:
+        try:
+            reported_findings = list(
+                changed_line_selection.select(baseline_selected_findings)
+            )
+        except ChangedLinesError as error:
+            raise click.ClickException(str(error)) from error
+        changed_lines_summary = changed_line_selection.summary(
+            input_findings=len(baseline_selected_findings),
+            selected_findings=len(reported_findings),
+        )
     baseline_summary = (
         comparison.as_dict()
         if baseline_path is not None or write_baseline_path is not None
@@ -314,6 +347,7 @@ def _run_analysis(
             verbose,
             reported_findings,
             baseline_summary,
+            changed_lines_summary,
             anonymizer,
             offline,
             redact_paths,
@@ -324,6 +358,7 @@ def _run_analysis(
             analysis_health,
             reported_findings,
             baseline_summary,
+            changed_lines_summary,
             anonymizer,
             offline,
             redact_paths,
@@ -345,6 +380,7 @@ def _run_analysis(
                 verbose,
                 reported_findings,
                 baseline_summary,
+                changed_lines_summary,
                 anonymizer,
                 offline,
                 redact_paths,
@@ -470,6 +506,7 @@ def _build_sarif_run(
     analysis_health,
     reported_findings,
     baseline_summary,
+    changed_lines_summary,
     anonymizer,
     offline,
     redact_paths,
@@ -499,6 +536,7 @@ def _build_sarif_run(
         analysis_health=analysis_health,
         privacy=_privacy_payload(anonymizer, offline, redact_paths),
         baseline_selection=baseline_selection,
+        changed_line_selection=changed_lines_summary,
         findings=findings,
     )
 
@@ -535,6 +573,7 @@ def _build_json_report(
     verbose,
     reported_findings,
     baseline_summary,
+    changed_lines_summary,
     anonymizer,
     offline,
     redact_paths,
@@ -592,6 +631,8 @@ def _build_json_report(
     }
     if baseline_summary is not None:
         output["baseline"] = baseline_summary
+    if changed_lines_summary is not None:
+        output["changed_lines"] = changed_lines_summary
     if complexity_payload:
         output["complexity"] = complexity_payload
     if complexity_health:
@@ -617,6 +658,7 @@ def _emit_text(
     verbose,
     reported_findings,
     baseline_summary,
+    changed_lines_summary,
     anonymizer,
     offline,
     redact_paths,
@@ -695,6 +737,7 @@ def _emit_text(
     )
     _print_package_intelligence(package_payload)
     _print_baseline_summary(baseline_summary)
+    _print_changed_lines_summary(changed_lines_summary)
     _print_findings(finding_payload)
     _print_pattern_table(
         "DSA Patterns Detected",
@@ -759,6 +802,20 @@ def _print_baseline_summary(summary):
         f"[bold]Current findings:[/bold] {summary['current_findings']}\n"
         f"[bold]New findings:[/bold] {summary['new_findings']}",
         title="[bold]Finding Baseline[/bold]",
+        expand=False,
+    ))
+    console.print()
+
+
+def _print_changed_lines_summary(summary):
+    if summary is None:
+        return
+    console.print(Panel(
+        f"[bold]Files:[/bold] {summary['file_count']}\n"
+        f"[bold]Canonical ranges:[/bold] {summary['range_count']}\n"
+        f"[bold]Input findings:[/bold] {summary['input_findings']}\n"
+        f"[bold]Selected findings:[/bold] {summary['selected_findings']}",
+        title="[bold]Changed-Line Selection[/bold]",
         expand=False,
     ))
     console.print()

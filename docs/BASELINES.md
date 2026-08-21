@@ -37,3 +37,15 @@ A finding fingerprint includes its rule ID, hidden project-relative identity pat
 - Unknown schema versions are rejected.
 - Fingerprints must be lowercase SHA-256 hexadecimal strings.
 - `--new-findings-only` requires an existing `--baseline`.
+
+## Changed-line intersection
+
+`--changed-lines-manifest` is an independent final selector. The analyzer first
+compares every current finding with the baseline, applies
+`--new-findings-only`, and then keeps only findings overlapping changed lines.
+`--fail-on` evaluates that final intersection.
+
+Baseline summaries remain global. `--write-baseline` always fingerprints all
+current findings before changed-line selection, so combining the options cannot
+silently create a partial baseline. See [`CHANGED_LINES.md`](CHANGED_LINES.md)
+for the manifest and overlap contract.

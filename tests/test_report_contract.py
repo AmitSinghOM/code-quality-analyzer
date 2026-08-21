@@ -8,7 +8,7 @@ from click.testing import CliRunner
 from analyzer.__main__ import main
 
 FIXTURES = Path(__file__).parent / "fixtures"
-SCHEMA = Path(__file__).parents[1] / "docs" / "report-schema-1.8.0.json"
+SCHEMA = Path(__file__).parents[1] / "docs" / "report-schema-1.9.0.json"
 
 
 def test_json_authority_contract_matches_schema_and_golden(project):
