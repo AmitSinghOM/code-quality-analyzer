@@ -304,8 +304,13 @@ def test_standard_reporters_are_registered_and_negotiated():
     assert registry.negotiate_reporter("json").render(report) == (
         b'{\n  "status": "ok"\n}'
     )
+    assert registry.negotiate_reporter("sarif").format_name == "sarif"
+    assert registry.negotiate_reporter(
+        "sarif", "1.0.0"
+    ).capability_version == "1.0.0"
     assert registry.negotiate_reporter("text").render(report) == b"ready\n"
     assert registry.capabilities()["reporters"] == [
         {"format_name": "json", "capability_version": "1.0.0"},
+        {"format_name": "sarif", "capability_version": "1.0.0"},
         {"format_name": "text", "capability_version": "1.0.0"},
     ]

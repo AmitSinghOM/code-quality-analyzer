@@ -21,11 +21,20 @@ Normal reports can contain:
 - Package metadata and import relationships
 - Experimental complexity estimates and reasoning
 
+SARIF contains only normalized actionable findings plus the built-in rule
+catalog, analysis health, privacy state, effective-configuration fingerprint,
+and baseline-selection metadata. It omits architecture evidence, package
+intelligence, complexity data, source snippets, command lines, environment
+variables, timestamps, fixes, finding fingerprints, and repository metadata.
+Artifact locations are percent-encoded project-relative URIs, never absolute or
+`file://` URIs.
+
 `--redact-paths` removes directory components from report paths, but it is not full anonymization. Basenames, identifiers, messages, package metadata, and architecture signals can still be sensitive.
 
 ## Fully anonymized reports
 
-`--anonymize` is stronger than `--redact-paths` and applies to text and JSON output. It:
+`--anonymize` is stronger than `--redact-paths` and applies to text, JSON,
+and SARIF output. It:
 
 - Replaces the project name with `anonymized-project`
 - Replaces file and function identities with report-local opaque tokens
@@ -42,4 +51,6 @@ Baseline files contain a schema version, algorithm name, and SHA-256 finding fin
 
 ## Local storage
 
-The analyzer writes no cache or report unless the user explicitly redirects output or requests `--write-baseline`. Baselines are written with atomic replacement. Python, package-management, shell-redirection, and CI tools may independently create caches, build artifacts, or logs outside the analyzer's control.
+The analyzer writes no cache or report unless the user explicitly redirects
+text, JSON, or SARIF output or requests `--write-baseline`. SARIF rendering is
+local and performs no network access. Baselines are written with atomic replacement. Python, package-management, shell-redirection, and CI tools may independently create caches, build artifacts, or logs outside the analyzer's control.

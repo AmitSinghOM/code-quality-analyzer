@@ -40,7 +40,8 @@ code-quality-analyzer/
 │   ├── protocols.py     # Source, parse, rule, provider, and reporter contracts
 │   ├── registry.py      # Versioned plugin and capability negotiation registry
 │   ├── plugins.py       # Built-in plugin assembly
-│   ├── reporters.py     # Registered text/JSON report renderers
+│   ├── reporters.py     # Registered text, JSON, and SARIF renderers
+│   ├── rule_metadata.py # Stable built-in rule catalog for standard reports
 │   ├── languages/       # Built-in language adapters and rule packs
 │   ├── scanner.py       # Language-neutral orchestration through plugins
 │   ├── complexity.py    # Time/space complexity analyzer
@@ -84,6 +85,9 @@ code-quality-analyzer /path/to/project -v
 # Output as JSON
 code-quality-analyzer /path/to/project -f json
 
+# Output normalized findings as SARIF 2.1.0
+code-quality-analyzer /path/to/project -f sarif > results.sarif
+
 # Include time/space complexity analysis
 code-quality-analyzer /path/to/project -c
 ```
@@ -124,6 +128,7 @@ Use `--anonymize` when a report may leave the trusted development environment:
 
 ```bash
 code-quality-analyzer /path/to/project --anonymize -f json
+code-quality-analyzer /path/to/project --anonymize -f sarif > results.sarif
 code-quality-analyzer /path/to/project --anonymize --offline -v -c
 ```
 
@@ -147,7 +152,7 @@ remaining disclosure considerations.
 | Option | Default | Purpose |
 |--------|---------|---------|
 | `-v, --verbose` | off | Include matched files and evidence; JSON omits evidence unless enabled |
-| `-f, --output-format` | `text` | `text` or versioned `json` |
+| `-f, --output-format` | `text` | `text`, versioned `json`, or SARIF 2.1.0 |
 | `-c, --complexity` | off | Add experimental time/space complexity estimates |
 | `--max-file-size` | 2 MB | Skip files larger than this positive byte count |
 | `--max-files` | 20000 | Stop after this positive number of registered source files |
@@ -169,7 +174,10 @@ identities, so changing either presentation option does not change CI identity.
 the `format` builtin. JSON reports include schema, analyzer, and ruleset versions
 plus explicit privacy state, scoring-policy version, effective-configuration
 fingerprint, and analysis authority so consumers can identify the contract,
-protections, and completeness that produced a result. `architecture_signal_score` is the primary score field;
+protections, and completeness that produced a result. SARIF emits the same
+baseline-filtered findings for standard code-scanning consumers without
+changing JSON schema `1.8.0`; see [`docs/SARIF.md`](docs/SARIF.md).
+`architecture_signal_score` is the primary score field;
 `rating` is a transitional equal-valued 2.x compatibility alias.
 
 ## Exit Codes
@@ -212,8 +220,13 @@ code-quality-analyzer . \
   --baseline .code-quality-baseline.json \
   --new-findings-only \
   --fail-on warning \
-  --strict
+  --strict \
+  -f sarif > code-quality-results.sarif
 ```
+
+The SARIF artifact is emitted before the gate exit code and contains the same
+selected findings used by `--fail-on`. See [`docs/SARIF.md`](docs/SARIF.md) for
+the deterministic ordering, URI, metadata, and privacy contract.
 
 Baseline files contain only schema metadata and SHA-256 fingerprints. They do
 not contain source paths, messages, identifiers, snippets, or report evidence.

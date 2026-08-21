@@ -1,5 +1,11 @@
 # Rule reference
 
+The built-in SARIF catalog mirrors the rule IDs, titles, categories, default
+severities, confidence, and remediation documented here. Catalog completeness
+is tested so a built-in finding cannot be rendered without stable metadata.
+Runtime severity policy may override a finding's level without changing the
+documented default.
+
 ## PY-COR-001: Mutable default argument
 
 **Category:** Correctness  

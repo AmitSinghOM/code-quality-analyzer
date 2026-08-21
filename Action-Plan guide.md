@@ -368,7 +368,7 @@ Next work includes dependency declaration comparison, broader package-data and b
 
 ### Phase 4 — Developer and CI workflows
 
-#### Phase 4 progress (August 20, 2026)
+#### Phase 4 progress (August 21, 2026)
 
 **Status:** In progress
 
@@ -383,7 +383,19 @@ Completed in the first Phase 4 vertical slice:
 - Kept fingerprints stable when report paths are redacted.
 - Added privacy, comparison, invalid-input, and end-to-end CI-gate tests.
 
-Next work includes SARIF, changed-line awareness, pre-commit integration, content-hash caching, and richer category/rule-specific policies.
+Completed in the SARIF vertical slice:
+
+- Added deterministic SARIF 2.1.0 output through the versioned reporter registry.
+- Added one stable run for empty and nonempty result sets with lexical rule descriptors and valid rule indexes.
+- Added a complete immutable catalog for all 18 built-in Python and Go rules.
+- Mapped effective severity, one-based regions, category, confidence, and remediation without source snippets.
+- Added percent-encoded project-relative artifact URIs with fail-closed path validation.
+- Applied baseline/new-only selection before SARIF projection and preserved existing gate exit semantics.
+- Added basename redaction and deterministic opaque anonymization with no absolute paths or source-derived text.
+- Kept JSON report schema 1.8.0 and ruleset 2.12.0 unchanged.
+- Added unit, CLI, mixed-language, determinism, privacy, offline, baseline, and adversarial path tests.
+
+Next work includes changed-line awareness, pre-commit integration, content-hash caching, and richer category/rule-specific policies.
 
 **Objective:** Make adoption practical without forcing teams to fix all historical findings immediately.
 
@@ -403,11 +415,11 @@ Next work includes SARIF, changed-line awareness, pre-commit integration, conten
 **Target workflow:**
 
 ```bash
-code-quality-analyzer check . \
+code-quality-analyzer . \
   --baseline .code-quality-baseline.json \
   --new-findings-only \
   --fail-on error \
-  --format sarif
+  --output-format sarif
 ```
 
 **Exit criteria:**

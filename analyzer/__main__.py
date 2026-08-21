@@ -29,7 +29,7 @@ from .offline import OfflineViolationError, enforce_offline
 from .patterns import DSA_PATTERNS, SYSTEM_DESIGN_PATTERNS
 from .plugins import create_default_registry
 from .rater import QualityRater, coverage_gap_ratio
-from .reporters import AnalysisReport
+from .reporters import AnalysisReport, SarifRun
 from .scanner import CodeScanner
 
 console = Console()
@@ -318,6 +318,17 @@ def _run_analysis(
             offline,
             redact_paths,
         ))
+    elif output_format == "sarif":
+        report = AnalysisReport(sarif=_build_sarif_run(
+            scanner,
+            analysis_health,
+            reported_findings,
+            baseline_summary,
+            anonymizer,
+            offline,
+            redact_paths,
+            new_findings_only,
+        ))
     else:
         with console.capture() as capture:
             _emit_text(
@@ -452,6 +463,44 @@ def _privacy_payload(
         "paths_redacted": bool(redact_paths or anonymizer is not None),
         "offline_enforced": offline,
     }
+
+
+def _build_sarif_run(
+    scanner,
+    analysis_health,
+    reported_findings,
+    baseline_summary,
+    anonymizer,
+    offline,
+    redact_paths,
+    new_findings_only,
+) -> SarifRun:
+    if anonymizer is None:
+        findings = tuple(
+            finding.as_dict() for finding in reported_findings
+        )
+    else:
+        identities = sorted({
+            finding.location.identity_path or finding.location.path
+            for finding in reported_findings
+        })
+        for identity in identities:
+            anonymizer.file(identity)
+        findings = tuple(
+            anonymizer.finding(finding) for finding in reported_findings
+        )
+
+    baseline_selection = {"newFindingsOnly": new_findings_only}
+    if baseline_summary is not None:
+        baseline_selection.update(baseline_summary)
+    return SarifRun(
+        analyzer_version=__version__,
+        configuration_fingerprint=scanner.configuration.fingerprint,
+        analysis_health=analysis_health,
+        privacy=_privacy_payload(anonymizer, offline, redact_paths),
+        baseline_selection=baseline_selection,
+        findings=findings,
+    )
 
 
 def _project_analysis_payload(scanner, anonymized: bool) -> dict:
