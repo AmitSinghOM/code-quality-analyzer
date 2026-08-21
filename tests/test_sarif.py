@@ -38,7 +38,7 @@ def _finding(
 
 def _run(*findings):
     return SarifRun(
-        analyzer_version="2.24.0",
+        analyzer_version="2.25.0",
         configuration_fingerprint="a" * 64,
         analysis_health={"complete": True, "authoritative": True},
         privacy={
@@ -66,7 +66,7 @@ def test_empty_sarif_run_has_one_deterministic_run():
     assert run["tool"]["driver"] == {
         "name": "Code Quality Analyzer",
         "rules": [],
-        "semanticVersion": "2.24.0",
+        "semanticVersion": "2.25.0",
     }
     assert run["results"] == []
     assert run["properties"]["configurationFingerprint"] == "a" * 64

@@ -48,7 +48,8 @@ code-quality-analyzer/
 │   ├── complexity.py    # Time/space complexity analyzer
 │   └── rater.py         # Rating calculator (1-10)
 ├── tests/               # Regression tests
-├── docs/                # Rule, baseline, and privacy guidance
+├── docs/                # Rule, workflow, and privacy guidance
+├── .pre-commit-hooks.yaml # Published local-analysis hook contract
 ├── LICENSE
 ├── SECURITY.md
 ├── CHANGELOG.md
@@ -73,6 +74,29 @@ That installs a `code-quality-analyzer` command. Running as a module works too:
 .venv/bin/pip install -r requirements.txt
 .venv/bin/python -m analyzer /path/to/project
 ```
+
+## Pre-commit
+
+Pin a released tag in `.pre-commit-config.yaml`:
+
+```yaml
+repos:
+  - repo: https://github.com/AmitSinghOM/code-quality-analyzer
+    rev: v2.25.0
+    hooks:
+      - id: code-quality-analyzer
+```
+
+The built-in hook runs one serial
+full-repository analysis as `code-quality-analyzer . --offline`; it does not
+pass staged filenames because the CLI accepts a directory. Findings are
+advisory by default. Add `args: [--fail-on, error]`, or baseline/new-only
+arguments, when the project is ready to gate commits.
+
+The analyzer invocation remains local-only. Pre-commit itself may need network
+access once to clone the pinned release and create its environment. See
+[`docs/PRE_COMMIT.md`](docs/PRE_COMMIT.md) for trigger paths, strict and baseline
+profiles, and the installation privacy boundary.
 
 ## Usage
 

@@ -56,6 +56,15 @@ Anonymized reports intentionally retain rule IDs, finding categories and severit
 
 Baseline files contain a schema version, algorithm name, and SHA-256 finding fingerprints. They do not contain source paths, messages, snippets, identifiers, or evidence in plain text. Fingerprints are deterministic and are intended for regression comparison, not cryptographic secrecy against an attacker who already knows likely finding inputs. Anonymization and path redaction do not change fingerprint identity.
 
+## Pre-commit execution
+
+The published hook fixes the analyzer entry to
+`code-quality-analyzer . --offline`, processes the repository locally, and
+sends no telemetry. Pre-commit
+is a separate tool and may access the network during first installation to
+clone the pinned hook repository and install declared dependencies. Its cached
+environment and lifecycle are outside the analyzer process and threat boundary.
+
 ## Local storage
 
 The analyzer writes no cache or report unless the user explicitly redirects

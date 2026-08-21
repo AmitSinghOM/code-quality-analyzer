@@ -1,5 +1,6 @@
 include LICENSE
 include SECURITY.md
 include CHANGELOG.md
+include .pre-commit-hooks.yaml
 recursive-include docs *.md *.json
 recursive-include tests/fixtures *.json *.txt

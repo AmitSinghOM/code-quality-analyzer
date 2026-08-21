@@ -1,0 +1,9 @@
+- id: code-quality-analyzer
+  name: code-quality-analyzer
+  description: Run privacy-first Python and Go code-quality analysis locally.
+  entry: code-quality-analyzer . --offline
+  language: python
+  types: [file]
+  files: '(^|/)[^/]+\.(py|go)$|^(pyproject\.toml|go\.mod|\.code-quality\.toml|\.gitignore)$'
+  pass_filenames: false
+  require_serial: true

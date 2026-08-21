@@ -405,7 +405,16 @@ Completed in the changed-line awareness vertical slice:
 - Advanced analyzer version to 2.24.0 and JSON report schema to 1.9.0 while retaining ruleset 2.12.0.
 - Added canonicalization, overlap, path-adversarial, privacy, baseline, gate, and deterministic SARIF tests.
 
-Next work includes pre-commit integration, content-hash caching, and richer category/rule-specific policies.
+Completed in the pre-commit integration vertical slice:
+
+- Published a first-class `code-quality-analyzer` hook pinned through normal pre-commit release tags.
+- Fixed the hook entry to one serial full-repository `--offline` scan with no staged filenames.
+- Added source and root policy trigger coverage without running on documentation-only commits.
+- Kept findings advisory by default while documenting severity, strict, and baseline regression profiles.
+- Included hook metadata in source distributions and distribution CI verification.
+- Documented the analyzer runtime boundary separately from pre-commit installation and environment caching.
+
+Next work includes content-hash caching and richer category/rule-specific policies.
 
 **Objective:** Make adoption practical without forcing teams to fix all historical findings immediately.
 
