@@ -1,0 +1,80 @@
+{
+  "title": "Code Quality Analyzer report 1.10.0",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "analyzer_version",
+    "ruleset_version",
+    "scoring_policy_version",
+    "configuration_fingerprint",
+    "project",
+    "privacy",
+    "architecture_signal_score",
+    "rating",
+    "analysis_health",
+    "scan_health",
+    "findings"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.10.0"},
+    "analyzer_version": {"type": "string"},
+    "ruleset_version": {"type": "string"},
+    "scoring_policy_version": {"type": "string"},
+    "configuration_fingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "project": {"type": "string"},
+    "architecture_signal_score": {"type": "number", "minimum": 1, "maximum": 10},
+    "rating": {"type": "number", "minimum": 1, "maximum": 10},
+    "privacy": {
+      "type": "object",
+      "required": [
+        "anonymized",
+        "paths_redacted",
+        "offline_enforced",
+        "cache_enabled"
+      ],
+      "properties": {
+        "anonymized": {"type": "boolean"},
+        "paths_redacted": {"type": "boolean"},
+        "offline_enforced": {"type": "boolean"},
+        "cache_enabled": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "analysis_health": {
+      "type": "object",
+      "required": [
+        "complete",
+        "authoritative",
+        "source_candidates",
+        "files_read",
+        "files_successfully_analyzed",
+        "completeness_ratio",
+        "reasons"
+      ]
+    },
+    "scan_health": {"type": "object"},
+    "findings": {"type": "array"},
+    "changed_lines": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "file_count",
+        "range_count",
+        "input_findings",
+        "selected_findings"
+      ],
+      "properties": {
+        "schema_version": {"const": "1.0.0"},
+        "file_count": {"type": "integer", "minimum": 0},
+        "range_count": {"type": "integer", "minimum": 0},
+        "input_findings": {"type": "integer", "minimum": 0},
+        "selected_findings": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
+}

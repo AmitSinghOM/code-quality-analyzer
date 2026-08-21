@@ -47,6 +47,24 @@ class LanguageAdapter(Protocol):
 
 
 @runtime_checkable
+class ParsedArtifactCodec(Protocol):
+    """Optional safe cache codec implemented by a language adapter."""
+
+    language_id: str
+    adapter_version: str
+    cache_codec_version: str
+    cache_runtime_version: str
+
+    def serialize_parsed(self, parsed: ParsedFile) -> Mapping[str, object]: ...
+
+    def deserialize_parsed(
+        self,
+        source: SourceFile,
+        payload: Mapping[str, object],
+    ) -> ParsedFile: ...
+
+
+@runtime_checkable
 class RulePack(Protocol):
     """Evaluate one adapter artifact and emit normalized findings."""
 

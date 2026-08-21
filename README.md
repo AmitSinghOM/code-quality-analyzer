@@ -30,6 +30,7 @@ code-quality-analyzer/
 │   ├── __init__.py
 │   ├── __main__.py      # CLI entry point
 │   ├── baseline.py      # Hashed finding baselines and comparison
+│   ├── cache.py         # Bounded local parse-artifact cache
 │   ├── changed_lines.py # Bounded changed-line finding selection
 │   ├── config.py        # Bounded configuration, path, and rule policy
 │   ├── discovery.py     # Safe file discovery (limits, symlink guard)
@@ -151,6 +152,29 @@ a privacy-safe `configuration_fingerprint`.
 See [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) for glob semantics,
 validation limits, rule policy, suppressions, and compatibility boundaries.
 
+## Incremental parse cache
+
+Caching is explicit so analysis never writes source-derived state unless a
+location is selected:
+
+```bash
+code-quality-analyzer . \
+  --cache-dir ~/.cache/code-quality-analyzer/my-project \
+  --offline
+```
+
+The bounded JSON cache stores only Python/Go parse artifacts. Rules, package
+providers, policy, scoring, baselines, changed-line selection, reports, and
+gates rerun on every analysis. Content, project-relative path, adapter, codec,
+plugin API, and runtime identities participate in cache keys, so changed or
+renamed files miss safely. Corrupt, stale, oversized, or incompatible entries
+also become misses; cache state never reduces analysis authority.
+
+Cache artifacts contain source-derived data and must be protected like source.
+Reports expose only whether caching was enabled, never its path, keys, digests,
+hit counts, or errors. See [`docs/CACHING.md`](docs/CACHING.md) for invalidation,
+security bounds, warm/cold determinism, and lifecycle guidance.
+
 ## Privacy and offline options
 
 Use `--anonymize` when a report may leave the trusted development environment:
@@ -188,6 +212,7 @@ remaining disclosure considerations.
 | `--redact-paths` | off | Report file names only, no directory structure |
 | `--anonymize` | off | Remove project paths, metadata, and source identifiers |
 | `--offline` | off | Deny socket operations while analysis runs |
+| `--cache-dir` | none | Reuse bounded local parse artifacts from this directory |
 | `--fail-under` | none | Exit non-zero when the compatibility architecture signal score is below 1–10 |
 | `--fail-on` | none | Exit 4 for reported findings at `warning` or `error` severity |
 | `--baseline` | none | Compare findings with an existing hashed baseline |
@@ -207,9 +232,10 @@ fingerprint, and analysis authority so consumers can identify the contract,
 protections, and completeness that produced a result. SARIF emits the same
 baseline- and changed-line-filtered findings for standard code-scanning
 consumers. Changed-line manifests are supplied externally; the analyzer never
-invokes Git or a shell to derive them. JSON schema `1.9.0` records aggregate
-selection metadata; see [`docs/CHANGED_LINES.md`](docs/CHANGED_LINES.md) and
-[`docs/SARIF.md`](docs/SARIF.md).
+invokes Git or a shell to derive them. JSON schema `1.10.0` records aggregate
+selection metadata and whether the local parse cache was enabled; see
+[`docs/CHANGED_LINES.md`](docs/CHANGED_LINES.md),
+[`docs/CACHING.md`](docs/CACHING.md), and [`docs/SARIF.md`](docs/SARIF.md).
 `architecture_signal_score` is the primary score field;
 `rating` is a transitional equal-valued 2.x compatibility alias.
 
@@ -234,7 +260,7 @@ No source candidates exit with code 2. If candidates exist but none can be
 successfully parsed, analysis exits with code 3 even without `--strict`.
 Partial non-strict analysis may exit successfully for inspection, but it is
 always marked non-authoritative. See the versioned schema in
-[`docs/report-schema-1.9.0.json`](docs/report-schema-1.9.0.json) and the decision
+[`docs/report-schema-1.10.0.json`](docs/report-schema-1.10.0.json) and the decision
 record in
 [`docs/adr/001-analysis-authority-and-score-migration.md`](docs/adr/001-analysis-authority-and-score-migration.md).
 

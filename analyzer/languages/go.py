@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -19,7 +19,10 @@ from ..protocols import (
 from ..registry import PluginRegistry
 
 GO_ADAPTER_VERSION = "1.0.0"
+GO_CACHE_CODEC_VERSION = "1.0.0"
 GO_RULE_PACK_ID = "go-core"
+_MAX_CACHED_GO_STRING = 4 * 1024 * 1024
+_MAX_CACHED_GO_IMPORTS = 100_000
 
 _PACKAGE = re.compile(r"(?m)^\s*package\s+([A-Za-z_]\w*)\s*$")
 _SINGLE_IMPORT = re.compile(
@@ -122,6 +125,8 @@ class GoLanguageAdapter:
     adapter_version = GO_ADAPTER_VERSION
     plugin_api_version = PLUGIN_API_VERSION
     extensions = (".go",)
+    cache_codec_version = GO_CACHE_CODEC_VERSION
+    cache_runtime_version = "portable"
 
     def parse(self, source: SourceFile) -> ParsedFile:
         code_text, lexical_complete = _strip_comments_and_strings(
@@ -152,6 +157,60 @@ class GoLanguageAdapter:
                 and facts is not None
             ),
         )
+
+    def serialize_parsed(self, parsed: ParsedFile) -> Mapping[str, object]:
+        facts = parsed.facts
+        if facts is not None and not isinstance(facts, GoFacts):
+            raise TypeError("Go cache codec requires GoFacts")
+        return {
+            "line_count": parsed.line_count,
+            "complete": parsed.complete,
+            "facts": None if facts is None else {
+                "package_name": facts.package_name,
+                "imports": [
+                    {
+                        "path": imported.path,
+                        "local_name": imported.local_name,
+                        "kind": imported.kind,
+                    }
+                    for imported in facts.imports
+                ],
+                "code_text": facts.code_text,
+            },
+        }
+
+    def deserialize_parsed(
+        self,
+        source: SourceFile,
+        payload: Mapping[str, object],
+    ) -> ParsedFile:
+        data = _go_exact_mapping(
+            payload,
+            {"line_count", "complete", "facts"},
+        )
+        line_count = _go_nonnegative_int(data["line_count"])
+        complete = _go_boolean(data["complete"])
+        encoded_facts = data["facts"]
+        facts = None
+        if encoded_facts is not None:
+            fact_data = _go_exact_mapping(
+                encoded_facts,
+                {"package_name", "imports", "code_text"},
+            )
+            encoded_imports = fact_data["imports"]
+            if (
+                not isinstance(encoded_imports, list)
+                or len(encoded_imports) > _MAX_CACHED_GO_IMPORTS
+            ):
+                raise ValueError("Cached Go imports are invalid")
+            facts = GoFacts(
+                package_name=_go_string(fact_data["package_name"]),
+                imports=tuple(
+                    _decode_go_import(item) for item in encoded_imports
+                ),
+                code_text=_go_string(fact_data["code_text"]),
+            )
+        return ParsedFile(source, facts, facts, line_count, complete)
 
 
 class GoIgnoredErrorRule:
@@ -293,6 +352,45 @@ class GoRulePack:
                 finding.rule_id,
             ),
         ))
+
+
+def _go_exact_mapping(value: object, keys: set[str]) -> dict:
+    if not isinstance(value, dict) or set(value) != keys:
+        raise ValueError("Cached Go object has unexpected fields")
+    return value
+
+
+def _go_string(value: object) -> str:
+    if not isinstance(value, str) or len(value) > _MAX_CACHED_GO_STRING:
+        raise ValueError("Cached Go string is invalid")
+    return value
+
+
+def _go_nonnegative_int(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError("Cached Go integer is invalid")
+    return value
+
+
+def _go_boolean(value: object) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError("Cached Go boolean is invalid")
+    return value
+
+
+def _decode_go_import(value: object) -> GoImport:
+    data = _go_exact_mapping(value, {"path", "local_name", "kind"})
+    local_name = data["local_name"]
+    if local_name is not None:
+        local_name = _go_string(local_name)
+    kind = _go_string(data["kind"])
+    if kind not in {"default", "alias", "blank", "dot"}:
+        raise ValueError("Cached Go import kind is invalid")
+    return GoImport(
+        path=_go_string(data["path"]),
+        local_name=local_name,
+        kind=kind,
+    )
 
 
 def register_go_plugins(registry: PluginRegistry) -> PluginRegistry:

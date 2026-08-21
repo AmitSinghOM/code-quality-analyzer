@@ -24,6 +24,7 @@ from .baseline import (
     write_baseline,
 )
 from .changed_lines import ChangedLinesError, load_changed_lines
+from .cache import CacheError, CacheStore
 from .config import ConfigError, load_config
 from .discovery import DEFAULT_MAX_FILE_SIZE, DEFAULT_MAX_FILES
 from .offline import OfflineViolationError, enforce_offline
@@ -103,6 +104,12 @@ EXIT_FINDINGS = 4
     help="Deny socket operations while analysis is running",
 )
 @click.option(
+    "--cache-dir",
+    type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
+    default=None,
+    help="Cache bounded parse artifacts in this local directory",
+)
+@click.option(
     "--fail-under",
     type=click.FloatRange(min=1.0, max=10.0),
     default=None,
@@ -163,6 +170,7 @@ def main(
     redact_paths: bool,
     anonymize: bool,
     offline: bool,
+    cache_dir: Path | None,
     fail_under: float | None,
     fail_on: str | None,
     baseline_path: Path | None,
@@ -187,6 +195,7 @@ def main(
                 redact_paths=redact_paths,
                 anonymize=anonymize,
                 offline=offline,
+                cache_dir=cache_dir,
                 fail_under=fail_under,
                 fail_on=fail_on,
                 baseline_path=baseline_path,
@@ -212,6 +221,7 @@ def _run_analysis(
     redact_paths: bool,
     anonymize: bool,
     offline: bool,
+    cache_dir: Path | None,
     fail_under: float | None,
     fail_on: str | None,
     baseline_path: Path | None,
@@ -257,6 +267,13 @@ def _run_analysis(
             f"Unknown output format {output_format!r}; choose from {available}"
         ) from error
 
+    cache_store = None
+    if cache_dir is not None:
+        try:
+            cache_store = CacheStore(cache_dir)
+        except CacheError as error:
+            raise click.ClickException(str(error)) from error
+
     scanner = CodeScanner(
         root,
         max_file_size=max_file_size,
@@ -264,6 +281,7 @@ def _run_analysis(
         redact_paths=internal_redaction,
         registry=registry,
         configuration=configuration,
+        cache_store=cache_store,
     )
     dsa_found, design_found = scanner.scan()
     scan_health = scanner.scan_health()
@@ -493,11 +511,13 @@ def _privacy_payload(
     anonymizer: ReportAnonymizer | None,
     offline: bool,
     redact_paths: bool,
+    cache_enabled: bool,
 ) -> dict:
     return {
         "anonymized": anonymizer is not None,
         "paths_redacted": bool(redact_paths or anonymizer is not None),
         "offline_enforced": offline,
+        "cache_enabled": cache_enabled,
     }
 
 
@@ -534,7 +554,12 @@ def _build_sarif_run(
         analyzer_version=__version__,
         configuration_fingerprint=scanner.configuration.fingerprint,
         analysis_health=analysis_health,
-        privacy=_privacy_payload(anonymizer, offline, redact_paths),
+        privacy=_privacy_payload(
+            anonymizer,
+            offline,
+            redact_paths,
+            scanner.cache_enabled,
+        ),
         baseline_selection=baseline_selection,
         changed_line_selection=changed_lines_summary,
         findings=findings,
@@ -599,7 +624,12 @@ def _build_json_report(
         "configuration_fingerprint": scanner.configuration.fingerprint,
         "language_adapters": scanner.registry.capabilities()["languages"],
         "project": project_label,
-        "privacy": _privacy_payload(anonymizer, offline, redact_paths),
+        "privacy": _privacy_payload(
+            anonymizer,
+            offline,
+            redact_paths,
+            scanner.cache_enabled,
+        ),
         "architecture_signal_score": rating,
         "architecture_signal_label": rater.get_rating_label(rating),
         "rating": rating,
@@ -664,12 +694,18 @@ def _emit_text(
     redact_paths,
 ):
     console.print(f"\n[bold blue]Analyzing:[/bold blue] {project_label}\n")
-    privacy = _privacy_payload(anonymizer, offline, redact_paths)
+    privacy = _privacy_payload(
+        anonymizer,
+        offline,
+        redact_paths,
+        scanner.cache_enabled,
+    )
     console.print(
         "[dim]Privacy: "
         f"anonymized={'yes' if privacy['anonymized'] else 'no'} | "
         f"paths redacted={'yes' if privacy['paths_redacted'] else 'no'} | "
-        f"offline enforced={'yes' if privacy['offline_enforced'] else 'no'}"
+        f"offline enforced={'yes' if privacy['offline_enforced'] else 'no'} | "
+        f"cache enabled={'yes' if privacy['cache_enabled'] else 'no'}"
         "[/dim]\n"
     )
 

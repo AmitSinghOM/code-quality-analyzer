@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from .cache import CacheStore
 from .config import AnalyzerConfig
 
 from .discovery import (
@@ -46,6 +47,7 @@ class CodeScanner:
         redact_paths: bool = False,
         registry: PluginRegistry | None = None,
         configuration: AnalyzerConfig | None = None,
+        cache_store: CacheStore | None = None,
     ):
         self.project_path = Path(project_path).resolve()
         self.max_file_size = max_file_size
@@ -53,6 +55,8 @@ class CodeScanner:
         self.redact_paths = redact_paths
         self.registry = registry or create_default_registry()
         self.configuration = configuration or AnalyzerConfig()
+        self.cache_store = cache_store
+        self.cache_enabled = cache_store is not None
         self.language_counts: dict[str, int] = {}
 
         self.files_scanned = 0
@@ -179,7 +183,15 @@ class CodeScanner:
             identity_path=internal_path,
             content=content,
         )
-        parsed = adapter.parse(source)
+        parsed = (
+            self.cache_store.load(adapter, source)
+            if self.cache_store is not None
+            else None
+        )
+        if parsed is None:
+            parsed = adapter.parse(source)
+            if self.cache_store is not None:
+                self.cache_store.store(adapter, source, parsed)
         self.files_scanned += 1
         self.total_lines += parsed.line_count
         self.language_counts[adapter.language_id] = (

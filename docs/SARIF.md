@@ -55,6 +55,5 @@ guard used by other formats; rendering itself performs no network access.
 ## Contract versions
 
 The output declares SARIF `2.1.0`. Analyzer semantic versioning identifies the
-producer. Changed-line aggregate metadata advances the independent JSON report
-schema to `1.9.0`; SARIF remains `2.1.0` and the built-in ruleset contract is
-unchanged.
+producer. Cache enablement advances the independent JSON report schema to
+`1.10.0`; SARIF remains `2.1.0` and the built-in ruleset contract is unchanged.

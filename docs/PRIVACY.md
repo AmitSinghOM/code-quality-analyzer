@@ -56,6 +56,20 @@ Anonymized reports intentionally retain rule IDs, finding categories and severit
 
 Baseline files contain a schema version, algorithm name, and SHA-256 finding fingerprints. They do not contain source paths, messages, snippets, identifiers, or evidence in plain text. Fingerprints are deterministic and are intended for regression comparison, not cryptographic secrecy against an attacker who already knows likely finding inputs. Anonymization and path redaction do not change fingerprint identity.
 
+## Parse cache
+
+`--cache-dir` explicitly enables local parse-artifact caching. Cache entries can
+contain source-derived identifiers, imports, literals, and stripped source
+layout, so they must be protected like source code. `--anonymize` applies only
+to reports and does not anonymize cache contents.
+
+The cache uses bounded typed JSON, a private fixed namespace, restrictive
+permissions where supported, and atomic replacement. It never uses executable
+deserialization or imports project classes. Unsafe, corrupt, stale, oversized,
+or incompatible entries become misses. Reports expose only the aggregate
+`cache_enabled` boolean; cache paths, keys, source digests, hit counts, entry
+errors, and contents are omitted. See [`CACHING.md`](CACHING.md).
+
 ## Pre-commit execution
 
 The published hook fixes the analyzer entry to
@@ -67,6 +81,10 @@ environment and lifecycle are outside the analyzer process and threat boundary.
 
 ## Local storage
 
-The analyzer writes no cache or report unless the user explicitly redirects
-text, JSON, or SARIF output or requests `--write-baseline`. SARIF rendering is
-local and performs no network access. Baselines are written with atomic replacement. Python, package-management, shell-redirection, and CI tools may independently create caches, build artifacts, or logs outside the analyzer's control.
+The analyzer writes no report unless the user explicitly redirects text, JSON,
+or SARIF output or requests `--write-baseline`. It writes bounded parse
+artifacts only when `--cache-dir` explicitly selects a local directory. SARIF
+rendering is local and performs no network access. Baselines and cache entries
+are written with atomic replacement. Python, package-management,
+shell-redirection, and CI tools may independently create caches, build
+artifacts, or logs outside the analyzer's control.

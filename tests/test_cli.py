@@ -41,8 +41,8 @@ def test_json_output_is_valid_and_includes_health(project):
     payload = json.loads(result.output)
 
     assert result.exit_code == EXIT_OK
-    assert payload["schema_version"] == "1.9.0"
-    assert payload["analyzer_version"] == "2.25.0"
+    assert payload["schema_version"] == "1.10.0"
+    assert payload["analyzer_version"] == "2.26.0"
     assert payload["ruleset_version"] == "2.12.0"
     assert payload["scoring_policy_version"] == "1.0.0"
     assert len(payload["configuration_fingerprint"]) == 64
@@ -411,6 +411,7 @@ def test_anonymized_json_removes_source_identifiers(project):
         "anonymized": True,
         "paths_redacted": True,
         "offline_enforced": True,
+        "cache_enabled": False,
     }
     assert payload["scan_health"]["skipped_examples"]["too_large"] == [
         "file-0001"

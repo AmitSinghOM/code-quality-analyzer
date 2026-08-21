@@ -33,10 +33,11 @@ All notable changes are documented in this file. Versions follow semantic versio
 - Deterministic, privacy-bounded SARIF 2.1.0 output with a stable built-in rule catalog
 - Bounded changed-line manifests with aggregate-only text, JSON, and SARIF selection metadata
 - First-class serial offline pre-commit hook with advisory and gated adoption profiles
+- Explicit deterministic content-hash caching for bounded Python and Go parse artifacts
 
 ### Changed
 
-- Analyzer version advanced to 2.25.0; report schema remains 1.9.0 and ruleset remains 2.12.0
+- Analyzer version advanced to 2.26.0; report schema advanced to 1.10.0 and ruleset remains 2.12.0
 - Reports now qualify authority with source-candidate, readable-file, and successful-analysis counts, completeness ratio, and stable reason codes
 - `architecture_signal_score` replaces `rating` as the primary score name; `rating` remains a documented equal-valued 2.x compatibility alias
 - Source candidates with zero successful analyses now exit 3 even without strict mode
@@ -62,4 +63,5 @@ All notable changes are documented in this file. Versions follow semantic versio
 - Baselines store bounded SHA-256 fingerprints rather than source identifiers
 - Changed-line manifests are strictly bounded and reports retain aggregate selection metadata only
 - The published pre-commit hook enforces analyzer runtime `--offline` mode
+- Parse cache entries use bounded typed JSON, restrictive permissions, and atomic replacement
 - Skipped-file examples no longer expose absolute paths

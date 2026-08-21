@@ -414,7 +414,23 @@ Completed in the pre-commit integration vertical slice:
 - Included hook metadata in source distributions and distribution CI verification.
 - Documented the analyzer runtime boundary separately from pre-commit installation and environment caching.
 
-Next work includes content-hash caching and richer category/rule-specific policies.
+Completed in the deterministic parse-cache vertical slice:
+
+- Added explicit `--cache-dir` opt-in with no default repository writes.
+- Cached only bounded Python and Go parse artifacts while rerunning rules,
+  project providers, suppressions, policy, scoring, baselines, selection, and
+  gates on every analysis.
+- Added canonical SHA-256 keys over source content, project-relative identity,
+  cache/plugin/adapter/codec versions, and adapter runtime identity.
+- Added typed JSON codecs with structural bounds, no executable
+  deserialization, private namespace permissions, and atomic replacement.
+- Preserved byte-identical warm/cold reports, full analysis-health accounting,
+  strict-mode authority, anonymization, and offline enforcement.
+- Advanced analyzer version to 2.26.0 and JSON report schema to 1.10.0 while
+  retaining ruleset 2.12.0.
+
+Next work includes richer category/rule-specific gates and optional HTML or
+JUnit-style summaries.
 
 **Objective:** Make adoption practical without forcing teams to fix all historical findings immediately.
 
