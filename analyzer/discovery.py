@@ -206,9 +206,9 @@ def _is_within(candidate: Path, root: Path) -> bool:
 
 
 def display_path(path: Path, root: Path, redact: bool = False) -> str:
-    """Path for reports: project-relative when possible, never absolute."""
+    """Return a project-relative POSIX report path, never an absolute one."""
     try:
-        rel = str(Path(path).relative_to(root))
+        rel = Path(path).relative_to(root).as_posix()
     except ValueError:
         rel = Path(path).name
     if redact:

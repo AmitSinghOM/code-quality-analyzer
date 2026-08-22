@@ -114,7 +114,7 @@ def test_strict_flags_unreadable_files(project):
 
 def test_report_paths_are_project_relative_and_never_absolute(project):
     root = project({
-        "ok.py": "\n",
+        "ok.py": "",
         "pkg/too_large.py": RICH_SOURCE,
     })
 
@@ -131,7 +131,7 @@ def test_report_paths_are_project_relative_and_never_absolute(project):
 
 def test_redact_paths_keeps_absolute_paths_out_of_json(project):
     root = project({
-        "ok.py": "\n",
+        "ok.py": "",
         "pkg/too_large.py": RICH_SOURCE,
     })
 

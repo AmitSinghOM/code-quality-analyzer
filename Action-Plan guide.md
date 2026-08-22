@@ -119,9 +119,9 @@ Core
 
 Language adapters
 ├── Python frontend
-├── future Go frontend
-├── future Java frontend
-└── future JavaScript/TypeScript frontend
+├── Go frontend
+├── JavaScript/TypeScript frontend
+└── Java frontend
 
 Rule packs
 ├── common package rules
@@ -586,7 +586,125 @@ The pilot intentionally does not claim full Go parsing or broad ignored-error in
 - Language-specific rules remain isolated from the core.
 - Adding the pilot requires no hard-coded branching in standard reporters or policies.
 
-## 8. Recommended implementation order within each phase
+## 8. Phase 8 — JavaScript/TypeScript language family
+
+**Objective:** Add useful JavaScript and TypeScript analysis through one shared,
+bounded language-family frontend without executing package scripts or requiring a
+Node.js runtime during default analysis.
+
+**Parser strategy:**
+
+- Use maintained Tree-sitter JavaScript and TypeScript/TSX grammars behind an
+  optional, exactly pinned parser dependency group.
+- Treat `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, and `.tsx` as one language family
+  with explicit dialect metadata.
+- Normalize only stable facts—imports, exports, declarations, calls, control
+  flow, comments, and locations—while retaining dialect-specific syntax in
+  adapter-owned models.
+- Report missing or incompatible parser capabilities as explicit analysis-health
+  gaps; never fall back to broad regex parsing that appears authoritative.
+
+**Representative first rules and metrics:**
+
+- Empty or silently discarded `catch` blocks.
+- Directly unreachable statements after unconditional control transfer.
+- Excessive cyclomatic/cognitive complexity and oversized functions.
+- High-confidence CommonJS/ES module boundary mistakes.
+- Missing or invalid literal package entry-point and export targets.
+
+**Passive package intelligence:**
+
+- Parse bounded `package.json`, `tsconfig.json`, and referenced TypeScript
+  configuration files as data only.
+- Detect package/workspace roots, source roots, local module imports, import
+  cycles, package entry points, conditional exports, and TypeScript project
+  references.
+- Compare first-party imports with declared dependencies only when package and
+  workspace ownership can be resolved with high confidence.
+- Never run `npm`, `npx`, package scripts, lifecycle hooks, transpilers, bundlers,
+  or arbitrary JavaScript during default analysis.
+
+**Caching, privacy, and CI:**
+
+- Add a versioned typed-JSON cache codec for normalized parse facts; do not cache
+  executable parser objects or project configuration results.
+- Reuse findings, suppressions, policy, baselines, changed-line selection,
+  anonymization, offline enforcement, SARIF, and exit semantics unchanged.
+- Add mixed Python/Go/JavaScript/TypeScript fixtures and run parser, filesystem,
+  privacy, cold/warm determinism, and distribution checks on Linux, macOS, and
+  Windows.
+
+**Exit criteria:**
+
+- All six extensions produce precise, project-relative POSIX locations through
+  one family adapter with explicit dialect capability metadata.
+- Representative rules have positive, negative, boundary, malformed-source,
+  suppression, privacy, and determinism coverage.
+- Package intelligence explains supported package/workspace graphs without
+  executing project code or contacting the network.
+- Cache-disabled, cold-cache, and warm-cache reports are byte-identical for the
+  same inputs.
+
+## 9. Phase 9 — Java language support
+
+**Objective:** Add bounded Java source and package analysis after the
+JavaScript/TypeScript frontend validates optional parser loading and a third
+language family validates the shared contracts.
+
+**Parser strategy:**
+
+- Use a maintained Tree-sitter Java grammar behind an optional, exactly pinned
+  parser dependency rather than invoking `javac` during default analysis.
+- Discover `.java` files through the existing bounded inventory and normalize
+  packages, imports, type/method declarations, calls, control flow, annotations,
+  and source locations.
+- Preserve Java-specific facts such as records, sealed types, modules, generic
+  signatures, and annotation usage in adapter-owned models.
+- Treat unsupported or malformed syntax as explicit coverage gaps instead of
+  inferring findings from unparsed text.
+
+**Representative first rules and metrics:**
+
+- Empty or silently discarded exception handlers.
+- Caught `InterruptedException` that is neither propagated nor restores the
+  thread interruption state, within conservative control-flow bounds.
+- Locally created closeable resources without bounded try-with-resources or
+  structural cleanup.
+- Excessive cyclomatic/cognitive complexity, nesting, parameters, and method
+  length.
+- High-confidence package cycles and invalid static service/provider targets.
+
+**Passive package intelligence:**
+
+- Build package, type, and local import graphs from source declarations.
+- Recognize conventional Maven and Gradle source layouts plus static
+  `module-info.java` and service-provider metadata.
+- Read bounded `pom.xml`, Gradle settings, and build files only as passive text
+  or supported data subsets; skip dynamic build logic rather than evaluating it.
+- Never run Maven, Gradle, `javac`, annotation processors, build plugins, or
+  dependency downloads during default analysis.
+
+**Caching, privacy, and CI:**
+
+- Add a bounded, versioned Java fact codec keyed by parser/adapter/runtime,
+  project-relative path, and content identity.
+- Reuse the language-neutral report, policy, baseline, changed-line, SARIF,
+  anonymization, offline, and gate contracts without Java-specific CLI branches.
+- Add mixed-language and platform-matrix fixtures, malformed build metadata,
+  filesystem adversarial cases, and cold/warm cache determinism checks.
+
+**Exit criteria:**
+
+- A mixed Python/Go/JavaScript/TypeScript/Java repository produces one coherent
+  report and one deterministic finding order.
+- Java rules remain isolated to the adapter/rule pack and standard reporters
+  require no Java-specific changes.
+- Common source-layout, package-cycle, and supported metadata problems produce
+  actionable findings without invoking the Java toolchain.
+- Unsupported dynamic build behavior is reported as bounded/unsupported and
+  never silently treated as complete analysis.
+
+## 10. Recommended implementation order within each phase
 
 Use vertical slices rather than building all infrastructure first:
 
@@ -598,7 +716,7 @@ Use vertical slices rather than building all infrastructure first:
 6. Measure performance.
 7. Expand the rule/feature set only after the slice is stable.
 
-## 9. Definition of done for every rule
+## 11. Definition of done for every rule
 
 A rule is complete only when it has:
 
@@ -614,7 +732,7 @@ A rule is complete only when it has:
 - Performance consideration
 - Privacy review confirming that evidence does not expose unnecessary source
 
-## 10. Success metrics
+## 12. Success metrics
 
 Track product quality without collecting user telemetry. Measurements should come from local fixtures, opt-in community feedback, and CI:
 
@@ -632,7 +750,7 @@ Track product quality without collecting user telemetry. Measurements should com
 
 Do not add telemetry to collect these metrics automatically from user projects.
 
-## 11. Explicit non-goals
+## 13. Explicit non-goals
 
 - Replacing a compiler, language server, or type checker.
 - Executing untrusted project code during default analysis.
@@ -642,7 +760,7 @@ Do not add telemetry to collect these metrics automatically from user projects.
 - Supporting many languages before the extension contracts are validated.
 - Reimplementing every mature local tool when importing its local output is safer and faster.
 
-## 12. Private local-tool integrations
+## 14. Private local-tool integrations
 
 Privacy does not require rebuilding every analyzer. Optional adapters may consume local outputs from tools such as Ruff, mypy, Bandit, coverage.py, or package builders. Requirements:
 
@@ -653,22 +771,22 @@ Privacy does not require rebuilding every analyzer. Optional adapters may consum
 - Findings are normalized into the same report model.
 - Missing optional tools degrade gracefully.
 
-## 13. Immediate next backlog
+## 15. Immediate next backlog
 
-Start with these tasks in order:
+Start the next language-expansion work in this order:
 
-1. Fix path leakage in project and skipped-file output.
-2. Add privacy regression fixtures for every output mode.
-3. Unify version metadata.
-4. Add CLI range validation.
-5. Version the JSON contract.
-6. Make parse failure and truncation authoritative analysis-health failures.
-7. Include complexity health in strict mode.
-8. Rename the current quality score in output and documentation.
-9. Introduce the normalized `Finding` and `Location` models.
-10. Implement one end-to-end maintainability rule as the architectural proving slice.
+1. Evaluate the bounded Go adapter and package graph against maintained real-world fixtures.
+2. Finalize optional parser dependency loading, capability negotiation, and failure semantics.
+3. Implement one JavaScript rule end-to-end for `.js` and `.mjs` files.
+4. Extend the same family adapter to CommonJS, JSX, TypeScript, and TSX dialects.
+5. Add passive `package.json`, TypeScript configuration, workspace, and export analysis.
+6. Validate cross-platform paths, anonymization, offline behavior, and cache determinism.
+7. Review and revise plugin contracts based on the JavaScript/TypeScript implementation.
+8. Implement one Java rule end-to-end without invoking the Java toolchain.
+9. Add passive Java package, module, Maven-layout, and Gradle-layout intelligence.
+10. Expand each rule pack only after calibration-corpus false-positive review.
 
-## 14. Roadmap dependency summary
+## 16. Roadmap dependency summary
 
 ```text
 Phase 0: Baseline and decisions
@@ -685,11 +803,19 @@ Phase 5: Distribution/privacy hardening
     ↓
 Phase 6: Multi-language foundation
     ↓
-Phase 7: Pilot second language
+Phase 7: Go pilot
+    ↓
+Phase 8: JavaScript/TypeScript language family
+    ↓
+Phase 9: Java language support
 ```
 
-Phases may overlap only when their dependencies are satisfied. In particular, do not begin a second language before the Phase 6 contracts are proven by the Python adapter.
+Phases may overlap only when their dependencies are satisfied. Phase 8 should
+start after the Go pilot's real-world calibration and optional parser contracts
+are stable. Phase 9 should start after Phase 8 proves shared parser loading,
+family dialects, package intelligence, and cache behavior without core or
+reporter branching.
 
-## 15. Reference conclusion
+## 17. Reference conclusion
 
-The analyzer should compete with hosted AI review products through privacy, determinism, reproducibility, source-located evidence, and transparent rules—not through open-ended generated advice. The shortest route to real developer value is to establish trustworthy privacy, replace pattern-presence scoring with actionable findings, understand Python packages, and support baseline-driven CI. Multi-language support should follow only after those capabilities are separated into a stable language-neutral core.
+The analyzer should compete with hosted AI review products through privacy, determinism, reproducibility, source-located evidence, and transparent rules—not through open-ended generated advice. The Go pilot has established the language-neutral path; JavaScript/TypeScript should be the next family because it exercises multiple dialects and package metadata, followed by Java to validate package/module and build-layout analysis. Every frontend must preserve passive default analysis, explicit coverage health, local-only execution, and the same normalized report and CI contracts.
