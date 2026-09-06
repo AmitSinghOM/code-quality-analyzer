@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from analyzer.signals import extract_signals, strip_comments_and_strings
+from cqa_analyzer.signals import extract_signals, strip_comments_and_strings
 
 
 def signals_for(source: str):

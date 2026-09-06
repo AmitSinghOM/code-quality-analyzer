@@ -2,8 +2,8 @@
 
 import ast
 
-from analyzer.python_rules import PythonRuleAnalyzer
-from analyzer.scanner import CodeScanner
+from cqa_analyzer.python_rules import PythonRuleAnalyzer
+from cqa_analyzer.scanner import CodeScanner
 
 
 def findings(source: str):

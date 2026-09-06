@@ -464,6 +464,17 @@ def _health_has_gaps(health: dict | None) -> bool:
     )
 
 
+def _signal_definitions(scanner, category: str, builtins: dict) -> dict:
+    definitions = dict(builtins)
+    for observation in scanner.signal_observations:
+        if observation.category == category:
+            definitions.setdefault(
+                observation.signal_id,
+                {"description": observation.description},
+            )
+    return definitions
+
+
 def _pattern_payload(
     found,
     definitions,
@@ -476,10 +487,14 @@ def _pattern_payload(
 
     payload = {}
     for name, files in found.items():
+        definition = definitions.get(name, {})
         entry = {
             "files": files,
             "file_count": len(files),
-            "description": definitions[name]["description"],
+            "description": definition.get(
+                "description",
+                "Plugin-provided architecture signal.",
+            ),
         }
         if verbose:
             entry["evidence"] = [
@@ -646,14 +661,18 @@ def _build_json_report(
         "findings": finding_payload,
         "dsa_patterns": _pattern_payload(
             dsa_found,
-            DSA_PATTERNS,
+            _signal_definitions(scanner, "architecture.dsa", DSA_PATTERNS),
             scanner.dsa_evidence,
             verbose=verbose,
             anonymizer=anonymizer,
         ),
         "design_patterns": _pattern_payload(
             design_found,
-            SYSTEM_DESIGN_PATTERNS,
+            _signal_definitions(
+                scanner,
+                "architecture.design",
+                SYSTEM_DESIGN_PATTERNS,
+            ),
             scanner.design_evidence,
             verbose=verbose,
             anonymizer=anonymizer,
@@ -779,7 +798,7 @@ def _emit_text(
         "DSA Patterns Detected",
         "cyan",
         dsa_found,
-        DSA_PATTERNS,
+        _signal_definitions(scanner, "architecture.dsa", DSA_PATTERNS),
         scanner.dsa_evidence,
         verbose,
         anonymizer,
@@ -788,7 +807,11 @@ def _emit_text(
         "System Design Patterns Detected",
         "magenta",
         design_found,
-        SYSTEM_DESIGN_PATTERNS,
+        _signal_definitions(
+            scanner,
+            "architecture.design",
+            SYSTEM_DESIGN_PATTERNS,
+        ),
         scanner.design_evidence,
         verbose,
         anonymizer,
@@ -951,7 +974,10 @@ def _print_pattern_table(
     for pattern, files in sorted_patterns:
         table.add_row(
             pattern,
-            definitions[pattern]["description"],
+            definitions.get(pattern, {}).get(
+                "description",
+                "Plugin-provided architecture signal.",
+            ),
             str(len(files)),
         )
         if verbose:

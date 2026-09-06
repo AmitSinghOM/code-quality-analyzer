@@ -2,15 +2,15 @@
 
 from pathlib import Path
 
-from analyzer.languages.go import (
+from cqa_analyzer.languages.go import (
     GoFacts,
     GoImport,
     GoLanguageAdapter,
     GoPackageGraph,
     GoRulePack,
 )
-from analyzer.protocols import SourceFile
-from analyzer.scanner import CodeScanner
+from cqa_analyzer.protocols import SourceFile
+from cqa_analyzer.scanner import CodeScanner
 
 
 def parse_go(source: str):

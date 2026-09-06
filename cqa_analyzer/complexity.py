@@ -120,6 +120,21 @@ BUILTIN_SPACE_COMPLEXITY = {
     'copy': 'O(n)', 'deepcopy': 'O(n)', 'slice': 'O(k)',
 }
 
+
+def _space_order(value: str) -> int:
+    """Return a total order for currently emitted space classes."""
+    if value == "O(1)":
+        return 0
+    if value in {"O(n)", "O(k)"}:
+        return 1
+    if value.startswith("O(n^") and value.endswith(")"):
+        try:
+            return int(value[4:-1])
+        except ValueError:
+            return 1
+    return 1
+
+
 # Type hints that indicate collections
 COLLECTION_TYPE_HINTS = {
     'List': 'list', 'list': 'list',
@@ -137,6 +152,30 @@ COLLECTION_TYPE_HINTS = {
 SCOPE_BOUNDARIES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
 
 LOOP_NODES = (ast.For, ast.AsyncFor, ast.While)
+
+
+def _is_midpoint_expression(node: ast.AST, bounds: set[str]) -> bool:
+    if not (
+        isinstance(node, ast.BinOp)
+        and isinstance(node.op, ast.FloorDiv)
+        and isinstance(node.right, ast.Constant)
+        and node.right.value == 2
+        and isinstance(node.left, ast.BinOp)
+        and isinstance(node.left.op, ast.Add)
+    ):
+        return False
+    names = {
+        item.id for item in ast.walk(node.left) if isinstance(item, ast.Name)
+    }
+    return names == bounds
+
+
+def _assignment_targets(
+    node: ast.Assign | ast.AugAssign,
+) -> tuple[ast.expr, ...]:
+    if isinstance(node, ast.Assign):
+        return tuple(node.targets)
+    return (node.target,)
 
 
 def _contains_return(node: ast.AST) -> bool:
@@ -486,14 +525,43 @@ class SymbolicExecutor(ast.NodeVisitor):
         return LoopInfo('while', '', 'condition', 'n', True)
 
     def _is_binary_search_pattern(self, node: ast.While) -> bool:
-        """Detect binary search pattern in while loop."""
-        # Look for mid = (left + right) // 2 pattern
-        for stmt in node.body:
-            if isinstance(stmt, ast.Assign):
-                if isinstance(stmt.value, ast.BinOp):
-                    if isinstance(stmt.value.op, ast.FloorDiv):
-                        return True
-        return False
+        """Require bounds, a canonical midpoint, and a bound update."""
+        if not (
+            isinstance(node.test, ast.Compare)
+            and isinstance(node.test.left, ast.Name)
+            and len(node.test.comparators) == 1
+            and isinstance(node.test.comparators[0], ast.Name)
+        ):
+            return False
+        bounds = {
+            node.test.left.id,
+            node.test.comparators[0].id,
+        }
+        midpoint_names = set()
+        for statement in node.body:
+            if not (
+                isinstance(statement, ast.Assign)
+                and len(statement.targets) == 1
+                and isinstance(statement.targets[0], ast.Name)
+                and _is_midpoint_expression(statement.value, bounds)
+            ):
+                continue
+            midpoint_names.add(statement.targets[0].id)
+        if not midpoint_names:
+            return False
+        return any(
+            isinstance(candidate, ast.Assign | ast.AugAssign)
+            and any(
+                isinstance(target, ast.Name) and target.id in bounds
+                for target in _assignment_targets(candidate)
+            )
+            and any(
+                isinstance(value, ast.Name) and value.id in midpoint_names
+                for value in ast.walk(candidate)
+            )
+            for statement in node.body
+            for candidate in ast.walk(statement)
+        )
 
 
     def visit_Call(self, node: ast.Call):
@@ -538,28 +606,35 @@ class SymbolicExecutor(ast.NodeVisitor):
             )
         return False
 
-    def visit_ListComp(self, node: ast.ListComp):
-        """Track list comprehension space."""
-        gens = len(node.generators)
-        if gens == 1:
-            self.space_allocations.append(('list_comp', 'O(n)'))
-        else:
-            self.space_allocations.append(('list_comp', f'O(n^{gens})'))
-
-        # Also counts as nested loops for time
-        self.current_depth += gens
+    def _visit_comprehension(
+        self,
+        node: ast.ListComp | ast.SetComp | ast.DictComp | ast.GeneratorExp,
+        allocation: str | None,
+    ) -> None:
+        generators = len(node.generators)
+        if allocation is not None:
+            space = "O(n)" if generators == 1 else f"O(n^{generators})"
+            self.space_allocations.append((allocation, space))
+        self.current_depth += generators
         self.max_depth = max(self.max_depth, self.current_depth)
         self.generic_visit(node)
-        self.current_depth -= gens
+        self.current_depth -= generators
 
-    def visit_DictComp(self, node: ast.DictComp):
-        """Track dict comprehension space."""
-        gens = len(node.generators)
-        self.space_allocations.append(('dict_comp', f'O(n^{gens})' if gens > 1 else 'O(n)'))
-        self.current_depth += gens
-        self.max_depth = max(self.max_depth, self.current_depth)
-        self.generic_visit(node)
-        self.current_depth -= gens
+    def visit_ListComp(self, node: ast.ListComp) -> None:
+        """Track materialized list comprehension time and space."""
+        self._visit_comprehension(node, "list_comp")
+
+    def visit_SetComp(self, node: ast.SetComp) -> None:
+        """Track materialized set comprehension time and space."""
+        self._visit_comprehension(node, "set_comp")
+
+    def visit_DictComp(self, node: ast.DictComp) -> None:
+        """Track materialized dict comprehension time and space."""
+        self._visit_comprehension(node, "dict_comp")
+
+    def visit_GeneratorExp(self, node: ast.GeneratorExp) -> None:
+        """Track generator iteration time without materialization space."""
+        self._visit_comprehension(node, None)
 
     def _detect_recursion_pattern(self, call_node: ast.Call):
         """Detect type of recursion (linear, binary, multiple, fan-out)."""
@@ -775,37 +850,21 @@ class AdvancedComplexityAnalyzer:
     def _calculate_space_complexity(
         self, exec_result: dict, uses_memo: bool
     ) -> tuple[str, list[str]]:
-        """Calculate space complexity from execution results."""
+        """Calculate worst-case space across recursion and allocations."""
+        candidates = list(exec_result["space_allocations"])
         reasoning = []
-        allocations = exec_result['space_allocations']
+        if exec_result["recursive_calls"] > 0:
+            label = "memoized recursion" if uses_memo else "recursion stack"
+            candidates.append((label, "O(n)"))
 
-        # Recursion adds stack space
-        if exec_result['recursive_calls'] > 0:
-            if uses_memo:
-                reasoning.append("Recursion with memoization → O(n) for cache")
-                return "O(n)", reasoning
-            else:
-                reasoning.append("Recursion → O(n) call stack")
-                return "O(n)", reasoning
+        if not candidates:
+            return "O(1)", ["No significant allocations → O(1)"]
 
-        if not allocations:
-            reasoning.append("No significant allocations → O(1)")
-            return "O(1)", reasoning
-
-        # Find worst case allocation
-        max_space = "O(1)"
-        for alloc_type, space in allocations:
-            if 'n^' in space:
-                if max_space == "O(1)" or 'n^' not in max_space:
-                    max_space = space
-                    reasoning.append(f"{alloc_type} creates {space} space")
-            elif space == "O(n)" and max_space == "O(1)":
-                max_space = space
-                reasoning.append(f"{alloc_type} creates O(n) space")
-
-        if max_space == "O(1)":
-            reasoning.append("Only constant space allocations → O(1)")
-
+        allocation, max_space = max(
+            candidates,
+            key=lambda item: _space_order(item[1]),
+        )
+        reasoning.append(f"{allocation} creates {max_space} space")
         return max_space, reasoning
 
     def _get_dominant_operation(self, exec_result: dict) -> str | None:

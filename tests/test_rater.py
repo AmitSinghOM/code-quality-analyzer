@@ -1,6 +1,6 @@
 """Rating behaviour: size is not quality, breadth counts, gaps are penalized."""
 
-from analyzer.rater import QualityRater, coverage_gap_ratio
+from cqa_analyzer.rater import QualityRater, coverage_gap_ratio
 
 
 def rate(dsa=None, design=None, files=5, lines=1000, gap=0.0):

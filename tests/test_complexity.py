@@ -4,7 +4,7 @@ from pathlib import Path
 
 from conftest import function_node
 
-from analyzer.complexity import (
+from cqa_analyzer.complexity import (
     AdvancedComplexityAnalyzer,
     ProjectComplexityAnalyzer,
     loop_has_early_exit,
@@ -167,3 +167,62 @@ def test_project_analysis_respects_size_cap(project):
 
     assert analyzer.get_summary()["total_functions"] == 0
     assert analyzer.analysis_health()["skipped_by_reason"]["too_large"] == 1
+
+
+def test_all_comprehension_types_contribute_time_and_space():
+    materialized = analyze(
+        "def build(items):\n"
+        "    lists = [x for x in items]\n"
+        "    sets = {x for x in items for y in items}\n"
+        "    mapping = {x: y for x in items for y in items for z in items}\n"
+        "    return lists, sets, mapping\n",
+        "build",
+    )
+    generated = analyze(
+        "def generate(items):\n"
+        "    return (x for x in items for y in items)\n",
+        "generate",
+    )
+
+    assert materialized.time_complexity == "O(n³)"
+    assert materialized.space_complexity == "O(n^3)"
+    assert generated.time_complexity == "O(n²)"
+    assert generated.space_complexity == "O(1)"
+
+
+def test_worst_space_allocation_wins_regardless_of_source_order():
+    result = analyze(
+        "def build(items):\n"
+        "    pairs = {(x, y) for x in items for y in items}\n"
+        "    triples = {x: y for x in items for y in items for z in items}\n"
+        "    return pairs, triples\n",
+        "build",
+    )
+
+    assert result.space_complexity == "O(n^3)"
+
+
+def test_floor_division_alone_is_not_binary_search():
+    pagination = analyze(
+        "def pages(total, per_page):\n"
+        "    while total > 0:\n"
+        "        page_count = total // per_page\n"
+        "        total -= per_page\n"
+        "    return page_count\n",
+        "pages",
+    )
+    binary = analyze(
+        "def locate(items, target):\n"
+        "    left, right = 0, len(items) - 1\n"
+        "    while left <= right:\n"
+        "        mid = (left + right) // 2\n"
+        "        if items[mid] < target:\n"
+        "            left = mid + 1\n"
+        "        else:\n"
+        "            right = mid - 1\n"
+        "    return -1\n",
+        "locate",
+    )
+
+    assert pagination.time_complexity == "O(n)"
+    assert binary.time_complexity == "O(log n)"

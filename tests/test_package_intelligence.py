@@ -2,8 +2,8 @@
 
 import pytest
 
-from analyzer.package_intelligence import _strongly_connected_cycles
-from analyzer.scanner import CodeScanner
+from cqa_analyzer.package_intelligence import _strongly_connected_cycles
+from cqa_analyzer.scanner import CodeScanner
 
 
 def test_src_layout_metadata_and_import_graph(project):
@@ -308,7 +308,7 @@ def test_literal_all_findings_preserve_identity_when_redacted(project):
 
 
 def test_literal_all_project_findings_honor_rule_policy(project):
-    from analyzer.config import load_config
+    from cqa_analyzer.config import load_config
 
     root = project({
         ".code-quality.toml": (
@@ -788,7 +788,7 @@ def test_package_data_directories_and_symlinks_are_skipped(project, tmp_path):
 
 
 def test_package_data_rule_honors_project_policy(project):
-    from analyzer.config import load_config
+    from cqa_analyzer.config import load_config
 
     root = project({
         ".code-quality.toml": (
@@ -855,3 +855,39 @@ def test_package_data_skips_unconfigured_namespace_like_directory(project):
     assert not any(
         item.rule_id == "PY-PKG-006" for item in scanner.findings
     )
+
+
+def test_symlinked_pyproject_outside_root_is_rejected(project, tmp_path):
+    root = project({"module.py": "VALUE = 1\n"})
+    outside = tmp_path / "outside.toml"
+    outside.write_text("[project]\nname = 'outside'\n", encoding="utf-8")
+    try:
+        (root / "pyproject.toml").symlink_to(outside)
+    except OSError:
+        pytest.skip("symlinks are unavailable on this platform")
+
+    scanner = CodeScanner(root)
+    scanner.scan()
+
+    assert scanner.package_intelligence.project_name is None
+    assert scanner.package_health == {"errors": 1, "complete": False}
+    assert any(item.rule_id == "PY-PKG-003" for item in scanner.findings)
+
+
+def test_oversized_pyproject_is_rejected_without_parsing(project):
+    from cqa_analyzer.package_intelligence import MAX_PYPROJECT_SIZE
+
+    root = project({
+        "pyproject.toml": (
+            "[project]\nname = 'oversized'\n#"
+            + ("x" * MAX_PYPROJECT_SIZE)
+        ),
+        "module.py": "VALUE = 1\n",
+    })
+
+    scanner = CodeScanner(root)
+    scanner.scan()
+
+    assert scanner.package_intelligence.project_name is None
+    assert scanner.package_health == {"errors": 1, "complete": False}
+    assert any(item.rule_id == "PY-PKG-003" for item in scanner.findings)

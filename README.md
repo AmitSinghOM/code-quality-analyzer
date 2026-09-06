@@ -26,7 +26,7 @@ they did before. See [Scoring](#scoring).
 
 ```
 code-quality-analyzer/
-├── analyzer/
+├── cqa_analyzer/
 │   ├── __init__.py
 │   ├── __main__.py      # CLI entry point
 │   ├── baseline.py      # Hashed finding baselines and comparison
@@ -73,7 +73,7 @@ That installs a `code-quality-analyzer` command. Running as a module works too:
 
 ```bash
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m analyzer /path/to/project
+.venv/bin/python -m cqa_analyzer /path/to/project
 ```
 
 ## Pre-commit
@@ -83,7 +83,7 @@ Pin a released tag in `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/AmitSinghOM/code-quality-analyzer
-    rev: v2.25.0
+    rev: <released-tag>  # Replace after the first signed release is published
     hooks:
       - id: code-quality-analyzer
 ```
@@ -384,7 +384,7 @@ with an explicit warning.
 
 ## Scan Safety
 
-File reads go through `analyzer/discovery.py`, which refuses to:
+File reads go through `cqa_analyzer/discovery.py`, which refuses to:
 
 - read a path that resolves outside the project root, so a symlink pointing at
   `~/.aws/credentials` is skipped rather than parsed

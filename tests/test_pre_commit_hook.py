@@ -5,7 +5,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from analyzer.__main__ import EXIT_OK, main
+from cqa_analyzer.__main__ import EXIT_OK, main
 
 ROOT = Path(__file__).parents[1]
 HOOK = ROOT / ".pre-commit-hooks.yaml"

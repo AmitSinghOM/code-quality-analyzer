@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from analyzer.baseline import (
+from cqa_analyzer.baseline import (
     BASELINE_SCHEMA_VERSION,
     BaselineError,
     compare_findings,
@@ -12,7 +12,7 @@ from analyzer.baseline import (
     load_baseline,
     write_baseline,
 )
-from analyzer.findings import Finding, Location
+from cqa_analyzer.findings import Finding, Location
 
 
 def make_finding(

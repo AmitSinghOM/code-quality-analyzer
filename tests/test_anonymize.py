@@ -1,8 +1,8 @@
 """Fully anonymized report projections."""
 
-from analyzer.anonymize import ReportAnonymizer
-from analyzer.findings import Finding, Location
-from analyzer.package_intelligence import PackageIntelligence
+from cqa_analyzer.anonymize import ReportAnonymizer
+from cqa_analyzer.findings import Finding, Location
+from cqa_analyzer.package_intelligence import PackageIntelligence
 
 
 def make_finding() -> Finding:

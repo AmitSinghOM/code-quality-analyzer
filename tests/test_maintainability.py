@@ -2,9 +2,9 @@
 
 import ast
 
-from analyzer.maintainability import function_complexities
-from analyzer.python_rules import PythonRuleAnalyzer
-from analyzer.scanner import CodeScanner
+from cqa_analyzer.maintainability import function_complexities
+from cqa_analyzer.python_rules import PythonRuleAnalyzer
+from cqa_analyzer.scanner import CodeScanner
 
 
 def _function_source(name: str, decisions: int) -> str:

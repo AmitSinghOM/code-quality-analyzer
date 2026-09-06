@@ -15,12 +15,12 @@ Guarantees:
 from __future__ import annotations
 
 import os
-import stat
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from collections.abc import Iterator
 
 from .config import AnalysisConfig, path_is_selected
+from .safe_io import SafeReadError, read_bounded_text
 
 # Directories that never contain first-party source worth rating.
 SKIP_DIRS = frozenset({
@@ -162,39 +162,12 @@ def read_source(
 ) -> str | None:
     """Read a safe source path or record why it was skipped."""
     report = report if report is not None else DiscoveryReport()
-
-    # Symlink escape: a link inside the tree pointing at, say,
-    # ~/.aws/credentials must not be read.
     try:
-        resolved = path.resolve()
-    except OSError:
-        report.skip('unresolvable', path)
-        return None
-    if not _is_within(resolved, root):
-        report.skip('outside_project_root', path)
-        return None
-
-    try:
-        info = resolved.stat()
-    except OSError:
-        report.skip('stat_failed', path)
-        return None
-
-    # FIFOs and character devices block forever on read.
-    if not stat.S_ISREG(info.st_mode):
-        report.skip('not_regular_file', path)
-        return None
-
-    if info.st_size > max_file_size:
-        report.skip('too_large', path)
-        return None
-
-    try:
-        return resolved.read_text(encoding='utf-8')
-    except UnicodeDecodeError:
-        report.skip('undecodable', path)
-    except OSError:
-        report.skip('read_failed', path)
+        return read_bounded_text(path, max_file_size, root=root)
+    except FileNotFoundError:
+        report.skip("read_failed", path)
+    except SafeReadError as error:
+        report.skip(error.reason, path)
     return None
 
 

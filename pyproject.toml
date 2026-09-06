@@ -1,21 +1,41 @@
 [build-system]
-requires = ["setuptools==80.9.0"]
+requires = ["setuptools>=80.9.0,<82"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "code-quality-analyzer"
+name = "cqa-analyzer"
 dynamic = ["version"]
 description = "Privacy-first static code health analysis for Python packages"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
+authors = [{name = "Amit Singh"}]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Quality Assurance",
+]
 dependencies = [
     # click <8.3.3 carries PYSEC-2026-2132; keep this at or above the fix.
     "click==8.3.3",
     "rich==14.3.4",
     "tomli==2.2.1; python_version < '3.11'",
 ]
+
+[project.urls]
+Homepage = "https://github.com/AmitSinghOM/code-quality-analyzer"
+Documentation = "https://github.com/AmitSinghOM/code-quality-analyzer#readme"
+Issues = "https://github.com/AmitSinghOM/code-quality-analyzer/issues"
+Repository = "https://github.com/AmitSinghOM/code-quality-analyzer"
 
 [project.optional-dependencies]
 dev = [
@@ -26,13 +46,13 @@ dev = [
 ]
 
 [project.scripts]
-code-quality-analyzer = "analyzer.__main__:main"
+code-quality-analyzer = "cqa_analyzer.__main__:main"
 
 [tool.setuptools.packages.find]
-include = ["analyzer*"]
+include = ["cqa_analyzer*"]
 
 [tool.setuptools.dynamic]
-version = { attr = "analyzer.__version__" }
+version = { attr = "cqa_analyzer.__version__" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

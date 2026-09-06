@@ -5,7 +5,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from analyzer.__main__ import main
+from cqa_analyzer.__main__ import main
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SCHEMA = Path(__file__).parents[1] / "docs" / "report-schema-1.10.0.json"

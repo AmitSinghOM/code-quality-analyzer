@@ -5,13 +5,13 @@ import json
 import pytest
 from click.testing import CliRunner
 
-from analyzer.__main__ import EXIT_FINDINGS, EXIT_OK, main
-from analyzer.changed_lines import (
+from cqa_analyzer.__main__ import EXIT_FINDINGS, EXIT_OK, main
+from cqa_analyzer.changed_lines import (
     ChangedLinesError,
     LineRange,
     load_changed_lines,
 )
-from analyzer.findings import Finding, Location
+from cqa_analyzer.findings import Finding, Location
 
 
 def _write_manifest(path, files):
@@ -206,7 +206,7 @@ def test_manifest_rejects_malformed_utf8_and_nonregular_inputs(tmp_path):
 
 
 def test_manifest_enforces_bounded_counts(tmp_path, monkeypatch):
-    import analyzer.changed_lines as changed_lines
+    import cqa_analyzer.changed_lines as changed_lines
 
     monkeypatch.setattr(changed_lines, "MAX_FILES", 1)
     too_many_files = _write_manifest(tmp_path / "files.json", [
@@ -431,7 +431,7 @@ def test_changed_selection_does_not_change_written_baseline(project, tmp_path):
 
 
 def test_manifest_enforces_file_size_limit(tmp_path, monkeypatch):
-    import analyzer.changed_lines as changed_lines
+    import cqa_analyzer.changed_lines as changed_lines
 
     manifest = tmp_path / "changed.json"
     manifest.write_text("{}", encoding="utf-8")

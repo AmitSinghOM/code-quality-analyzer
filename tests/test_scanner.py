@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from analyzer.scanner import CodeScanner
+from cqa_analyzer.scanner import CodeScanner
 
 
 def test_imports_do_not_leak_between_files(project):
@@ -196,3 +196,23 @@ def test_analysis_authority_distinguishes_candidates_read_and_parsed(project):
         "completeness_ratio": 0.333,
         "reasons": ["source_files_skipped", "parse_failures"],
     }
+
+
+def test_scanner_rejects_second_scan_instead_of_accumulating(project):
+    root = project({"module.py": "def f(items=[]):\n    return items\n"})
+    scanner = CodeScanner(root)
+    scanner.scan()
+    snapshot = (
+        scanner.files_scanned,
+        scanner.total_lines,
+        tuple(scanner.findings),
+    )
+
+    with pytest.raises(RuntimeError, match="single-use"):
+        scanner.scan()
+
+    assert (
+        scanner.files_scanned,
+        scanner.total_lines,
+        tuple(scanner.findings),
+    ) == snapshot

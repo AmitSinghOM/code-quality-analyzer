@@ -5,9 +5,9 @@ import json
 import pytest
 from click.testing import CliRunner
 
-from analyzer.__main__ import EXIT_FINDINGS, EXIT_OK, main
-from analyzer.config import ConfigError, load_config
-from analyzer.scanner import CodeScanner
+from cqa_analyzer.__main__ import EXIT_FINDINGS, EXIT_OK, main
+from cqa_analyzer.config import ConfigError, load_config
+from cqa_analyzer.scanner import CodeScanner
 
 
 def test_absent_config_has_stable_effective_fingerprint(project):
