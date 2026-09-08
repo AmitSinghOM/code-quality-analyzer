@@ -610,6 +610,12 @@ privacy, offline, and CI-gate contracts. JSON `project_analyses` entries expose
 provider results normally and health-only projections under `--anonymize`.
 See [`docs/RULES.md`](docs/RULES.md).
 
+The architecture signal score is currently computed from Python signals only,
+so Go-only projects floor at 1.0 regardless of their design.
+[`docs/ROADMAP.md`](docs/ROADMAP.md) tracks the plan to fix this: score
+scope-honesty for non-Python projects, Go architecture signals, and a
+TypeScript/JavaScript pilot.
+
 ## Development
 
 ```bash
