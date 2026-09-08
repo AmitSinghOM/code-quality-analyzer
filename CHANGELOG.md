@@ -4,6 +4,23 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 2.29.0 - 2026-09-08
+
+### Added
+
+- `architecture_signal_scope` report field naming the signal-capable
+  languages (currently `["python"]`) and whether the score applies to
+  this analysis.
+- Exit code 5: `--fail-under` on a not-applicable score exits distinctly
+  instead of silently passing or failing.
+
+### Changed
+
+- Projects with no successfully analyzed Python source now report the
+  architecture signal score as **not applicable** (`null` in JSON,
+  an explicit panel in text output) instead of a misleading 1.0 floor.
+  Report schema 1.10.0 → 1.11.0 (score and `rating` are now nullable).
+
 ## 2.28.0 - 2026-09-08
 
 ### Added

@@ -256,7 +256,7 @@ remaining disclosure considerations.
 | `--anonymize` | off | Remove project paths, metadata, and source identifiers |
 | `--offline` | off | Deny socket operations while analysis runs |
 | `--cache-dir` | none | Reuse bounded local parse artifacts from this directory |
-| `--fail-under` | none | Exit non-zero when the compatibility architecture signal score is below 1–10 |
+| `--fail-under` | none | Exit non-zero when the compatibility architecture signal score is below 1–10; exits 5 when the score is not applicable |
 | `--fail-on` | none | Exit 4 for reported findings at `warning` or `error` severity |
 | `--baseline` | none | Compare findings with an existing hashed baseline |
 | `--write-baseline` | none | Atomically write current finding fingerprints |
@@ -275,7 +275,7 @@ fingerprint, and analysis authority so consumers can identify the contract,
 protections, and completeness that produced a result. SARIF emits the same
 baseline- and changed-line-filtered findings for standard code-scanning
 consumers. Changed-line manifests are supplied externally; the analyzer never
-invokes Git or a shell to derive them. JSON schema `1.10.0` records aggregate
+invokes Git or a shell to derive them. JSON schema `1.11.0` records aggregate
 selection metadata and whether the local parse cache was enabled; see
 [`docs/CHANGED_LINES.md`](docs/CHANGED_LINES.md),
 [`docs/CACHING.md`](docs/CACHING.md), and [`docs/SARIF.md`](docs/SARIF.md).
@@ -291,6 +291,7 @@ selection metadata and whether the local parse cache was enabled; see
 | 2 | No registered-language source candidates were discovered |
 | 3 | Source candidates produced no successful analysis, or `--strict` found incomplete analysis |
 | 4 | A reported finding met the `--fail-on` severity threshold |
+| 5 | `--fail-under` was set but the architecture signal score is not applicable (no signal-capable source analyzed) |
 
 ## Analysis Authority
 
@@ -303,7 +304,7 @@ No source candidates exit with code 2. If candidates exist but none can be
 successfully parsed, analysis exits with code 3 even without `--strict`.
 Partial non-strict analysis may exit successfully for inspection, but it is
 always marked non-authoritative. See the versioned schema in
-[`docs/report-schema-1.10.0.json`](docs/report-schema-1.10.0.json) and the decision
+[`docs/report-schema-1.11.0.json`](docs/report-schema-1.11.0.json) and the decision
 record in
 [`docs/adr/001-analysis-authority-and-score-migration.md`](docs/adr/001-analysis-authority-and-score-migration.md).
 
@@ -610,11 +611,13 @@ privacy, offline, and CI-gate contracts. JSON `project_analyses` entries expose
 provider results normally and health-only projections under `--anonymize`.
 See [`docs/RULES.md`](docs/RULES.md).
 
-The architecture signal score is currently computed from Python signals only,
-so Go-only projects floor at 1.0 regardless of their design.
-[`docs/ROADMAP.md`](docs/ROADMAP.md) tracks the plan to fix this: score
-scope-honesty for non-Python projects, Go architecture signals, and a
-TypeScript/JavaScript pilot.
+The architecture signal score is computed from Python signals only. Projects
+with no successfully analyzed Python source report the score as **not
+applicable** — `null` in JSON with an explicit `architecture_signal_scope`
+field — rather than a misleading floor value, and `--fail-under` exits with
+code 5 instead of silently passing or failing.
+[`docs/ROADMAP.md`](docs/ROADMAP.md) tracks what comes next: Go architecture
+signals and a TypeScript/JavaScript pilot.
 
 ## Development
 

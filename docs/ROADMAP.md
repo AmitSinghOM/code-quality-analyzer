@@ -24,7 +24,7 @@ Consequence, and the trigger for this roadmap: the architecture signal
 score is currently computed **from Python signals only**, so a Go-only
 project floors at 1.0 no matter how well it is built.
 
-## 1. Score integrity for non-Python projects (next minor)
+## 1. Score integrity for non-Python projects (✅ shipped in 2.29.0)
 
 Before Go grows signals, the score must stop misrepresenting projects
 that have none to give.
