@@ -181,6 +181,30 @@ A function exposes more than two parameters identified as boolean by an explicit
 
 All three rules report the function definition line, where a reason-required suppression can be placed when a stable external interface cannot yet be changed.
 
+## PY-DUP-001: Duplicate function implementation
+
+**Category:** Duplication
+**Default severity:** Warning
+**Confidence:** High
+
+A significant function body is structurally identical to another function in
+the project. Detection compares docstring-stripped bodies, parameter lists,
+and return annotations by exact AST structure, so a renamed or re-decorated
+copy of the same implementation still reports, while a docstring-only or
+comment-only difference does not hide a copy. Function names and decorators
+are deliberately excluded from the comparison.
+
+Only significant functions participate: the docstring-stripped body must
+contain at least three statements and at least forty AST nodes, so trivial
+getters and delegation stubs never report. When a duplicated function
+encloses other duplicated functions, only the outermost duplicate reports.
+Every occurrence in a duplicate group receives its own finding, and each
+message names one other occurrence so the copy is reviewable. Analysis is
+cross-file but project-local, fully static, and deterministic; findings can
+be suppressed on the reported definition line with a reason-required inline
+suppression, and the rule can be disabled or re-leveled in
+`.code-quality.toml`.
+
 ## Python package rules
 
 Package rules analyze conventional `src` and initialized flat packages plus

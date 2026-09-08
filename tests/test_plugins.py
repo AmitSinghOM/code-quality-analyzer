@@ -250,6 +250,13 @@ def test_python_project_providers_are_registered_and_cached(project):
         },
         {
             "language_id": "python",
+            "capability": "duplication",
+            "provider_id": "python-duplication",
+            "capability_version": "1.0.0",
+            "enabled_by_default": True,
+        },
+        {
+            "language_id": "python",
             "capability": "package",
             "provider_id": "python-package",
             "capability_version": "1.0.0",

@@ -158,6 +158,7 @@ def test_catalog_covers_every_current_builtin_rule():
         "PY-COR-004",
         "PY-COR-005",
         "PY-COR-006",
+        "PY-DUP-001",
         "PY-MAINT-001",
         "PY-MAINT-002",
         "PY-MAINT-003",

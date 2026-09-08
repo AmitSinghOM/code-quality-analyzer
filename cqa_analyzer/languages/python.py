@@ -8,6 +8,7 @@ import sys
 from collections.abc import Iterable, Mapping
 
 from ..complexity import ProjectComplexityAnalyzer
+from ..duplication import analyze_duplication
 from ..findings import Finding
 from ..package_intelligence import PythonPackageAnalyzer
 from ..patterns import DSA_PATTERNS, SYSTEM_DESIGN_PATTERNS
@@ -136,7 +137,7 @@ class PythonRulePack:
 
     rule_pack_id = PYTHON_RULE_PACK_ID
     language_id = "python"
-    ruleset_version = "2.12.0"
+    ruleset_version = "2.13.0"
     plugin_api_version = PLUGIN_API_VERSION
 
     def __init__(self, analyzer: PythonRuleAnalyzer | None = None) -> None:
@@ -219,6 +220,34 @@ class PythonPackageProvider:
             payload=payload,
             health=analyzer.analysis_health(),
             findings=tuple(analyzer.findings),
+        )
+
+
+class PythonDuplicationProvider:
+    """Detect duplicated function implementations from shared parse data."""
+
+    provider_id = "python-duplication"
+    language_id = "python"
+    capability = "duplication"
+    capability_version = DEFAULT_CAPABILITY_VERSION
+    plugin_api_version = PLUGIN_API_VERSION
+    enabled_by_default = True
+
+    def analyze(self, project: ProjectContext) -> ProviderResult:
+        parsed_modules = {
+            path: (
+                parsed.source.display_path,
+                parsed.artifact,
+                suppression_lines(parsed.source.content),
+            )
+            for path, parsed in project.parsed_files.items()
+            if isinstance(parsed.artifact, ast.AST)
+        }
+        payload, findings, health = analyze_duplication(parsed_modules)
+        return ProviderResult(
+            payload=payload,
+            health=health,
+            findings=findings,
         )
 
 
@@ -399,5 +428,6 @@ def register_python_plugins(registry: PluginRegistry) -> PluginRegistry:
     registry.register_rule_pack(PythonRulePack())
     registry.register_signal_provider(PythonArchitectureSignalProvider())
     registry.register_project_provider(PythonPackageProvider())
+    registry.register_project_provider(PythonDuplicationProvider())
     registry.register_project_provider(PythonComplexityProvider())
     return registry

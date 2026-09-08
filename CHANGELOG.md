@@ -4,6 +4,26 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 2.28.0 - 2026-09-08
+
+### Added
+
+- `PY-DUP-001` cross-file duplicate function implementation detection: a
+  default-enabled `python-duplication` project provider compares
+  docstring-stripped function bodies, parameter lists, and return annotations
+  by exact AST structure. Renamed and re-decorated copies still report;
+  trivial functions (fewer than three statements or forty AST nodes) and
+  functions nested inside an already-reported duplicate do not. Findings
+  flow through the standard severity policy, baseline, changed-line, SARIF,
+  suppression, and privacy contracts. JSON reports expose aggregate group
+  data under `project_analyses` (`python:duplication`).
+
+### Changed
+
+- Ruleset version 2.12.0 → 2.13.0 (new rule `PY-DUP-001`).
+- README restructured to lead with the privacy-first data boundary and to
+  pin the published `v2.27.0` pre-commit tag.
+
 ## 2.27.0 - 2026-09-01
 
 First public release. Earlier 2.x versions were development-only and were not
