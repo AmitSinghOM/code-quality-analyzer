@@ -14,6 +14,9 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10
     import tomli as tomllib
 
 from .findings import Finding, Location
+from .safe_io import SafeReadError, read_bounded_text
+
+MAX_PYPROJECT_SIZE = 1024 * 1024
 
 
 @dataclass(slots=True)
@@ -123,27 +126,43 @@ class PythonPackageAnalyzer:
     def analysis_health(self) -> dict:
         return {"errors": self.errors, "complete": self.errors == 0}
 
+    def _invalid_metadata_finding(self) -> None:
+        self.result.metadata_valid = False
+        self.errors += 1
+        self.findings.append(Finding(
+            rule_id="PY-PKG-003",
+            category="package-health",
+            severity="error",
+            confidence="high",
+            message="pyproject.toml could not be read as bounded valid TOML.",
+            location=Location("pyproject.toml", 1, 1),
+            remediation=(
+                "Use a regular project-local UTF-8 TOML file no larger than "
+                "1 MiB."
+            ),
+        ))
+
     def _read_metadata(self) -> dict | None:
         path = self.root / "pyproject.toml"
-        self.result.pyproject_present = path.is_file()
-        if not self.result.pyproject_present:
+        try:
+            content = read_bounded_text(
+                path,
+                MAX_PYPROJECT_SIZE,
+                root=self.root,
+            )
+        except FileNotFoundError:
+            self.result.pyproject_present = False
+            return None
+        except (SafeReadError, ValueError):
+            self.result.pyproject_present = True
+            self._invalid_metadata_finding()
             return None
 
+        self.result.pyproject_present = True
         try:
-            with path.open("rb") as stream:
-                data = tomllib.load(stream)
-        except (OSError, tomllib.TOMLDecodeError):
-            self.result.metadata_valid = False
-            self.errors += 1
-            self.findings.append(Finding(
-                rule_id="PY-PKG-003",
-                category="package-health",
-                severity="error",
-                confidence="high",
-                message="pyproject.toml could not be read as valid TOML.",
-                location=Location("pyproject.toml", 1, 1),
-                remediation="Correct the TOML syntax and run analysis again.",
-            ))
+            data = tomllib.loads(content)
+        except tomllib.TOMLDecodeError:
+            self._invalid_metadata_finding()
             return None
 
         project = _table(data.get("project"))

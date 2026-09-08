@@ -5,9 +5,9 @@ import json
 import pytest
 from click.testing import CliRunner
 
-from analyzer.__main__ import EXIT_FINDINGS, EXIT_OK, main
-from analyzer.reporters import AnalysisReport, SarifReporter, SarifRun
-from analyzer.rule_metadata import builtin_rule_ids
+from cqa_analyzer.__main__ import EXIT_FINDINGS, EXIT_OK, main
+from cqa_analyzer.reporters import AnalysisReport, SarifReporter, SarifRun
+from cqa_analyzer.rule_metadata import builtin_rule_ids
 
 
 def _finding(
@@ -38,7 +38,7 @@ def _finding(
 
 def _run(*findings):
     return SarifRun(
-        analyzer_version="2.26.0",
+        analyzer_version="2.27.0",
         configuration_fingerprint="a" * 64,
         analysis_health={"complete": True, "authoritative": True},
         privacy={
@@ -66,7 +66,7 @@ def test_empty_sarif_run_has_one_deterministic_run():
     assert run["tool"]["driver"] == {
         "name": "Code Quality Analyzer",
         "rules": [],
-        "semanticVersion": "2.26.0",
+        "semanticVersion": "2.27.0",
     }
     assert run["results"] == []
     assert run["properties"]["configurationFingerprint"] == "a" * 64
@@ -158,6 +158,7 @@ def test_catalog_covers_every_current_builtin_rule():
         "PY-COR-004",
         "PY-COR-005",
         "PY-COR-006",
+        "PY-DUP-001",
         "PY-MAINT-001",
         "PY-MAINT-002",
         "PY-MAINT-003",

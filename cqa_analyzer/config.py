@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import stat
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -13,6 +12,8 @@ try:
     import tomllib
 except ModuleNotFoundError:  # pragma: no cover - Python 3.10
     import tomli as tomllib
+
+from .safe_io import SafeReadError, read_bounded_text
 
 CONFIG_NAME = ".code-quality.toml"
 MAX_CONFIG_SIZE = 256 * 1024
@@ -197,17 +198,16 @@ def _load_gitignore(path: Path, root: Path) -> tuple[str, ...]:
 
 def _read_bounded_file(path: Path, root: Path, label: str) -> str:
     try:
-        resolved = path.resolve(strict=True)
-        resolved.relative_to(root)
-        info = resolved.stat()
-        if not stat.S_ISREG(info.st_mode):
-            raise ConfigError(f"{label} must be a regular file.")
-        if info.st_size > MAX_CONFIG_SIZE:
-            raise ConfigError(f"{label} exceeds the 256 KiB safety limit.")
-        return resolved.read_text(encoding="utf-8")
-    except ConfigError:
-        raise
-    except (OSError, UnicodeError, ValueError) as error:
+        return read_bounded_text(path, MAX_CONFIG_SIZE, root=root)
+    except SafeReadError as error:
+        if error.reason == "not_regular_file":
+            raise ConfigError(f"{label} must be a regular file.") from error
+        if error.reason == "too_large":
+            raise ConfigError(
+                f"{label} exceeds the 256 KiB safety limit."
+            ) from error
+        raise ConfigError(f"{label} could not be read safely.") from error
+    except (FileNotFoundError, ValueError) as error:
         raise ConfigError(f"{label} could not be read safely.") from error
 
 

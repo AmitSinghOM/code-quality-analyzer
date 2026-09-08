@@ -20,6 +20,8 @@ from .protocols import (
 CACHE_SCHEMA_VERSION = "1.0.0"
 CACHE_NAMESPACE = "parsed-v1"
 MAX_CACHE_ENTRY_SIZE = 16 * 1024 * 1024
+MAX_CACHE_ENTRIES = 4_096
+MAX_CACHE_TOTAL_SIZE = 512 * 1024 * 1024
 
 
 class CacheError(ValueError):
@@ -192,8 +194,10 @@ class CacheStore:
                 stream.write(encoded)
                 stream.flush()
                 os.fsync(stream.fileno())
-            os.replace(temporary, self.directory / f"{key}.json")
+            destination = self.directory / f"{key}.json"
+            os.replace(temporary, destination)
             temporary = None
+            self._prune(destination)
         except (OSError, RecursionError, TypeError, ValueError):
             return
         finally:
@@ -207,3 +211,33 @@ class CacheStore:
                     Path(temporary).unlink()
                 except OSError:
                     pass
+
+
+    def _prune(self, protected: Path) -> None:
+        """Best-effort deterministic pruning of validated regular entries."""
+        try:
+            entries = []
+            total_size = 0
+            for path in self.directory.iterdir():
+                if path == protected or path.suffix != ".json":
+                    continue
+                details = path.lstat()
+                if not stat.S_ISREG(details.st_mode):
+                    continue
+                entries.append((details.st_mtime_ns, path.name, path, details.st_size))
+                total_size += details.st_size
+            protected_size = protected.stat().st_size
+            total_size += protected_size
+            entry_count = len(entries) + 1
+            for _, _, path, size in sorted(entries):
+                if (
+                    entry_count <= MAX_CACHE_ENTRIES
+                    and total_size <= MAX_CACHE_TOTAL_SIZE
+                ):
+                    break
+                path.unlink()
+                entry_count -= 1
+                total_size -= size
+        except OSError:
+            return
+

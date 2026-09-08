@@ -57,6 +57,7 @@ class CodeScanner:
         self.configuration = configuration or AnalyzerConfig()
         self.cache_store = cache_store
         self.cache_enabled = cache_store is not None
+        self._scanned = False
         self.language_counts: dict[str, int] = {}
 
         self.files_scanned = 0
@@ -80,7 +81,10 @@ class CodeScanner:
         self.package_health = {"errors": 0, "complete": True}
 
     def scan(self) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
-        """Scan all bounded files supported by the active registry."""
+        """Scan all bounded files supported by the active registry once."""
+        if self._scanned:
+            raise RuntimeError("CodeScanner instances are single-use")
+        self._scanned = True
         for path, content in iter_source_files(
             self.project_path,
             self.registry.source_extensions(),

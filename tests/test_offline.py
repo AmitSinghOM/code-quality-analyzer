@@ -4,7 +4,7 @@ import socket
 
 import pytest
 
-from analyzer.offline import OfflineViolationError, enforce_offline
+from cqa_analyzer.offline import OfflineViolationError, enforce_offline
 
 
 def test_offline_guard_blocks_socket_entry_points_without_network_access():

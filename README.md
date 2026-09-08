@@ -1,12 +1,53 @@
 # Code Quality Analyzer
 
-A privacy-first local tool that analyzes Python packages and includes a bounded
-Go pilot. It detects:
+**Prove the health of a codebase without a single byte leaving the machine.**
 
-- **Actionable correctness and package findings** with normalized locations
+Code Quality Analyzer is a privacy-first static analysis tool for Python
+packages (with a bounded Go pilot) built for environments where source code
+cannot leave the trusted development boundary: regulated industries,
+air-gapped networks, client codebases under NDA, and anyone who refuses to
+ship their source to a SaaS dashboard to learn whether it is healthy.
+
+## The privacy contract
+
+Most quality platforms want your code on their servers. This tool inverts
+that: analysis is local-only by design, and the guarantees are enforced, not
+promised.
+
+- **No network, provably.** Analysis has no network-backed integration, and
+  `--offline` enforces it at runtime by denying socket and name-resolution
+  operations while analysis runs — an accidental future network call fails
+  the command instead of silently connecting.
+- **Anonymized reports for untrusted destinations.** `--anonymize` replaces
+  project, file, and function identities with opaque report-local tokens and
+  strips source-derived evidence, so a report can leave the machine while the
+  code's identity does not.
+- **Baselines are hashes, not source.** CI baseline files contain only
+  schema metadata and SHA-256 fingerprints — no paths, messages,
+  identifiers, or snippets.
+- **No shell, no Git, no execution.** The analyzer never invokes Git or a
+  shell, and package intelligence never imports, builds, or executes project
+  code. Changed-line manifests are supplied externally.
+- **Honest results, enforced.** Every report carries `analysis_health` and
+  an authority verdict; incomplete analysis cannot silently pass as a green
+  build (`--strict` makes it fail).
+
+See [`docs/PRIVACY.md`](docs/PRIVACY.md) for the exact data boundary.
+
+## What it detects
+
+- **Actionable correctness, maintainability, duplication, and package
+  findings** with stable rule IDs, severities, remediation, and normalized
+  locations — including cross-file **duplicate function implementations**
+  (`PY-DUP-001`) detected by exact AST structure, so renamed copies still
+  report and docstring changes cannot hide one
 - **Data Structures & Algorithms (DSA)** patterns in Python
 - **System Design** principles implemented in Python
 - A compatibility **architecture signal score from 1-10**
+
+Reports render as text, versioned JSON, or SARIF 2.1.0, and gate CI through
+baselines, changed-line selection, and severity thresholds — all under the
+same privacy contract.
 
 ## Architecture Signal Score Scale
 
@@ -26,7 +67,7 @@ they did before. See [Scoring](#scoring).
 
 ```
 code-quality-analyzer/
-├── analyzer/
+├── cqa_analyzer/
 │   ├── __init__.py
 │   ├── __main__.py      # CLI entry point
 │   ├── baseline.py      # Hashed finding baselines and comparison
@@ -34,6 +75,7 @@ code-quality-analyzer/
 │   ├── changed_lines.py # Bounded changed-line finding selection
 │   ├── config.py        # Bounded configuration, path, and rule policy
 │   ├── discovery.py     # Safe file discovery (limits, symlink guard)
+│   ├── duplication.py   # Cross-file duplicate function detection
 │   ├── findings.py      # Language-neutral actionable finding model
 │   ├── signals.py       # Per-file signal extraction + pattern matching
 │   ├── python_rules.py  # Source-located Python correctness rules
@@ -73,7 +115,7 @@ That installs a `code-quality-analyzer` command. Running as a module works too:
 
 ```bash
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m analyzer /path/to/project
+.venv/bin/python -m cqa_analyzer /path/to/project
 ```
 
 ## Pre-commit
@@ -83,7 +125,7 @@ Pin a released tag in `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/AmitSinghOM/code-quality-analyzer
-    rev: v2.25.0
+    rev: v2.27.0
     hooks:
       - id: code-quality-analyzer
 ```
@@ -204,6 +246,7 @@ remaining disclosure considerations.
 
 | Option | Default | Purpose |
 |--------|---------|---------|
+| `--version` | – | Print the analyzer version and exit |
 | `-v, --verbose` | off | Include matched files and evidence; JSON omits evidence unless enabled |
 | `-f, --output-format` | `text` | `text`, versioned `json`, or SARIF 2.1.0 |
 | `-c, --complexity` | off | Add experimental time/space complexity estimates |
@@ -384,7 +427,7 @@ with an explicit warning.
 
 ## Scan Safety
 
-File reads go through `analyzer/discovery.py`, which refuses to:
+File reads go through `cqa_analyzer/discovery.py`, which refuses to:
 
 - read a path that resolves outside the project root, so a symlink pointing at
   `~/.aws/credentials` is skipped rather than parsed
@@ -410,9 +453,13 @@ The built-in Python rules detect mutable function defaults, broad exception
 handlers, silently swallowed exceptions, directly unreachable statements,
 functions above measured cyclomatic or cognitive complexity limits, oversized
 functions, excessive parameter lists, boolean mode proliferation, known
-blocking calls in async functions, and locally unmanaged file/temporary
-resources. Rule enablement and severity can be configured, and valid same-line
-suppressions
+blocking calls in async functions, locally unmanaged file/temporary
+resources, and cross-file duplicate function implementations. Duplication
+(`PY-DUP-001`) compares docstring-stripped bodies, parameter lists, and
+return annotations by exact AST structure: renamed or re-decorated copies
+still report, trivial functions never do, and only the outermost of nested
+duplicates reports. Rule enablement and severity can be configured, and valid
+same-line suppressions
 require an explicit rule ID and quoted reason. See
 [`docs/RULES.md`](docs/RULES.md) for rule behavior and remediation examples and
 [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) for policy details.
@@ -562,6 +609,12 @@ invokes Go tooling. Python and Go findings share the same report, baseline,
 privacy, offline, and CI-gate contracts. JSON `project_analyses` entries expose
 provider results normally and health-only projections under `--anonymize`.
 See [`docs/RULES.md`](docs/RULES.md).
+
+The architecture signal score is currently computed from Python signals only,
+so Go-only projects floor at 1.0 regardless of their design.
+[`docs/ROADMAP.md`](docs/ROADMAP.md) tracks the plan to fix this: score
+scope-honesty for non-Python projects, Go architecture signals, and a
+TypeScript/JavaScript pilot.
 
 ## Development
 

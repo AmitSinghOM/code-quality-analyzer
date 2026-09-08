@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "analyzer/**"
+      - "cqa_analyzer/**"
       - "tests/**"
       - "docs/**"
       - "README.md"
@@ -19,7 +19,7 @@ on:
       - ".github/workflows/ci.yml"
   pull_request:
     paths:
-      - "analyzer/**"
+      - "cqa_analyzer/**"
       - "tests/**"
       - "docs/**"
       - "README.md"
@@ -47,14 +47,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 3.14 is what this is developed against; 3.10 is the floor declared
-        # in pyproject.toml.
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -78,9 +78,11 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.12'
           cache: pip
@@ -88,17 +90,21 @@ jobs:
       - name: Install
         run: python -m pip install -e ".[dev]"
 
-      - name: Test filesystem and privacy behavior
+      - name: Test filesystem, cache, privacy, and report behavior
         run: >-
           pytest tests/test_scanner.py tests/test_package_intelligence.py
-          tests/test_baseline.py tests/test_cli.py
+          tests/test_baseline.py tests/test_cache.py tests/test_changed_lines.py
+          tests/test_cli.py tests/test_config.py tests/test_offline.py
+          tests/test_sarif.py
 
   distribution:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.12'
           cache: pip
@@ -123,32 +129,69 @@ jobs:
               name.endswith("/.pre-commit-hooks.yaml")
               for name in names
           )
+          assert any(
+              name.endswith("/docs/report-schema-1.10.0.json")
+              for name in names
+          )
 
-      - name: Install built wheel
-        run: python -m pip install --force-reinstall dist/*.whl
+      - name: Verify wheel and source distribution installations
+        shell: bash
+        run: |
+          set -euo pipefail
+          wheel_path=$(printf '%s\n' dist/*.whl)
+          sdist_path=$(printf '%s\n' dist/*.tar.gz)
+          python -m venv "$RUNNER_TEMP/wheel-venv"
+          python -m venv "$RUNNER_TEMP/sdist-venv"
+          "$RUNNER_TEMP/wheel-venv/bin/python" -m pip install "$wheel_path"
+          "$RUNNER_TEMP/sdist-venv/bin/python" -m pip install "$sdist_path"
 
-      - name: Smoke test installed command
-        run: >-
-          code-quality-analyzer . --strict --output-format json
-          --offline --anonymize
+          pushd "$RUNNER_TEMP" >/dev/null
+          "$RUNNER_TEMP/wheel-venv/bin/python" -c '
+          import sys
+          from importlib.metadata import version
+          from pathlib import Path
+          import cqa_analyzer
+
+          assert version("cqa-analyzer") == "2.27.0"
+          assert cqa_analyzer.__version__ == "2.27.0"
+          assert Path(cqa_analyzer.__file__).resolve().is_relative_to(Path(sys.prefix).resolve())
+          '
+          "$RUNNER_TEMP/wheel-venv/bin/code-quality-analyzer" \
+            "$GITHUB_WORKSPACE" --strict --output-format json --offline --anonymize
+          "$RUNNER_TEMP/sdist-venv/bin/python" -c '
+          import sys
+          from importlib.metadata import version
+          from pathlib import Path
+          import cqa_analyzer
+
+          assert version("cqa-analyzer") == "2.27.0"
+          assert cqa_analyzer.__version__ == "2.27.0"
+          assert Path(cqa_analyzer.__file__).resolve().is_relative_to(Path(sys.prefix).resolve())
+          '
+          "$RUNNER_TEMP/sdist-venv/bin/code-quality-analyzer" \
+            "$GITHUB_WORKSPACE" --strict --output-format json --offline --anonymize
+          popd >/dev/null
 
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.12'
           cache: pip
 
-      - name: Install pip-audit
-        run: |
-          python -m pip install --upgrade pip
-          pip install pip-audit==2.7.3
+      - name: Install project and audit tooling
+        run: python -m pip install -e ".[dev]"
 
-      - name: Audit dependencies
+      - name: Audit declared runtime dependencies
         run: pip-audit --requirement requirements.txt --strict
+
+      - name: Audit resolved local environment
+        run: pip-audit --local --strict
 
   self-check:
     # Dogfood: the analyzer rates its own source and gates on the result.
@@ -156,9 +199,11 @@ jobs:
     # regression in the discovery layer cannot pass silently.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.12'
           cache: pip
@@ -168,7 +213,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
 
-      # Current self-rating is 5.1. The threshold sits just below it as a
-      # ratchet — raise it as the codebase improves, never lower it.
+      # The threshold is a ratchet: raise it as the codebase improves,
+      # never lower it to hide a regression.
       - name: Rate this repository
         run: code-quality-analyzer . --fail-under 4.5 --strict -c

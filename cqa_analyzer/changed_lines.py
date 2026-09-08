@@ -5,13 +5,13 @@ from __future__ import annotations
 import bisect
 import json
 import re
-import stat
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 
 from .findings import Finding
+from .safe_io import SafeReadError, read_bounded_text
 
 CHANGED_LINES_SCHEMA_VERSION = "1.0.0"
 MAX_MANIFEST_SIZE = 5 * 1024 * 1024
@@ -85,22 +85,23 @@ class ChangedLineSelection:
 def load_changed_lines(path: Path) -> ChangedLineSelection:
     """Load and strictly validate one bounded changed-lines manifest."""
     try:
-        metadata = path.lstat()
-        if not stat.S_ISREG(metadata.st_mode):
-            raise ChangedLinesError(
-                "Changed-lines manifest must be a regular file."
-            )
-        if metadata.st_size > MAX_MANIFEST_SIZE:
-            raise ChangedLinesError(
-                "Changed-lines manifest exceeds the 5 MB safety limit."
-            )
         payload = json.loads(
-            path.read_text(encoding="utf-8"),
+            read_bounded_text(path, MAX_MANIFEST_SIZE),
             object_pairs_hook=_strict_object,
         )
-    except ChangedLinesError:
-        raise
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+    except SafeReadError as error:
+        if error.reason == "not_regular_file":
+            raise ChangedLinesError(
+                "Changed-lines manifest must be a regular file."
+            ) from error
+        if error.reason == "too_large":
+            raise ChangedLinesError(
+                "Changed-lines manifest exceeds the 5 MB safety limit."
+            ) from error
+        raise ChangedLinesError(
+            "Changed-lines manifest is not readable valid UTF-8 JSON."
+        ) from error
+    except (FileNotFoundError, json.JSONDecodeError) as error:
         raise ChangedLinesError(
             "Changed-lines manifest is not readable valid UTF-8 JSON."
         ) from error

@@ -4,16 +4,17 @@ from pathlib import Path
 
 import pytest
 
-from analyzer.findings import Finding, Location
-from analyzer.plugins import create_default_registry
-from analyzer.protocols import ParsedFile, SignalObservation, SourceFile
-from analyzer.registry import (
+from cqa_analyzer.__main__ import _pattern_payload, _signal_definitions
+from cqa_analyzer.findings import Finding, Location
+from cqa_analyzer.plugins import create_default_registry
+from cqa_analyzer.protocols import ParsedFile, SignalObservation, SourceFile
+from cqa_analyzer.registry import (
     CapabilityNegotiationError,
     PluginRegistrationError,
     PluginRegistry,
 )
-from analyzer.reporters import AnalysisReport
-from analyzer.scanner import CodeScanner
+from cqa_analyzer.reporters import AnalysisReport
+from cqa_analyzer.scanner import CodeScanner
 
 
 class StubAdapter:
@@ -197,6 +198,16 @@ def test_scanner_discovers_registered_extension_without_branching(
     assert [finding.rule_id for finding in scanner.findings] == ["STUB-001"]
     assert dsa == {"stub-pattern": ["src/example.stub"]}
     assert scanner.signal_observations[0].evidence == ("stub:value",)
+    definitions = _signal_definitions(scanner, "architecture.dsa", {})
+    payload = _pattern_payload(
+        dsa,
+        definitions,
+        scanner.dsa_evidence,
+        verbose=True,
+    )
+    assert payload["stub-pattern"]["description"] == (
+        "Synthetic language signal"
+    )
     assert design == {}
 
 
@@ -236,6 +247,13 @@ def test_python_project_providers_are_registered_and_cached(project):
             "provider_id": "python-complexity",
             "capability_version": "1.0.0",
             "enabled_by_default": False,
+        },
+        {
+            "language_id": "python",
+            "capability": "duplication",
+            "provider_id": "python-duplication",
+            "capability_version": "1.0.0",
+            "enabled_by_default": True,
         },
         {
             "language_id": "python",

@@ -91,7 +91,10 @@ class ReportAnonymizer:
             entry = {
                 "files": [self.file(path) for path in files],
                 "file_count": len(files),
-                "description": definitions[name]["description"],
+            "description": definitions.get(name, {}).get(
+                "description",
+                "Plugin-provided architecture signal.",
+            ),
             }
             if verbose:
                 entry["evidence"] = [

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-# Allow `import analyzer` when running pytest from the package root without
+# Allow `import cqa_analyzer` when running pytest from the package root without
 # an editable install.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 

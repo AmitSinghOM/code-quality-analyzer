@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .findings import Finding
+from .safe_io import SafeReadError, read_bounded_text
 
 BASELINE_SCHEMA_VERSION = "1.0.0"
 MAX_BASELINE_SIZE = 5 * 1024 * 1024
@@ -82,12 +83,14 @@ def compare_findings(
 def load_baseline(path: Path) -> set[str]:
     """Load and validate a bounded baseline file."""
     try:
-        if path.stat().st_size > MAX_BASELINE_SIZE:
-            raise BaselineError("Baseline exceeds the 5 MB safety limit.")
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except BaselineError:
-        raise
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        payload = json.loads(read_bounded_text(path, MAX_BASELINE_SIZE))
+    except SafeReadError as error:
+        if error.reason == "too_large":
+            raise BaselineError(
+                "Baseline exceeds the 5 MB safety limit."
+            ) from error
+        raise BaselineError("Baseline is not readable valid JSON.") from error
+    except (FileNotFoundError, json.JSONDecodeError) as error:
         raise BaselineError("Baseline is not readable valid JSON.") from error
 
     if not isinstance(payload, dict):

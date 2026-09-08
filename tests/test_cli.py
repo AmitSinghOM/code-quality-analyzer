@@ -4,7 +4,7 @@ import json
 
 from click.testing import CliRunner
 
-from analyzer.__main__ import (
+from cqa_analyzer.__main__ import (
     EXIT_BELOW_THRESHOLD,
     EXIT_COVERAGE_GAP,
     EXIT_FINDINGS,
@@ -34,6 +34,15 @@ def run(args):
     return CliRunner().invoke(main, args)
 
 
+def test_version_flag_reports_analyzer_version():
+    result = run(["--version"])
+
+    assert result.exit_code == EXIT_OK
+    assert result.output.strip() == (
+        "code-quality-analyzer, version 2.28.0"
+    )
+
+
 def test_json_output_is_valid_and_includes_health(project):
     root = project({"lib.py": RICH_SOURCE})
 
@@ -42,8 +51,8 @@ def test_json_output_is_valid_and_includes_health(project):
 
     assert result.exit_code == EXIT_OK
     assert payload["schema_version"] == "1.10.0"
-    assert payload["analyzer_version"] == "2.26.0"
-    assert payload["ruleset_version"] == "2.12.0"
+    assert payload["analyzer_version"] == "2.28.0"
+    assert payload["ruleset_version"] == "2.13.0"
     assert payload["scoring_policy_version"] == "1.0.0"
     assert len(payload["configuration_fingerprint"]) == 64
     assert payload["language_adapters"] == {
@@ -169,7 +178,7 @@ def test_strict_flags_truncated_scan(project):
 
 
 def test_strict_includes_complexity_health(project, monkeypatch):
-    from analyzer.complexity import ProjectComplexityAnalyzer
+    from cqa_analyzer.complexity import ProjectComplexityAnalyzer
 
     root = project({"lib.py": "def f():\n    return 1\n"})
     monkeypatch.setattr(ProjectComplexityAnalyzer, "MAX_FUNCTIONS_PER_FILE", 0)
@@ -494,7 +503,7 @@ def test_offline_metadata_is_reported(project):
 def test_offline_cli_stops_network_attempt_before_connection(project, monkeypatch):
     import socket
 
-    from analyzer.scanner import CodeScanner
+    from cqa_analyzer.scanner import CodeScanner
 
     root = project({"module.py": "VALUE = 1\n"})
 

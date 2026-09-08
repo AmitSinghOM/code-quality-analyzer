@@ -4,6 +4,32 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 2.28.0 - 2026-09-08
+
+### Added
+
+- `PY-DUP-001` cross-file duplicate function implementation detection: a
+  default-enabled `python-duplication` project provider compares
+  docstring-stripped function bodies, parameter lists, and return annotations
+  by exact AST structure. Renamed and re-decorated copies still report;
+  trivial functions (fewer than three statements or forty AST nodes) and
+  functions nested inside an already-reported duplicate do not. Findings
+  flow through the standard severity policy, baseline, changed-line, SARIF,
+  suppression, and privacy contracts. JSON reports expose aggregate group
+  data under `project_analyses` (`python:duplication`).
+- `--version` flag that prints the analyzer version and exits.
+
+### Changed
+
+- Ruleset version 2.12.0 → 2.13.0 (new rule `PY-DUP-001`).
+- README restructured to lead with the privacy-first data boundary and to
+  pin the published `v2.27.0` pre-commit tag.
+
+## 2.27.0 - 2026-09-01
+
+First public release. Earlier 2.x versions were development-only and were not
+tagged or published.
+
 ### Added
 
 - Python package intelligence and optional complexity project providers
@@ -37,7 +63,12 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ### Changed
 
-- Analyzer version advanced to 2.26.0; report schema advanced to 1.10.0 and ruleset remains 2.12.0
+- Renamed the PyPI distribution to `cqa-analyzer` and the import package to
+  `cqa_analyzer`; the `code-quality-analyzer` CLI name is unchanged.
+- Analyzer version advanced to 2.27.0; report schema remains 1.10.0 and ruleset remains 2.12.0
+- Scanner instances are explicitly single-use to prevent accumulated results.
+- Optional complexity analysis now handles set and generator comprehensions,
+  compares competing space allocations correctly, and requires stronger binary-search evidence.
 - Reports now qualify authority with source-candidate, readable-file, and successful-analysis counts, completeness ratio, and stable reason codes
 - `architecture_signal_score` replaces `rating` as the primary score name; `rating` remains a documented equal-valued 2.x compatibility alias
 - Source candidates with zero successful analyses now exit 3 even without strict mode
@@ -57,6 +88,11 @@ All notable changes are documented in this file. Versions follow semantic versio
 - Big-O output is explicitly experimental
 
 ### Security
+
+- Project metadata, source, configuration, baseline, changed-line, and Go module
+  reads use bounded descriptor-based regular-file checks with symlink rejection.
+- GitHub Actions are pinned to reviewed immutable commit SHAs.
+- Parse caches enforce aggregate entry and byte limits with deterministic pruning.
 
 - Offline mode blocks connection and name-resolution socket entry points
 - Baselines retain stable private identities without exposing them in reports

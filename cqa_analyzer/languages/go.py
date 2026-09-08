@@ -17,6 +17,7 @@ from ..protocols import (
     SourceFile,
 )
 from ..registry import PluginRegistry
+from ..safe_io import SafeReadError, read_bounded_text
 
 GO_ADAPTER_VERSION = "1.0.0"
 GO_CACHE_CODEC_VERSION = "1.0.0"
@@ -445,14 +446,14 @@ def _read_module_path(
 ) -> tuple[str | None, bool]:
     module_file = root / "go.mod"
     try:
-        resolved = module_file.resolve(strict=True)
-        resolved.relative_to(root.resolve())
-        if not resolved.is_file() or resolved.stat().st_size > max_file_size:
-            return None, True
-        content = resolved.read_text(encoding="utf-8")
+        content = read_bounded_text(
+            module_file,
+            max_file_size,
+            root=root,
+        )
     except FileNotFoundError:
         return None, False
-    except (OSError, UnicodeError, ValueError):
+    except (SafeReadError, ValueError):
         return None, True
     match = _MODULE.search(content)
     return (match.group(1), False) if match else (None, True)

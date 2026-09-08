@@ -100,6 +100,17 @@ _RULES = (
         "Use a context manager or guarantee cleanup with try/finally.",
     ),
     _rule(
+        "PY-DUP-001",
+        "duplicate-function-implementation",
+        "Duplicate function implementation",
+        "A significant function body is structurally identical to another "
+        "function in the project.",
+        "duplication",
+        "warning",
+        "Extract the shared implementation into one function and call it "
+        "from each location.",
+    ),
+    _rule(
         "PY-MAINT-001",
         "high-cyclomatic-complexity",
         "High cyclomatic complexity",
