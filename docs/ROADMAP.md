@@ -40,7 +40,7 @@ that have none to give.
 Small, self-contained, and honest; ships independently of everything
 below.
 
-## 2. Go architecture signals
+## 2. Go architecture signals (✅ shipped in 2.29.0)
 
 Goal: Go projects earn a real architecture signal score through the same
 `SignalProvider` contract Python uses, with Go-idiom pattern definitions.
@@ -56,7 +56,12 @@ Prerequisites in the Go adapter — **both complete as of 2.29.0**:
   approximate; patterns must therefore keep the same `min_signals`
   corroboration discipline as Python.
 
-Remaining work: the Go pattern definitions and a Go `SignalProvider`.
+Remaining work: none — `go_patterns.py` and the `go-architecture-signals`
+provider shipped in 2.29.0. Pattern IDs reuse the shared scoring catalog
+(regression-locked in tests), scores aggregate across languages, and the
+acceptance criterion was met live: HUMM's Go backend moved from a 1.0
+floor to 6.4 with reviewable `-v` evidence and no literal/comment false
+positives on spot-check.
 
 Pattern set (initial, subject to the same strictness bar as 2.x Python):
 

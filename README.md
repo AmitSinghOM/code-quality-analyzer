@@ -41,8 +41,8 @@ See [`docs/PRIVACY.md`](docs/PRIVACY.md) for the exact data boundary.
   locations — including cross-file **duplicate function implementations**
   (`PY-DUP-001`) detected by exact AST structure, so renamed copies still
   report and docstring changes cannot hide one
-- **Data Structures & Algorithms (DSA)** patterns in Python
-- **System Design** principles implemented in Python
+- **Data Structures & Algorithms (DSA)** patterns in Python and Go
+- **System Design** principles implemented in Python and Go
 - A compatibility **architecture signal score from 1-10**
 
 Reports render as text, versioned JSON, or SARIF 2.1.0, and gate CI through
@@ -80,6 +80,7 @@ code-quality-analyzer/
 │   ├── signals.py       # Per-file signal extraction + pattern matching
 │   ├── python_rules.py  # Source-located Python correctness rules
 │   ├── patterns.py      # DSA & System Design pattern definitions
+│   ├── go_patterns.py   # Go-idiom signal definitions for the shared catalog
 │   ├── package_intelligence.py # Metadata, modules, imports, cycles
 │   ├── protocols.py     # Source, parse, rule, provider, and reporter contracts
 │   ├── registry.py      # Versioned plugin and capability negotiation registry
@@ -604,20 +605,25 @@ The confidence score indicates how reliable the complexity estimate is.
 Python receives actionable rules, package intelligence, architecture signals,
 and experimental complexity analysis. The Go pilot discovers `.go` files,
 preserves import aliases, emits `GO-COR-001` for discarded errors from a
-narrow set of imported standard-library calls, and passively aggregates
+narrow set of imported standard-library calls, extracts Go-idiom DSA and
+design signals from blanked source (`container/heap`, `sort.Search`,
+corroborated BFS/DFS, `net/http`/gRPC API design, `database/sql`/GORM,
+message queues, `sync.Once` singletons, and more), and passively aggregates
 multi-file packages plus local module import edges from `go.mod`. It never
-invokes Go tooling. Python and Go findings share the same report, baseline,
+invokes Go tooling. Go patterns reuse the shared scoring catalog IDs, so
+mixed projects aggregate signals across both languages under one score.
+Python and Go findings share the same report, baseline,
 privacy, offline, and CI-gate contracts. JSON `project_analyses` entries expose
 provider results normally and health-only projections under `--anonymize`.
 See [`docs/RULES.md`](docs/RULES.md).
 
-The architecture signal score is computed from Python signals only. Projects
-with no successfully analyzed Python source report the score as **not
-applicable** — `null` in JSON with an explicit `architecture_signal_scope`
-field — rather than a misleading floor value, and `--fail-under` exits with
-code 5 instead of silently passing or failing.
-[`docs/ROADMAP.md`](docs/ROADMAP.md) tracks what comes next: Go architecture
-signals and a TypeScript/JavaScript pilot.
+The architecture signal score covers Python and Go signals. A project where
+no signal-capable source was successfully analyzed reports the score as
+**not applicable** — `null` in JSON with an explicit
+`architecture_signal_scope` field — rather than a misleading floor value,
+and `--fail-under` exits with code 5 instead of silently passing or failing.
+[`docs/ROADMAP.md`](docs/ROADMAP.md) tracks what comes next: a
+TypeScript/JavaScript pilot and decision-gated Go duplication depth.
 
 ## Development
 

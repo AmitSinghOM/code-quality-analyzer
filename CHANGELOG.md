@@ -18,6 +18,14 @@ All notable changes are documented in this file. Versions follow semantic versio
   call sites from blanked source, the prerequisite for Go architecture
   signals. Go adapter and cache codec 1.0.0 → 1.1.0 (old cache entries
   miss safely).
+- Go architecture signals: a `go-architecture-signals` provider matches
+  Go-idiom DSA and design pattern definitions (`container/heap`,
+  `sort.Search`, corroborated BFS/DFS, `net/http`/gRPC API design,
+  `database/sql`/GORM, message queues, `sync.Once` singletons, JWT/crypto
+  auth, and more) against blanked source through the shared
+  language-neutral matcher. Go pattern IDs reuse the shared scoring
+  catalog, so Go and mixed projects now earn real architecture signal
+  scores; Go-only projects are no longer reported as not applicable.
 
 ### Changed
 

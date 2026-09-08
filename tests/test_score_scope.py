@@ -12,6 +12,12 @@ from cqa_analyzer.__main__ import (
     EXIT_SCORE_NOT_APPLICABLE,
     main,
 )
+from cqa_analyzer.languages.go import (
+    GoLanguageAdapter,
+    GoRulePack,
+)
+from cqa_analyzer.registry import PluginRegistry
+from cqa_analyzer.scanner import CodeScanner
 
 _GO_SOURCE = (
     "package main\n"
@@ -30,38 +36,52 @@ def run(args):
     return CliRunner().invoke(main, args)
 
 
-def test_go_only_project_reports_score_not_applicable(project):
+def test_go_only_project_score_is_now_applicable(project):
     root = project({"main.go": _GO_SOURCE})
 
     result = run([str(root), "-f", "json"])
     payload = json.loads(result.output)
 
     assert result.exit_code == EXIT_OK
-    assert payload["architecture_signal_score"] is None
-    assert payload["rating"] is None
-    assert payload["architecture_signal_label"] == "Not applicable"
+    assert isinstance(payload["architecture_signal_score"], float)
     assert payload["architecture_signal_scope"] == {
-        "languages": ["python"],
-        "applicable": False,
+        "languages": ["go", "python"],
+        "applicable": True,
     }
 
 
-def test_go_only_text_report_shows_not_applicable(project):
+def test_scope_is_not_applicable_without_signal_providers(project):
     root = project({"main.go": _GO_SOURCE})
+    registry = PluginRegistry()
+    registry.register_language(GoLanguageAdapter())
+    registry.register_rule_pack(GoRulePack())
+    scanner = CodeScanner(root, registry=registry)
 
-    result = run([str(root)])
+    scanner.scan()
+    scope = scanner.architecture_signal_scope()
 
-    assert result.exit_code == EXIT_OK
-    assert "Not applicable" in result.output
-    assert "/10" not in result.output
+    assert scope == {"languages": [], "applicable": False}
 
 
-def test_go_only_fail_under_exits_distinctly(project):
+def test_fail_under_on_not_applicable_score_exits_distinctly(project):
+    from cqa_analyzer.__main__ import _exit_code
+
     root = project({"main.go": _GO_SOURCE})
+    registry = PluginRegistry()
+    registry.register_language(GoLanguageAdapter())
+    registry.register_rule_pack(GoRulePack())
+    scanner = CodeScanner(root, registry=registry)
+    scanner.scan()
 
-    result = run([str(root), "--fail-under", "5"])
+    exit_code = _exit_code(
+        scanner,
+        1.0,
+        scanner.architecture_signal_scope(),
+        fail_under=5.0,
+        strict=False,
+    )
 
-    assert result.exit_code == EXIT_SCORE_NOT_APPLICABLE
+    assert exit_code == EXIT_SCORE_NOT_APPLICABLE
 
 
 def test_python_project_score_remains_applicable(project):
@@ -73,7 +93,7 @@ def test_python_project_score_remains_applicable(project):
     assert result.exit_code == EXIT_OK
     assert isinstance(payload["architecture_signal_score"], float)
     assert payload["architecture_signal_scope"] == {
-        "languages": ["python"],
+        "languages": ["go", "python"],
         "applicable": True,
     }
 

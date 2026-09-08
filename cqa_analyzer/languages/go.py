@@ -8,16 +8,19 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..findings import Finding, Location
+from ..go_patterns import GO_DESIGN_PATTERNS, GO_DSA_PATTERNS
 from ..protocols import (
     DEFAULT_CAPABILITY_VERSION,
     PLUGIN_API_VERSION,
     ParsedFile,
     ProjectContext,
     ProviderResult,
+    SignalObservation,
     SourceFile,
 )
 from ..registry import PluginRegistry
 from ..safe_io import SafeReadError, read_bounded_text
+from ..signals import FileSignals, pattern_is_present
 
 GO_ADAPTER_VERSION = "1.1.0"
 GO_CACHE_CODEC_VERSION = "1.1.0"
@@ -451,10 +454,52 @@ def _decode_go_import(value: object) -> GoImport:
     )
 
 
+class GoArchitectureSignalProvider:
+    """Extract Go DSA and design signals from blanked adapter facts.
+
+    Reuses the language-neutral pattern matcher over a signal view built
+    from the Go adapter's blanked code text, bounded identifiers, and
+    import paths, so literals are never evidence and generic patterns
+    keep the same corroboration discipline as Python.
+    """
+
+    provider_id = "go-architecture-signals"
+    language_id = "go"
+    capability_version = DEFAULT_CAPABILITY_VERSION
+    plugin_api_version = PLUGIN_API_VERSION
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[SignalObservation]:
+        facts = parsed.facts
+        if not isinstance(facts, GoFacts):
+            raise TypeError("Go signal provider requires GoFacts")
+        signals = FileSignals(
+            path=parsed.source.path,
+            line_count=parsed.line_count,
+            code_text=facts.code_text.lower(),
+            identifiers={name.lower() for name in facts.identifiers},
+            imports={imported.path.lower() for imported in facts.imports},
+        )
+        for category, definitions in (
+            ("architecture.dsa", GO_DSA_PATTERNS),
+            ("architecture.design", GO_DESIGN_PATTERNS),
+        ):
+            for signal_id, definition in definitions.items():
+                present, matched = pattern_is_present(signals, definition)
+                if present:
+                    yield SignalObservation(
+                        category=category,
+                        signal_id=signal_id,
+                        description=definition["description"],
+                        path=parsed.source.display_path,
+                        evidence=tuple(matched),
+                    )
+
+
 def register_go_plugins(registry: PluginRegistry) -> PluginRegistry:
     """Register the built-in Go pilot adapter and rules."""
     registry.register_language(GoLanguageAdapter())
     registry.register_rule_pack(GoRulePack())
+    registry.register_signal_provider(GoArchitectureSignalProvider())
     registry.register_project_provider(GoPackageGraphProvider())
     return registry
 
