@@ -23,14 +23,18 @@ from collections.abc import Iterable, Mapping
 
 from ..findings import Finding, Location
 from ..protocols import (
+    DEFAULT_CAPABILITY_VERSION,
     PLUGIN_API_VERSION,
     ParsedFile,
     ProjectContext,
     ProviderResult,
+    SignalObservation,
     SourceFile,
 )
 from ..registry import PluginRegistry
 from ..safe_io import SafeReadError, read_bounded_text
+from ..signals import FileSignals, pattern_is_present
+from ..ts_patterns import TS_DESIGN_PATTERNS, TS_DSA_PATTERNS
 
 TS_ADAPTER_VERSION = "1.0.0"
 TS_CACHE_CODEC_VERSION = "1.0.0"
@@ -356,6 +360,47 @@ class TypeScriptRulePack:
         return findings
 
 
+class TsArchitectureSignalProvider:
+    """Extract TS/JS DSA and design signals from blanked adapter facts.
+
+    Reuses the language-neutral pattern matcher over a signal view built
+    from blanked code text, bounded identifiers, and import specifiers,
+    so literals are never evidence and generic patterns keep the same
+    corroboration discipline as Python and Go.
+    """
+
+    provider_id = "typescript-architecture-signals"
+    language_id = "typescript"
+    capability_version = DEFAULT_CAPABILITY_VERSION
+    plugin_api_version = PLUGIN_API_VERSION
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[SignalObservation]:
+        facts = parsed.facts
+        if not isinstance(facts, TsFacts):
+            raise TypeError("TypeScript signal provider requires TsFacts")
+        signals = FileSignals(
+            path=parsed.source.path,
+            line_count=parsed.line_count,
+            code_text=facts.code_text.lower(),
+            identifiers={name.lower() for name in facts.identifiers},
+            imports={specifier.lower() for specifier in facts.imports},
+        )
+        for category, definitions in (
+            ("architecture.dsa", TS_DSA_PATTERNS),
+            ("architecture.design", TS_DESIGN_PATTERNS),
+        ):
+            for signal_id, definition in definitions.items():
+                present, matched = pattern_is_present(signals, definition)
+                if present:
+                    yield SignalObservation(
+                        category=category,
+                        signal_id=signal_id,
+                        description=definition["description"],
+                        path=parsed.source.display_path,
+                        evidence=tuple(matched),
+                    )
+
+
 class TsPackageProvider:
     """Passive package.json metadata and dependency-drift analysis."""
 
@@ -541,5 +586,6 @@ def register_typescript_plugins(registry: PluginRegistry) -> PluginRegistry:
     """Register the built-in TypeScript/JavaScript pilot plugins."""
     registry.register_language(TypeScriptLanguageAdapter())
     registry.register_rule_pack(TypeScriptRulePack())
+    registry.register_signal_provider(TsArchitectureSignalProvider())
     registry.register_project_provider(TsPackageProvider())
     return registry

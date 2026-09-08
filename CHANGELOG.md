@@ -34,8 +34,14 @@ All notable changes are documented in this file. Versions follow semantic versio
   imported-but-undeclared dependencies (`TS-PKG-001`) and invalid
   manifests (`TS-PKG-002`). Workspace manifests skip drift analysis;
   node builtins, path aliases, and non-npm-name specifiers are never
-  flagged. TS/JS has no architecture signals yet, so TS/JS-only
-  projects report the score as not applicable. Ruleset 2.13.0 → 2.14.0.
+  flagged. TS/JS architecture signals match ecosystem idioms
+  (`new Map`/`new Set`, memoization, express/fastify/NestJS/tRPC API
+  design, Prisma/TypeORM data access, redis/react-query caching,
+  kafkajs/bullmq queues, jsonwebtoken/next-auth authentication,
+  vitest/jest/playwright testing) through the shared scoring catalog,
+  so TS/JS-only projects earn real scores and full-stack projects
+  aggregate one score across Python, Go, and TS/JS.
+  Ruleset 2.13.0 → 2.14.0.
 - Frontend build-output directories (`.next`, `.nuxt`, `.turbo`,
   `.svelte-kit`, `out`, `coverage`, `bower_components`, `.yarn`,
   `.pnpm-store`) are now excluded from discovery.

@@ -42,8 +42,10 @@ See [`docs/PRIVACY.md`](docs/PRIVACY.md) for the exact data boundary.
   locations — including cross-file **duplicate function implementations**
   (`PY-DUP-001`) detected by exact AST structure, so renamed copies still
   report and docstring changes cannot hide one
-- **Data Structures & Algorithms (DSA)** patterns in Python and Go
-- **System Design** principles implemented in Python and Go
+- **Data Structures & Algorithms (DSA)** patterns in Python, Go, and
+  TypeScript/JavaScript
+- **System Design** principles implemented in Python, Go, and
+  TypeScript/JavaScript
 - A compatibility **architecture signal score from 1-10**
 
 Reports render as text, versioned JSON, or SARIF 2.1.0, and gate CI through
@@ -628,9 +630,13 @@ dependencies (`TS-PKG-001`) and invalid manifests (`TS-PKG-002`).
 Workspace (monorepo) manifests skip drift analysis, node builtins and
 path aliases are never flagged, and generated output directories
 (`.next`, `dist`, `build`, `coverage`, and friends) are excluded from
-discovery. It never invokes `node`, `tsc`, or a package manager, and it
-has no architecture signals yet — a TS/JS-only project reports its score
-as not applicable.
+discovery. It never invokes `node`, `tsc`, or a package manager. TS/JS
+architecture signals match ecosystem idioms (`new Map`/`new Set`,
+memoization, express/fastify/NestJS/tRPC API design, Prisma/TypeORM
+data access, redis/react-query caching, kafkajs/bullmq queues,
+jsonwebtoken/next-auth authentication, vitest/jest/playwright testing)
+through the same shared scoring catalog, so full-stack projects
+aggregate one score across all three languages.
 
 The architecture signal score covers Python and Go signals. A project where
 no signal-capable source was successfully analyzed reports the score as

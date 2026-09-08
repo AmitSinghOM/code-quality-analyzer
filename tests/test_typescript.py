@@ -238,9 +238,10 @@ def test_directive_strings_and_artifacts_are_not_packages(project):
     assert package["undeclared_imports"] == ["server-only"]
 
 
-def test_ts_only_project_reports_score_not_applicable(project):
+def test_ts_only_project_now_earns_a_real_score(project):
     root = project({
         "src/app.ts": (
+            "import express from 'express';\n"
             "export function run() {\n"
             "  try {\n"
             "    work();\n"
@@ -253,12 +254,13 @@ def test_ts_only_project_reports_score_not_applicable(project):
     payload = json.loads(result.output)
 
     assert result.exit_code == 0
-    assert payload["architecture_signal_score"] is None
+    assert isinstance(payload["architecture_signal_score"], float)
     assert payload["architecture_signal_scope"] == {
-        "languages": ["go", "python"],
-        "applicable": False,
+        "languages": ["go", "python", "typescript"],
+        "applicable": True,
     }
     assert [f["rule_id"] for f in payload["findings"]] == ["TS-COR-001"]
+    assert "api_design" in payload["design_patterns"]
 
 
 def test_javascript_files_are_analyzed_too(project):

@@ -117,9 +117,12 @@ manifests skipping drift analysis. Generated output directories
 
 Remaining for the pilot, in order:
 
-- TS/JS architecture signals through the shared catalog (React/Express/
-  Next.js design idioms), after which TS/JS-only projects earn real
-  scores; until then they correctly report the score as not applicable.
+- ✅ TS/JS architecture signals shipped in 2.29.0 through the shared
+  catalog (`ts_patterns.py` + `typescript-architecture-signals`
+  provider). TS/JS-only projects now earn real scores; HUMM's frontend
+  moved from not-applicable to 3.8 and the full platform aggregates
+  Go + TS to 6.8. A shared UI-component pattern ID remains a
+  cross-language scoring-policy decision.
 - Regex-literal lexing hardening in the blanker (a regex containing
   quote or comment delimiters can currently over-blank its line).
 - `tsconfig.json` path-alias awareness for drift analysis.
