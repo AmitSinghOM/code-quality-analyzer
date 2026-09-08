@@ -34,6 +34,15 @@ def run(args):
     return CliRunner().invoke(main, args)
 
 
+def test_version_flag_reports_analyzer_version():
+    result = run(["--version"])
+
+    assert result.exit_code == EXIT_OK
+    assert result.output.strip() == (
+        "code-quality-analyzer, version 2.28.0"
+    )
+
+
 def test_json_output_is_valid_and_includes_health(project):
     root = project({"lib.py": RICH_SOURCE})
 

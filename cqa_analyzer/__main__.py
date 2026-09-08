@@ -44,6 +44,7 @@ EXIT_FINDINGS = 4
 
 
 @click.command()
+@click.version_option(version=__version__, prog_name="code-quality-analyzer")
 @click.argument(
     "project_path",
     type=click.Path(

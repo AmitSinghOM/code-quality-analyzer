@@ -246,6 +246,7 @@ remaining disclosure considerations.
 
 | Option | Default | Purpose |
 |--------|---------|---------|
+| `--version` | – | Print the analyzer version and exit |
 | `-v, --verbose` | off | Include matched files and evidence; JSON omits evidence unless enabled |
 | `-f, --output-format` | `text` | `text`, versioned `json`, or SARIF 2.1.0 |
 | `-c, --complexity` | off | Add experimental time/space complexity estimates |

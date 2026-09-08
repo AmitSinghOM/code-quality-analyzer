@@ -17,6 +17,7 @@ All notable changes are documented in this file. Versions follow semantic versio
   flow through the standard severity policy, baseline, changed-line, SARIF,
   suppression, and privacy contracts. JSON reports expose aggregate group
   data under `project_analyses` (`python:duplication`).
+- `--version` flag that prints the analyzer version and exits.
 
 ### Changed
 
