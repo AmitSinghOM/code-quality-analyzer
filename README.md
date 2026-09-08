@@ -3,7 +3,8 @@
 **Prove the health of a codebase without a single byte leaving the machine.**
 
 Code Quality Analyzer is a privacy-first static analysis tool for Python
-packages (with a bounded Go pilot) built for environments where source code
+packages, with bounded Go and TypeScript/JavaScript pilots, built for
+environments where source code
 cannot leave the trusted development boundary: regulated industries,
 air-gapped networks, client codebases under NDA, and anyone who refuses to
 ship their source to a SaaS dashboard to learn whether it is healthy.
@@ -616,6 +617,20 @@ Python and Go findings share the same report, baseline,
 privacy, offline, and CI-gate contracts. JSON `project_analyses` entries expose
 provider results normally and health-only projections under `--anonymize`.
 See [`docs/RULES.md`](docs/RULES.md).
+
+The TypeScript/JavaScript pilot covers `.ts`, `.tsx`, `.js`, `.jsx`,
+`.mjs`, and `.cjs` with the same bounded, no-toolchain discipline: it
+blanks comments, strings, and template literals (interpolations included,
+so literals are never evidence), extracts bounded identifiers and import
+specifiers by regex, emits `TS-COR-001` for empty catch blocks, and
+passively reads the root `package.json` to flag imported-but-undeclared
+dependencies (`TS-PKG-001`) and invalid manifests (`TS-PKG-002`).
+Workspace (monorepo) manifests skip drift analysis, node builtins and
+path aliases are never flagged, and generated output directories
+(`.next`, `dist`, `build`, `coverage`, and friends) are excluded from
+discovery. It never invokes `node`, `tsc`, or a package manager, and it
+has no architecture signals yet — a TS/JS-only project reports its score
+as not applicable.
 
 The architecture signal score covers Python and Go signals. A project where
 no signal-capable source was successfully analyzed reports the score as

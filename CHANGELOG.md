@@ -26,6 +26,19 @@ All notable changes are documented in this file. Versions follow semantic versio
   language-neutral matcher. Go pattern IDs reuse the shared scoring
   catalog, so Go and mixed projects now earn real architecture signal
   scores; Go-only projects are no longer reported as not applicable.
+- TypeScript/JavaScript pilot: a bounded no-toolchain adapter for
+  `.ts`/`.tsx`/`.js`/`.jsx`/`.mjs`/`.cjs` blanks comments, strings, and
+  template literals (interpolations included), extracts bounded
+  identifiers and import specifiers, emits `TS-COR-001` for empty catch
+  blocks, and passively reads the root `package.json` to flag
+  imported-but-undeclared dependencies (`TS-PKG-001`) and invalid
+  manifests (`TS-PKG-002`). Workspace manifests skip drift analysis;
+  node builtins, path aliases, and non-npm-name specifiers are never
+  flagged. TS/JS has no architecture signals yet, so TS/JS-only
+  projects report the score as not applicable. Ruleset 2.13.0 → 2.14.0.
+- Frontend build-output directories (`.next`, `.nuxt`, `.turbo`,
+  `.svelte-kit`, `out`, `coverage`, `bower_components`, `.yarn`,
+  `.pnpm-store`) are now excluded from discovery.
 
 ### Changed
 

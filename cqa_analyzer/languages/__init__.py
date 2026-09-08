@@ -16,6 +16,12 @@ from .python import (
     PythonRulePack,
     register_python_plugins,
 )
+from .typescript import (
+    TsPackageProvider,
+    TypeScriptLanguageAdapter,
+    TypeScriptRulePack,
+    register_typescript_plugins,
+)
 
 __all__ = [
     "GoImport",
@@ -28,6 +34,10 @@ __all__ = [
     "PythonLanguageAdapter",
     "PythonPackageProvider",
     "PythonRulePack",
+    "TsPackageProvider",
+    "TypeScriptLanguageAdapter",
+    "TypeScriptRulePack",
     "register_go_plugins",
     "register_python_plugins",
+    "register_typescript_plugins",
 ]

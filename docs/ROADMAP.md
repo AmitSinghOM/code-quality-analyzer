@@ -103,21 +103,26 @@ regex facts. The decision point is the parser dependency:
 No commitment until Option A's dependency weight is evaluated; item 2
 does not depend on this.
 
-## 4. TypeScript/JavaScript pilot (next language)
+## 4. TypeScript/JavaScript pilot (✅ entry shipped in 2.29.0)
 
-Motivated by full-stack projects whose frontends are currently
-invisible to analysis. Same shape as the Go pilot's entry:
+The pilot entry landed with the same shape as Go's: a bounded
+no-toolchain adapter for `.ts`/`.tsx`/`.js`/`.jsx`/`.mjs`/`.cjs` with
+comment/string/template-literal blanking (interpolations conservatively
+included), bounded identifier and import-specifier extraction, the
+`TS-COR-001` empty-catch launch rule, and passive root `package.json`
+intelligence flagging imported-but-undeclared dependencies
+(`TS-PKG-001`) and invalid manifests (`TS-PKG-002`), with workspace
+manifests skipping drift analysis. Generated output directories
+(`.next`, `coverage`, and friends) are excluded from discovery.
 
-- `.ts`/`.tsx`/`.js` discovery with the standard safety bounds
-  (`node_modules` already excluded).
-- Regex-facts adapter: module imports/exports, declared identifiers
-  from blanked source.
-- One narrow launch rule mirroring `GO-COR-001` in spirit (for example,
-  discarded promise results from a small allowlist of known-async
-  standard APIs), plus package intelligence from `package.json`
-  (declared vs. imported dependency drift).
-- Architecture signals follow only after the same blanking and
-  corroboration bar as Go (item 2), never before.
+Remaining for the pilot, in order:
+
+- TS/JS architecture signals through the shared catalog (React/Express/
+  Next.js design idioms), after which TS/JS-only projects earn real
+  scores; until then they correctly report the score as not applicable.
+- Regex-literal lexing hardening in the blanker (a regex containing
+  quote or comment delimiters can currently over-blank its line).
+- `tsconfig.json` path-alias awareness for drift analysis.
 
 ## 5. Explicit non-goals
 

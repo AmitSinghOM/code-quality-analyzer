@@ -28,6 +28,8 @@ SKIP_DIRS = frozenset({
     '__pycache__', '.mypy_cache', '.pytest_cache', '.ruff_cache', '.tox',
     '.venv', 'venv', 'env', '.eggs', 'site-packages', 'node_modules',
     'dist', 'build', '.idea', '.vscode',
+    '.next', '.nuxt', '.turbo', '.svelte-kit', 'out', 'coverage',
+    'bower_components', '.yarn', '.pnpm-store',
 })
 
 # 2 MB. Anything bigger is generated, vendored, or a data blob.
