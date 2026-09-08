@@ -13,6 +13,11 @@ All notable changes are documented in this file. Versions follow semantic versio
   this analysis.
 - Exit code 5: `--fail-under` on a not-applicable score exits distinctly
   instead of silently passing or failing.
+- Bounded Go identifier extraction: `GoFacts.identifiers` captures
+  declared func/type/var/const and short-declaration names plus selector
+  call sites from blanked source, the prerequisite for Go architecture
+  signals. Go adapter and cache codec 1.0.0 → 1.1.0 (old cache entries
+  miss safely).
 
 ### Changed
 

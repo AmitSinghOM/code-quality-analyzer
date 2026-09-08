@@ -45,15 +45,18 @@ below.
 Goal: Go projects earn a real architecture signal score through the same
 `SignalProvider` contract Python uses, with Go-idiom pattern definitions.
 
-Prerequisites in the Go adapter (today it extracts only package name and
-imports by regex):
+Prerequisites in the Go adapter — **both complete as of 2.29.0**:
 
-- Comment and string-literal blanking for Go syntax, mirroring the
-  Python guarantee that literals and comments are not evidence.
-- Bounded identifier extraction (declared names, called selectors) from
-  blanked source. This stays regex-based and deliberately approximate;
-  patterns must therefore keep the same `min_signals` corroboration
-  discipline as Python.
+- ✅ Comment and string-literal blanking for Go syntax (shipped earlier
+  than this roadmap assumed: `GoFacts.code_text` has always been blanked,
+  and `GO-COR-001` already matches against it).
+- ✅ Bounded identifier extraction (declared func/type/var/const/short
+  declarations plus selector call sites) from blanked source, shipped in
+  2.29.0 as `GoFacts.identifiers`. It is regex-based and deliberately
+  approximate; patterns must therefore keep the same `min_signals`
+  corroboration discipline as Python.
+
+Remaining work: the Go pattern definitions and a Go `SignalProvider`.
 
 Pattern set (initial, subject to the same strictness bar as 2.x Python):
 
