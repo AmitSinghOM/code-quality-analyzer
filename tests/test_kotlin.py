@@ -100,6 +100,26 @@ def test_raw_string_with_trailing_quote_content_terminates_correctly():
     assert "run" in blanked
 
 
+def test_backtick_identifiers_with_apostrophes_are_code():
+    # javalin: fun `can't set duplicate cookies`() left 15 test files
+    # incomplete because the apostrophe opened a char literal.
+    source = "@Test\nfun `headers aren't set when origin doesn't match`() = run {\n  verify()\n}\n"
+    blanked, complete = _strip_kotlin_comments_and_strings(source)
+    assert complete
+    assert "verify" in blanked
+    assert len(blanked.splitlines()) == len(source.splitlines())
+
+
+def test_multi_dollar_interpolation_treats_single_dollar_as_literal():
+    # Kotlin 2.2 `$$"""..."""`: `${` is text, `$${` is the template. Found
+    # live in ktor's YamlConfigTest.
+    source = 'val c = $$"""\n  ktor: ${unclosed\n  port: $${port}\n"""\nrun()\n'
+    blanked, complete = _strip_kotlin_comments_and_strings(source)
+    assert complete
+    assert "unclosed" not in blanked and "port" not in blanked
+    assert "run" in blanked
+
+
 def test_metadata_pass_preserves_content_with_same_structure():
     source = 'val s = "x ${f("}")} y"\nimport org.koin.core.Koin\n'
     kept, complete = _strip_kotlin_comments_and_strings(source, blank_strings=False)

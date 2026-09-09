@@ -92,6 +92,21 @@ TS_DSA_PATTERNS = {
         "min_signals": 1,
         "description": "Trie / prefix tree structures",
     },
+    "segment_tree": {
+        "identifiers": ["segmenttree", "segtree"],
+        "min_signals": 1,
+        "description": "Segment tree for range queries",
+    },
+    "fenwick_tree": {
+        "identifiers": ["fenwick", "fenwicktree", "binaryindexedtree"],
+        "min_signals": 1,
+        "description": "Fenwick tree (Binary Indexed Tree)",
+    },
+    "minimum_spanning_tree": {
+        "identifiers": ["kruskal", "prim", "spanningtree", "minimumspanningtree"],
+        "min_signals": 1,
+        "description": "Minimum spanning tree algorithms",
+    },
     "union_find": {
         "identifiers": [
             "unionfind", "union_find", "disjointset", "disjoint_set",
