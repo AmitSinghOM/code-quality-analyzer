@@ -42,6 +42,12 @@ All notable changes are documented in this file. Versions follow semantic versio
   so TS/JS-only projects earn real scores and full-stack projects
   aggregate one score across Python, Go, and TS/JS.
   Ruleset 2.13.0 → 2.14.0.
+- Nested `package.json` discovery: dependency-drift analysis covers
+  manifests in subdirectories (bounded), associating each TS/JS file
+  with its nearest enclosing manifest, unioning declared dependencies
+  up the ancestor chain, skipping workspace or unreadable chains, and
+  locating findings at each manifest's project-relative path.
+  TypeScript package provider capability 1.0.0 → 1.1.0.
 - Frontend build-output directories (`.next`, `.nuxt`, `.turbo`,
   `.svelte-kit`, `out`, `coverage`, `bower_components`, `.yarn`,
   `.pnpm-store`) are now excluded from discovery.

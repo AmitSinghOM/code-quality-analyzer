@@ -358,12 +358,17 @@ are never evidence. Optional catch binding (`catch {}`) is covered.
 
 A bare module specifier is imported (via `import`, `export ... from`,
 `require(...)`, or dynamic `import(...)`) but not declared in any
-dependency section of the root `package.json`. Relative paths, node
+dependency section of its governing `package.json`. Manifests are
+discovered at the scan root and in every non-excluded directory that
+encloses an analyzed TS/JS file; each file is checked against its
+nearest enclosing manifest with declared dependencies unioned up the
+ancestor chain, matching Node module resolution. Relative paths, node
 builtins (including the `node:` prefix), path aliases (`@/`, `~`, `#`),
 and specifiers that are not valid npm package names (directive strings,
-minifier artifacts) are never flagged. Manifests declaring `workspaces`
-skip drift analysis entirely, since monorepo dependencies resolve through
-hoisting.
+minifier artifacts) are never flagged. Files under a manifest chain
+that declares `workspaces` — or contains an unreadable manifest — skip
+drift analysis entirely. Findings locate at the governing manifest's
+project-relative path.
 
 ## TS-PKG-002: Invalid package.json
 

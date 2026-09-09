@@ -43,6 +43,7 @@ _MAX_CACHED_TS_STRING = 4 * 1024 * 1024
 _MAX_TS_IDENTIFIERS = 20_000
 _MAX_TS_IMPORTS = 20_000
 _MAX_PACKAGE_JSON_BYTES = 1024 * 1024
+_MAX_MANIFESTS = 100
 
 _FROM_IMPORT = re.compile(r"""\bfrom\s+['"]([^'"\n]+)['"]""")
 _SIDE_EFFECT_IMPORT = re.compile(r"""(?m)^\s*import\s+['"]([^'"\n]+)['"]""")
@@ -402,69 +403,208 @@ class TsArchitectureSignalProvider:
 
 
 class TsPackageProvider:
-    """Passive package.json metadata and dependency-drift analysis."""
+    """Passive package.json metadata and dependency-drift analysis.
+
+    Manifests are discovered at the scan root and in every non-excluded
+    directory that encloses an analyzed TS/JS file (bounded). Each file
+    is associated with its nearest enclosing manifest; declared
+    dependencies are the union of that manifest and its ancestors,
+    because Node module resolution walks up the directory tree. Files
+    under a manifest chain that declares ``workspaces`` — or contains an
+    unreadable manifest — skip drift analysis rather than guess.
+    """
 
     provider_id = "typescript-package"
     language_id = "typescript"
     capability = "package"
-    capability_version = "1.0.0"
+    capability_version = "1.1.0"
     plugin_api_version = PLUGIN_API_VERSION
     enabled_by_default = True
 
     def analyze(self, project: ProjectContext) -> ProviderResult:
-        manifest_path = project.root / "package.json"
-        payload: dict = {
-            "manifest_present": manifest_path.is_file(),
-            "name": None,
-            "declared_dependencies": [],
-            "workspaces": False,
-            "undeclared_imports": [],
+        manifest_dirs, truncated = _manifest_directories(
+            project.root,
+            project.parsed_files,
+        )
+        manifests = {
+            directory: _load_manifest(project.root, directory)
+            for directory in manifest_dirs
         }
         findings: list[Finding] = []
         errors = 0
+        for directory in manifest_dirs:
+            if manifests[directory]["invalid"]:
+                errors += 1
+                findings.append(_manifest_finding(
+                    _manifest_report_path(directory, project.redact_paths),
+                    _manifest_identity_path(directory),
+                ))
 
-        manifest = None
-        if payload["manifest_present"]:
-            try:
-                raw = read_bounded_text(
-                    manifest_path,
-                    max_bytes=_MAX_PACKAGE_JSON_BYTES,
-                )
-                manifest = json.loads(raw)
-                if not isinstance(manifest, dict):
-                    raise ValueError("package.json is not an object")
-            except (SafeReadError, ValueError) as error:
-                errors = 1
-                findings.append(_manifest_finding(str(error)))
-                manifest = None
-
-        if manifest is not None:
-            payload["name"] = (
-                manifest.get("name")
-                if isinstance(manifest.get("name"), str)
-                else None
+        undeclared = _undeclared_by_manifest(
+            project.parsed_files,
+            manifests,
+        )
+        for directory in sorted(undeclared):
+            report_path = _manifest_report_path(
+                directory,
+                project.redact_paths,
             )
-            declared = _declared_dependencies(manifest)
-            payload["declared_dependencies"] = sorted(declared)
-            payload["workspaces"] = "workspaces" in manifest
-            if not payload["workspaces"]:
-                undeclared = _undeclared_imports(
-                    project.parsed_files,
-                    declared,
-                )
-                payload["undeclared_imports"] = [
-                    module for module, _ in undeclared
-                ]
-                findings.extend(
-                    _undeclared_finding(module, example)
-                    for module, example in undeclared
-                )
+            identity = _manifest_identity_path(directory)
+            for module, example in undeclared[directory]:
+                findings.append(_undeclared_finding(
+                    module,
+                    example,
+                    report_path,
+                    identity,
+                ))
 
+        root_manifest = manifests.get("")
+        payload = {
+            "manifest_present": root_manifest is not None,
+            "name": root_manifest["name"] if root_manifest else None,
+            "declared_dependencies": (
+                sorted(root_manifest["declared"]) if root_manifest else []
+            ),
+            "workspaces": (
+                root_manifest["workspaces"] if root_manifest else False
+            ),
+            "undeclared_imports": sorted({
+                module
+                for entries in undeclared.values()
+                for module, _ in entries
+            }),
+            "manifests": [
+                {
+                    "path": _manifest_identity_path(directory),
+                    "name": manifests[directory]["name"],
+                    "workspaces": manifests[directory]["workspaces"],
+                    "invalid": manifests[directory]["invalid"],
+                    "undeclared_imports": [
+                        module
+                        for module, _ in undeclared.get(directory, [])
+                    ],
+                }
+                for directory in manifest_dirs
+            ],
+            "manifests_truncated": truncated,
+        }
         return ProviderResult(
             payload=payload,
-            health={"complete": True, "errors": errors},
+            health={"complete": not truncated, "errors": errors},
             findings=tuple(findings),
         )
+
+
+def _manifest_directories(
+    root,
+    parsed_files,
+) -> tuple[list[str], bool]:
+    """Return sorted project-relative directories holding a package.json."""
+    candidates = {""}
+    for identity_path in parsed_files:
+        parts = identity_path.split("/")[:-1]
+        for depth in range(1, len(parts) + 1):
+            candidates.add("/".join(parts[:depth]))
+    present = sorted(
+        directory
+        for directory in candidates
+        if (root / directory / "package.json").is_file()
+        if directory == "" or ".." not in directory.split("/")
+    )
+    return present[:_MAX_MANIFESTS], len(present) > _MAX_MANIFESTS
+
+
+def _load_manifest(root, directory: str) -> dict:
+    info = {
+        "name": None,
+        "declared": set(),
+        "workspaces": False,
+        "invalid": False,
+    }
+    try:
+        raw = read_bounded_text(
+            root / directory / "package.json",
+            max_bytes=_MAX_PACKAGE_JSON_BYTES,
+            root=root,
+        )
+        manifest = json.loads(raw)
+        if not isinstance(manifest, dict):
+            raise ValueError("package.json is not an object")
+    except (SafeReadError, ValueError):
+        info["invalid"] = True
+        return info
+    if isinstance(manifest.get("name"), str):
+        info["name"] = manifest["name"]
+    info["declared"] = _declared_dependencies(manifest)
+    info["workspaces"] = "workspaces" in manifest
+    return info
+
+
+def _manifest_chain(directory: str, manifests: dict) -> list[dict]:
+    """Return manifests from ``directory`` up to the root, nearest first."""
+    chain = []
+    parts = directory.split("/") if directory else []
+    for depth in range(len(parts), -1, -1):
+        prefix = "/".join(parts[:depth])
+        if prefix in manifests:
+            chain.append(manifests[prefix])
+    return chain
+
+
+def _nearest_manifest_dir(
+    identity_path: str,
+    manifests: dict,
+) -> str | None:
+    parts = identity_path.split("/")[:-1]
+    for depth in range(len(parts), -1, -1):
+        prefix = "/".join(parts[:depth])
+        if prefix in manifests:
+            return prefix
+    return None
+
+
+def _manifest_identity_path(directory: str) -> str:
+    return f"{directory}/package.json" if directory else "package.json"
+
+
+def _manifest_report_path(directory: str, redact_paths: bool) -> str:
+    return (
+        "package.json"
+        if redact_paths
+        else _manifest_identity_path(directory)
+    )
+
+
+def _undeclared_by_manifest(
+    parsed_files,
+    manifests: dict,
+) -> dict[str, list[tuple[str, str]]]:
+    """Map manifest directory to sorted (module, example path) drift."""
+    first_seen: dict[str, dict[str, str]] = {}
+    for identity_path in sorted(parsed_files):
+        parsed = parsed_files[identity_path]
+        if not isinstance(parsed.facts, TsFacts):
+            continue
+        directory = _nearest_manifest_dir(identity_path, manifests)
+        if directory is None:
+            continue
+        chain = _manifest_chain(directory, manifests)
+        if any(info["workspaces"] or info["invalid"] for info in chain):
+            continue
+        declared: set[str] = set()
+        for info in chain:
+            declared.update(info["declared"])
+        for specifier in parsed.facts.imports:
+            module = _bare_module(specifier)
+            if module is not None and module not in declared:
+                first_seen.setdefault(directory, {}).setdefault(
+                    module,
+                    parsed.source.display_path,
+                )
+    return {
+        directory: sorted(modules.items())
+        for directory, modules in first_seen.items()
+    }
 
 
 def _declared_dependencies(manifest: dict) -> set[str]:
@@ -507,35 +647,31 @@ def _bare_module(specifier: str) -> str | None:
     return base
 
 
-def _undeclared_imports(
-    parsed_files,
-    declared: set[str],
-) -> list[tuple[str, str]]:
-    first_seen: dict[str, str] = {}
-    for identity_path in sorted(parsed_files):
-        parsed = parsed_files[identity_path]
-        if not isinstance(parsed.facts, TsFacts):
-            continue
-        for specifier in parsed.facts.imports:
-            module = _bare_module(specifier)
-            if module is not None and module not in declared:
-                first_seen.setdefault(module, parsed.source.display_path)
-    return sorted(first_seen.items())
-
-
-def _manifest_finding(detail: str) -> Finding:
+def _manifest_finding(report_path: str, identity_path: str) -> Finding:
     return Finding(
         rule_id="TS-PKG-002",
         category="package-health",
         severity="error",
         confidence="high",
-        message="package.json cannot be read as a valid JSON object.",
-        location=Location("package.json", 1, 1),
+        message=(
+            f"{identity_path} cannot be read as a valid JSON object."
+        ),
+        location=Location(
+            report_path,
+            1,
+            1,
+            identity_path=identity_path,
+        ),
         remediation="Correct the package.json syntax and run analysis again.",
     )
 
 
-def _undeclared_finding(module: str, example_path: str) -> Finding:
+def _undeclared_finding(
+    module: str,
+    example_path: str,
+    report_path: str,
+    identity_path: str,
+) -> Finding:
     return Finding(
         rule_id="TS-PKG-001",
         category="package-health",
@@ -543,9 +679,14 @@ def _undeclared_finding(module: str, example_path: str) -> Finding:
         confidence="high",
         message=(
             f"Module '{module}' is imported (for example in "
-            f"{example_path}) but not declared in package.json."
+            f"{example_path}) but not declared in {identity_path}."
         ),
-        location=Location("package.json", 1, 1),
+        location=Location(
+            report_path,
+            1,
+            1,
+            identity_path=identity_path,
+        ),
         remediation=(
             "Declare the dependency in package.json or remove the import."
         ),

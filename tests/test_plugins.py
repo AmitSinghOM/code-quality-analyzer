@@ -266,7 +266,7 @@ def test_python_project_providers_are_registered_and_cached(project):
             "language_id": "typescript",
             "capability": "package",
             "provider_id": "typescript-package",
-            "capability_version": "1.0.0",
+            "capability_version": "1.1.0",
             "enabled_by_default": True,
         },
     ]

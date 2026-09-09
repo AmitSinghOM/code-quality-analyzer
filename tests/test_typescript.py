@@ -238,6 +238,99 @@ def test_directive_strings_and_artifacts_are_not_packages(project):
     assert package["undeclared_imports"] == ["server-only"]
 
 
+def test_nested_manifest_drift_is_discovered(project):
+    root = project({
+        "backend/main.go.txt": "not scanned\n",
+        "frontend/package.json": json.dumps({
+            "name": "web",
+            "dependencies": {"react": "^19.0.0"},
+        }),
+        "frontend/src/app.ts": (
+            "import react from 'react';\n"
+            "import only from 'server-only';\n"
+        ),
+    })
+
+    result = CliRunner().invoke(main, [str(root), "-f", "json"])
+    payload = json.loads(result.output)
+    drift = [
+        f for f in payload["findings"] if f["rule_id"] == "TS-PKG-001"
+    ]
+
+    assert len(drift) == 1
+    assert drift[0]["location"]["path"] == "frontend/package.json"
+    assert "'server-only'" in drift[0]["message"]
+    package = payload["project_analyses"]["typescript:package"]["result"]
+    assert package["manifest_present"] is False
+    assert package["undeclared_imports"] == ["server-only"]
+    assert [m["path"] for m in package["manifests"]] == [
+        "frontend/package.json",
+    ]
+
+
+def test_ancestor_declarations_satisfy_nested_imports(project):
+    root = project({
+        "package.json": json.dumps({
+            "name": "root",
+            "dependencies": {"zod": "^4.0.0"},
+        }),
+        "app/package.json": json.dumps({
+            "name": "app",
+            "dependencies": {"express": "^5.0.0"},
+        }),
+        "app/src/main.ts": (
+            "import express from 'express';\n"
+            "import { z } from 'zod';\n"
+        ),
+    })
+
+    result = CliRunner().invoke(main, [str(root), "-f", "json"])
+    payload = json.loads(result.output)
+
+    assert not [
+        f for f in payload["findings"] if f["rule_id"] == "TS-PKG-001"
+    ]
+
+
+def test_workspace_root_skips_nested_manifest_drift(project):
+    root = project({
+        "package.json": json.dumps({
+            "name": "monorepo",
+            "workspaces": ["packages/*"],
+        }),
+        "packages/a/package.json": json.dumps({"name": "a"}),
+        "packages/a/src/main.ts": "import { z } from 'zod';\n",
+    })
+
+    result = CliRunner().invoke(main, [str(root), "-f", "json"])
+    payload = json.loads(result.output)
+
+    assert not [
+        f for f in payload["findings"] if f["rule_id"] == "TS-PKG-001"
+    ]
+
+
+def test_invalid_nested_manifest_reports_and_skips_drift(project):
+    root = project({
+        "frontend/package.json": "{broken",
+        "frontend/src/app.ts": "import { z } from 'zod';\n",
+    })
+
+    result = CliRunner().invoke(main, [str(root), "-f", "json"])
+    payload = json.loads(result.output)
+    rules = [
+        f["rule_id"]
+        for f in payload["findings"]
+        if f["rule_id"].startswith("TS-PKG")
+    ]
+
+    assert rules == ["TS-PKG-002"]
+    invalid = [
+        f for f in payload["findings"] if f["rule_id"] == "TS-PKG-002"
+    ][0]
+    assert invalid["location"]["path"] == "frontend/package.json"
+
+
 def test_ts_only_project_now_earns_a_real_score(project):
     root = project({
         "src/app.ts": (
