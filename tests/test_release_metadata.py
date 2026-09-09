@@ -2,10 +2,7 @@
 
 from pathlib import Path
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - Python 3.10
-    import tomli as tomllib
+import tomllib
 
 import cqa_analyzer
 
@@ -21,7 +18,7 @@ def test_distribution_import_and_cli_identities_are_distinct_and_stable():
     metadata = _project_metadata()
 
     assert metadata["name"] == "cqa-analyzer"
-    assert cqa_analyzer.__version__ == "2.29.0"
+    assert cqa_analyzer.__version__ == "2.30.0"
     assert metadata["scripts"] == {
         "code-quality-analyzer": "cqa_analyzer.__main__:main"
     }
@@ -43,4 +40,5 @@ def test_public_package_metadata_is_complete():
         classifier.startswith("License ::")
         for classifier in metadata["classifiers"]
     )
-    assert "Programming Language :: Python :: 3.10" in metadata["classifiers"]
+    assert "Programming Language :: Python :: 3.11" in metadata["classifiers"]
+    assert "Programming Language :: Python :: 3.10" not in metadata["classifiers"]

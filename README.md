@@ -517,8 +517,8 @@ contents remain out of scope. Test-only directories without a package
 initializer are excluded from unconfigured flat-layout package modules. See
 [`docs/RULES.md`](docs/RULES.md).
 
-Python 3.10 uses the pinned `tomli` compatibility parser; Python 3.11 and newer
-use the standard-library `tomllib` parser.
+TOML parsing uses the standard-library `tomllib` parser; the analyzer
+requires Python 3.11 or newer.
 
 ## Complexity Analysis
 
