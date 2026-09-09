@@ -5,16 +5,28 @@ The distribution is published as **`cqa-analyzer`**. The name
 install documentation must say `pip install cqa-analyzer` while the CLI
 command remains `code-quality-analyzer`.
 
-## One-time setup (maintainer machine)
+Publishing uses **PyPI Trusted Publishing (OIDC)** via
+`.github/workflows/publish.yml` — no API token exists anywhere.
+Publishing a GitHub release triggers the workflow, which rebuilds the
+distributions from the tagged source, verifies the tag matches the
+package version, and uploads to PyPI.
+
+## One-time setup (PyPI website)
 
 1. Create a PyPI account with 2FA enabled.
-2. Create a project-scoped API token at
-   [pypi.org/manage/account/token](https://pypi.org/manage/account/token/)
-   (account-scoped for the first upload; replace it with a project-scoped
-   token immediately after the project exists).
-3. Never commit the token. Supply it per-invocation via
-   `TWINE_USERNAME=__token__` and `TWINE_PASSWORD=<token>` environment
-   variables, or a `keyring` entry.
+2. Configure the trusted publisher at
+   [pypi.org/manage/account/publishing](https://pypi.org/manage/account/publishing/)
+   using the **pending publisher** form (the project does not exist yet):
+   - PyPI project name: `cqa-analyzer`
+   - Owner: `AmitSinghOM`
+   - Repository: `code-quality-analyzer`
+   - Workflow name: `publish.yml`
+   - Environment name: `pypi`
+3. In the GitHub repository settings, create an environment named
+   `pypi` (Settings → Environments). Optionally add yourself as a
+   required reviewer so every upload needs a manual approval click.
+
+No token is created, stored, or shared at any point.
 
 ## Release procedure
 
@@ -32,60 +44,26 @@ Run every step from the package root with a clean working tree.
    `RULESET_VERSION`) and the `CHANGELOG.md` entry agree, and that the
    changelog entry is dated.
 
-3. **Tag.** Tag the release commit and push the tag (the pre-commit hook
-   contract pins tags):
+3. **Merge to main and publish a GitHub release** whose tag is
+   `vX.Y.Z` matching `__version__`. Publishing the release triggers
+   `publish.yml`, which rebuilds from the tagged source, verifies the
+   tag/version agreement, runs `twine check --strict`, and uploads to
+   PyPI through the `pypi` environment via OIDC.
 
-   ```bash
-   git tag -a vX.Y.Z -m "vX.Y.Z: <summary>"
-   git push origin vX.Y.Z
-   ```
-
-4. **Build.** Build from a clean `dist/`:
-
-   ```bash
-   rm -rf dist
-   .venv/bin/python -m build
-   ```
-
-5. **Validate.** Both artifacts must pass, and the wheel must work in a
-   fresh environment:
-
-   ```bash
-   .venv/bin/python -m twine check dist/*
-   python3 -m venv /tmp/relcheck && /tmp/relcheck/bin/pip install \
-     dist/cqa_analyzer-X.Y.Z-py3-none-any.whl
-   /tmp/relcheck/bin/code-quality-analyzer <some-project> --offline
-   rm -rf /tmp/relcheck
-   ```
-
-6. **Upload to TestPyPI first** and verify an install from it:
-
-   ```bash
-   .venv/bin/python -m twine upload --repository testpypi dist/*
-   pip install --index-url https://test.pypi.org/simple/ \
-     --no-deps cqa-analyzer
-   ```
-
-7. **Upload to PyPI:**
-
-   ```bash
-   .venv/bin/python -m twine upload dist/*
-   ```
-
-8. **Verify.** `pip install cqa-analyzer` in a fresh venv, run one scan,
-   and confirm the version. Then update the README pre-commit `rev:` pin
-   if this release should become the documented hook version.
+4. **Verify.** Watch the workflow run, then `pip install cqa-analyzer`
+   in a fresh venv, run one scan, and confirm the version. Update the
+   README pre-commit `rev:` pin if this release should become the
+   documented hook version.
 
 ## Post-release
 
-- Create a GitHub release from the tag, pasting the CHANGELOG entry.
 - Bump `__version__` only when the next change lands (versions are not
   pre-bumped).
 
 ## Known constraints
 
-- The first upload must be done by a human with the PyPI token; there is
-  no CI publishing pipeline yet. When one is added, use PyPI Trusted
-  Publishing (OIDC) from GitHub Actions instead of a long-lived token.
-- Artifacts are not GPG-signed; PyPI attestation via Trusted Publishing
-  is the planned integrity path.
+- The tag must exactly equal `v` + `__version__`; the publish workflow
+  fails closed on any mismatch.
+- Manual `twine upload` remains possible as a break-glass path with a
+  short-lived project-scoped token, but Trusted Publishing is the
+  supported flow.
