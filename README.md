@@ -108,14 +108,84 @@ code-quality-analyzer/
 
 ## Installation
 
-Install from [PyPI](https://pypi.org/project/cqa-analyzer/) — the
-distribution is named `cqa-analyzer`, the command it installs is
-`code-quality-analyzer`:
+Install from [PyPI](https://pypi.org/project/cqa-analyzer/). Two names
+matter, and mixing them up is the most common first-run mistake:
+
+| What | Name |
+|---|---|
+| PyPI distribution (`pip install …`) | `cqa-analyzer` |
+| Installed command | `code-quality-analyzer` |
+| Python module (`python -m …`) | `cqa_analyzer` |
+
+`code-quality-analyzer` on PyPI is an unrelated project — installing it
+will not give you this tool.
+
+**Requirements:** Python 3.11 or newer (`python3 --version`).
+
+### Recommended: pipx (isolated, always on PATH)
 
 ```bash
-pip install cqa-analyzer
+pipx install cqa-analyzer
+code-quality-analyzer --version
+```
+
+pipx keeps the tool in its own environment and puts the command on your
+PATH regardless of which Python your shell or a version manager (mise,
+pyenv, asdf) resolves in a given directory. Install pipx with
+`brew install pipx && pipx ensurepath` (macOS) or your platform's
+package manager, then restart the shell.
+
+### Alternative: pip into a specific interpreter
+
+Always install through the interpreter you will run, so the install and
+the invocation cannot target different Pythons:
+
+```bash
+python3 -m pip install cqa-analyzer
+python3 -m cqa_analyzer --version
+```
+
+Inside a virtual environment, the command lives in that environment's
+`bin/` directory: `.venv/bin/code-quality-analyzer /path/to/project`.
+
+### Verify
+
+```bash
+code-quality-analyzer --version   # code-quality-analyzer, version X.Y.Z
 code-quality-analyzer /path/to/project
 ```
+
+### Troubleshooting
+
+**`zsh: command not found: code-quality-analyzer`** — the shell cannot
+find the console script. Confirm the package is installed at all with
+`python3 -m cqa_analyzer --version`; if that works, only PATH is
+missing. pip drops scripts next to the interpreter that installed them
+(for example `~/.local/share/mise/installs/python/3.12.x/bin/` or
+`~/Library/Python/3.x/bin/` on macOS), and that directory may not be on
+PATH. Either add it to your shell profile, run `pipx ensurepath` if you
+used pipx, or use `python3 -m cqa_analyzer` instead of the command.
+
+**`No module named cqa_analyzer`** — the package is installed in a
+different Python than the one you are running. This is common with
+version managers such as mise or pyenv, where `python3` changes per
+directory. Reinstall through the exact interpreter:
+`python3 -m pip install cqa-analyzer`. To stop this recurring, use pipx.
+
+**`No matching distribution found for cqa-analyzer`** — your Python is
+older than 3.11. Check `python3 --version` and install a newer Python
+(for example `brew install python@3.12`). Python 3.10 users can pin
+`cqa-analyzer==2.29.0`, the last release supporting 3.10.
+
+**`error: externally-managed-environment`** — a system or Homebrew
+Python is refusing a bare `pip install` (PEP 668). Use pipx or a
+virtual environment; do not override the protection with
+`--break-system-packages`.
+
+**Installed but analyzing the wrong thing** — `PROJECT_PATH` must be a
+directory; pointing at a single file is rejected. Generated output such
+as `node_modules`, `.next`, `dist`, and `.venv` is excluded
+automatically.
 
 Releases are published through PyPI Trusted Publishing with digital
 attestations, so every artifact is provably built from this
@@ -129,8 +199,6 @@ cd code-quality-analyzer
 python3 -m venv .venv
 .venv/bin/pip install -e .
 ```
-
-Running as a module works too: `python -m cqa_analyzer /path/to/project`.
 
 ## Pre-commit
 
