@@ -24,7 +24,7 @@ Consequence, and the trigger for this roadmap: the architecture signal
 score is currently computed **from Python signals only**, so a Go-only
 project floors at 1.0 no matter how well it is built.
 
-## 1. Score integrity for non-Python projects (next minor)
+## 1. Score integrity for non-Python projects (✅ shipped in 2.29.0)
 
 Before Go grows signals, the score must stop misrepresenting projects
 that have none to give.
@@ -40,20 +40,28 @@ that have none to give.
 Small, self-contained, and honest; ships independently of everything
 below.
 
-## 2. Go architecture signals
+## 2. Go architecture signals (✅ shipped in 2.29.0)
 
 Goal: Go projects earn a real architecture signal score through the same
 `SignalProvider` contract Python uses, with Go-idiom pattern definitions.
 
-Prerequisites in the Go adapter (today it extracts only package name and
-imports by regex):
+Prerequisites in the Go adapter — **both complete as of 2.29.0**:
 
-- Comment and string-literal blanking for Go syntax, mirroring the
-  Python guarantee that literals and comments are not evidence.
-- Bounded identifier extraction (declared names, called selectors) from
-  blanked source. This stays regex-based and deliberately approximate;
-  patterns must therefore keep the same `min_signals` corroboration
-  discipline as Python.
+- ✅ Comment and string-literal blanking for Go syntax (shipped earlier
+  than this roadmap assumed: `GoFacts.code_text` has always been blanked,
+  and `GO-COR-001` already matches against it).
+- ✅ Bounded identifier extraction (declared func/type/var/const/short
+  declarations plus selector call sites) from blanked source, shipped in
+  2.29.0 as `GoFacts.identifiers`. It is regex-based and deliberately
+  approximate; patterns must therefore keep the same `min_signals`
+  corroboration discipline as Python.
+
+Remaining work: none — `go_patterns.py` and the `go-architecture-signals`
+provider shipped in 2.29.0. Pattern IDs reuse the shared scoring catalog
+(regression-locked in tests), scores aggregate across languages, and the
+acceptance criterion was met live: HUMM's Go backend moved from a 1.0
+floor to 6.4 with reviewable `-v` evidence and no literal/comment false
+positives on spot-check.
 
 Pattern set (initial, subject to the same strictness bar as 2.x Python):
 
@@ -95,21 +103,38 @@ regex facts. The decision point is the parser dependency:
 No commitment until Option A's dependency weight is evaluated; item 2
 does not depend on this.
 
-## 4. TypeScript/JavaScript pilot (next language)
+## 4. TypeScript/JavaScript pilot (✅ entry shipped in 2.29.0)
 
-Motivated by full-stack projects whose frontends are currently
-invisible to analysis. Same shape as the Go pilot's entry:
+The pilot entry landed with the same shape as Go's: a bounded
+no-toolchain adapter for `.ts`/`.tsx`/`.js`/`.jsx`/`.mjs`/`.cjs` with
+comment/string/template-literal blanking (interpolations conservatively
+included), bounded identifier and import-specifier extraction, the
+`TS-COR-001` empty-catch launch rule, and passive root `package.json`
+intelligence flagging imported-but-undeclared dependencies
+(`TS-PKG-001`) and invalid manifests (`TS-PKG-002`), with workspace
+manifests skipping drift analysis. Generated output directories
+(`.next`, `coverage`, and friends) are excluded from discovery.
 
-- `.ts`/`.tsx`/`.js` discovery with the standard safety bounds
-  (`node_modules` already excluded).
-- Regex-facts adapter: module imports/exports, declared identifiers
-  from blanked source.
-- One narrow launch rule mirroring `GO-COR-001` in spirit (for example,
-  discarded promise results from a small allowlist of known-async
-  standard APIs), plus package intelligence from `package.json`
-  (declared vs. imported dependency drift).
-- Architecture signals follow only after the same blanking and
-  corroboration bar as Go (item 2), never before.
+Remaining for the pilot, in order:
+
+- ✅ TS/JS architecture signals shipped in 2.29.0 through the shared
+  catalog (`ts_patterns.py` + `typescript-architecture-signals`
+  provider). TS/JS-only projects now earn real scores; HUMM's frontend
+  moved from not-applicable to 3.8 and the full platform aggregates
+  Go + TS to 6.8. A shared UI-component pattern ID remains a
+  cross-language scoring-policy decision.
+- Regex-literal lexing hardening in the blanker (a regex containing
+  quote or comment delimiters can currently over-blank its line).
+- `tsconfig.json` path-alias awareness for drift analysis.
+- ✅ Nested `package.json` discovery shipped in 2.29.0: manifests are
+  discovered in every non-excluded directory enclosing an analyzed
+  TS/JS file (bounded at 100), each file associates with its nearest
+  enclosing manifest, declared dependencies union up the ancestor chain
+  (matching Node module resolution), chains containing a `workspaces`
+  or unreadable manifest skip drift, and findings locate at each
+  manifest's project-relative path. Verified live: a full-stack scan
+  from the repository root now reports frontend dependency drift at
+  `frontend/package.json`.
 
 ## 5. Explicit non-goals
 

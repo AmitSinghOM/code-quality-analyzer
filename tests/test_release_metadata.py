@@ -21,7 +21,7 @@ def test_distribution_import_and_cli_identities_are_distinct_and_stable():
     metadata = _project_metadata()
 
     assert metadata["name"] == "cqa-analyzer"
-    assert cqa_analyzer.__version__ == "2.28.0"
+    assert cqa_analyzer.__version__ == "2.29.0"
     assert metadata["scripts"] == {
         "code-quality-analyzer": "cqa_analyzer.__main__:main"
     }

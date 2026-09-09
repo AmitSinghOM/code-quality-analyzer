@@ -170,6 +170,9 @@ def test_catalog_covers_every_current_builtin_rule():
         "PY-PKG-004",
         "PY-PKG-005",
         "PY-PKG-006",
+        "TS-COR-001",
+        "TS-PKG-001",
+        "TS-PKG-002",
     )
 
 

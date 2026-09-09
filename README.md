@@ -3,7 +3,8 @@
 **Prove the health of a codebase without a single byte leaving the machine.**
 
 Code Quality Analyzer is a privacy-first static analysis tool for Python
-packages (with a bounded Go pilot) built for environments where source code
+packages, with bounded Go and TypeScript/JavaScript pilots, built for
+environments where source code
 cannot leave the trusted development boundary: regulated industries,
 air-gapped networks, client codebases under NDA, and anyone who refuses to
 ship their source to a SaaS dashboard to learn whether it is healthy.
@@ -41,8 +42,10 @@ See [`docs/PRIVACY.md`](docs/PRIVACY.md) for the exact data boundary.
   locations — including cross-file **duplicate function implementations**
   (`PY-DUP-001`) detected by exact AST structure, so renamed copies still
   report and docstring changes cannot hide one
-- **Data Structures & Algorithms (DSA)** patterns in Python
-- **System Design** principles implemented in Python
+- **Data Structures & Algorithms (DSA)** patterns in Python, Go, and
+  TypeScript/JavaScript
+- **System Design** principles implemented in Python, Go, and
+  TypeScript/JavaScript
 - A compatibility **architecture signal score from 1-10**
 
 Reports render as text, versioned JSON, or SARIF 2.1.0, and gate CI through
@@ -80,6 +83,7 @@ code-quality-analyzer/
 │   ├── signals.py       # Per-file signal extraction + pattern matching
 │   ├── python_rules.py  # Source-located Python correctness rules
 │   ├── patterns.py      # DSA & System Design pattern definitions
+│   ├── go_patterns.py   # Go-idiom signal definitions for the shared catalog
 │   ├── package_intelligence.py # Metadata, modules, imports, cycles
 │   ├── protocols.py     # Source, parse, rule, provider, and reporter contracts
 │   ├── registry.py      # Versioned plugin and capability negotiation registry
@@ -256,7 +260,7 @@ remaining disclosure considerations.
 | `--anonymize` | off | Remove project paths, metadata, and source identifiers |
 | `--offline` | off | Deny socket operations while analysis runs |
 | `--cache-dir` | none | Reuse bounded local parse artifacts from this directory |
-| `--fail-under` | none | Exit non-zero when the compatibility architecture signal score is below 1–10 |
+| `--fail-under` | none | Exit non-zero when the compatibility architecture signal score is below 1–10; exits 5 when the score is not applicable |
 | `--fail-on` | none | Exit 4 for reported findings at `warning` or `error` severity |
 | `--baseline` | none | Compare findings with an existing hashed baseline |
 | `--write-baseline` | none | Atomically write current finding fingerprints |
@@ -275,7 +279,7 @@ fingerprint, and analysis authority so consumers can identify the contract,
 protections, and completeness that produced a result. SARIF emits the same
 baseline- and changed-line-filtered findings for standard code-scanning
 consumers. Changed-line manifests are supplied externally; the analyzer never
-invokes Git or a shell to derive them. JSON schema `1.10.0` records aggregate
+invokes Git or a shell to derive them. JSON schema `1.11.0` records aggregate
 selection metadata and whether the local parse cache was enabled; see
 [`docs/CHANGED_LINES.md`](docs/CHANGED_LINES.md),
 [`docs/CACHING.md`](docs/CACHING.md), and [`docs/SARIF.md`](docs/SARIF.md).
@@ -291,6 +295,7 @@ selection metadata and whether the local parse cache was enabled; see
 | 2 | No registered-language source candidates were discovered |
 | 3 | Source candidates produced no successful analysis, or `--strict` found incomplete analysis |
 | 4 | A reported finding met the `--fail-on` severity threshold |
+| 5 | `--fail-under` was set but the architecture signal score is not applicable (no signal-capable source analyzed) |
 
 ## Analysis Authority
 
@@ -303,7 +308,7 @@ No source candidates exit with code 2. If candidates exist but none can be
 successfully parsed, analysis exits with code 3 even without `--strict`.
 Partial non-strict analysis may exit successfully for inspection, but it is
 always marked non-authoritative. See the versioned schema in
-[`docs/report-schema-1.10.0.json`](docs/report-schema-1.10.0.json) and the decision
+[`docs/report-schema-1.11.0.json`](docs/report-schema-1.11.0.json) and the decision
 record in
 [`docs/adr/001-analysis-authority-and-score-migration.md`](docs/adr/001-analysis-authority-and-score-migration.md).
 
@@ -603,18 +608,43 @@ The confidence score indicates how reliable the complexity estimate is.
 Python receives actionable rules, package intelligence, architecture signals,
 and experimental complexity analysis. The Go pilot discovers `.go` files,
 preserves import aliases, emits `GO-COR-001` for discarded errors from a
-narrow set of imported standard-library calls, and passively aggregates
+narrow set of imported standard-library calls, extracts Go-idiom DSA and
+design signals from blanked source (`container/heap`, `sort.Search`,
+corroborated BFS/DFS, `net/http`/gRPC API design, `database/sql`/GORM,
+message queues, `sync.Once` singletons, and more), and passively aggregates
 multi-file packages plus local module import edges from `go.mod`. It never
-invokes Go tooling. Python and Go findings share the same report, baseline,
+invokes Go tooling. Go patterns reuse the shared scoring catalog IDs, so
+mixed projects aggregate signals across both languages under one score.
+Python and Go findings share the same report, baseline,
 privacy, offline, and CI-gate contracts. JSON `project_analyses` entries expose
 provider results normally and health-only projections under `--anonymize`.
 See [`docs/RULES.md`](docs/RULES.md).
 
-The architecture signal score is currently computed from Python signals only,
-so Go-only projects floor at 1.0 regardless of their design.
-[`docs/ROADMAP.md`](docs/ROADMAP.md) tracks the plan to fix this: score
-scope-honesty for non-Python projects, Go architecture signals, and a
-TypeScript/JavaScript pilot.
+The TypeScript/JavaScript pilot covers `.ts`, `.tsx`, `.js`, `.jsx`,
+`.mjs`, and `.cjs` with the same bounded, no-toolchain discipline: it
+blanks comments, strings, and template literals (interpolations included,
+so literals are never evidence), extracts bounded identifiers and import
+specifiers by regex, emits `TS-COR-001` for empty catch blocks, and
+passively reads the root `package.json` to flag imported-but-undeclared
+dependencies (`TS-PKG-001`) and invalid manifests (`TS-PKG-002`).
+Workspace (monorepo) manifests skip drift analysis, node builtins and
+path aliases are never flagged, and generated output directories
+(`.next`, `dist`, `build`, `coverage`, and friends) are excluded from
+discovery. It never invokes `node`, `tsc`, or a package manager. TS/JS
+architecture signals match ecosystem idioms (`new Map`/`new Set`,
+memoization, express/fastify/NestJS/tRPC API design, Prisma/TypeORM
+data access, redis/react-query caching, kafkajs/bullmq queues,
+jsonwebtoken/next-auth authentication, vitest/jest/playwright testing)
+through the same shared scoring catalog, so full-stack projects
+aggregate one score across all three languages.
+
+The architecture signal score covers Python and Go signals. A project where
+no signal-capable source was successfully analyzed reports the score as
+**not applicable** — `null` in JSON with an explicit
+`architecture_signal_scope` field — rather than a misleading floor value,
+and `--fail-under` exits with code 5 instead of silently passing or failing.
+[`docs/ROADMAP.md`](docs/ROADMAP.md) tracks what comes next: a
+TypeScript/JavaScript pilot and decision-gated Go duplication depth.
 
 ## Development
 

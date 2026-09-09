@@ -317,3 +317,64 @@ if err != nil {
 ```
 
 The rule requires the corresponding standard-library import, ignores comments and string literals, follows explicit import aliases, and reports the discarded result's one-based location. Blank and dot imports are recorded but intentionally do not authorize qualified-call matches.
+
+## TS-COR-001: Empty catch block
+
+**Category:** Correctness
+**Default severity:** Warning
+**Confidence:** High
+
+A `catch` block whose body is empty after comment blanking discards the
+failure without recovery or context. A catch containing only a comment is
+still reported: the comment does not handle the error.
+
+### Non-compliant
+
+```ts
+try {
+  await persist();
+} catch (error) {}
+```
+
+### Compliant
+
+```ts
+try {
+  await persist();
+} catch (error) {
+  logger.error("persist failed", error);
+  throw error;
+}
+```
+
+The rule matches blanked source, so string or comment mentions of `catch`
+are never evidence. Optional catch binding (`catch {}`) is covered.
+
+## TS-PKG-001: Undeclared imported dependency
+
+**Category:** Package health
+**Default severity:** Warning
+**Confidence:** High
+
+A bare module specifier is imported (via `import`, `export ... from`,
+`require(...)`, or dynamic `import(...)`) but not declared in any
+dependency section of its governing `package.json`. Manifests are
+discovered at the scan root and in every non-excluded directory that
+encloses an analyzed TS/JS file; each file is checked against its
+nearest enclosing manifest with declared dependencies unioned up the
+ancestor chain, matching Node module resolution. Relative paths, node
+builtins (including the `node:` prefix), path aliases (`@/`, `~`, `#`),
+and specifiers that are not valid npm package names (directive strings,
+minifier artifacts) are never flagged. Files under a manifest chain
+that declares `workspaces` — or contains an unreadable manifest — skip
+drift analysis entirely. Findings locate at the governing manifest's
+project-relative path.
+
+## TS-PKG-002: Invalid package.json
+
+**Category:** Package health
+**Default severity:** Error
+**Confidence:** High
+
+The root `package.json` exists but cannot be read as a valid JSON object.
+Correct the syntax and run analysis again.

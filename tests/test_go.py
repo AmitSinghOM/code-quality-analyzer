@@ -195,3 +195,85 @@ def test_go_package_graph_reports_conflicting_packages(project):
     assert result.payload.conflicts == ("pkg",)
     assert result.health["complete"] is False
     assert scanner.has_coverage_gaps is True
+
+
+def test_go_adapter_extracts_bounded_identifiers():
+    parsed = parse_go(
+        "package service\n"
+        "\n"
+        'import "container/heap"\n'
+        "\n"
+        "type PriorityQueue struct{}\n"
+        "\n"
+        "func (pq *PriorityQueue) Push(item any) {}\n"
+        "\n"
+        "func Process(items []int) {\n"
+        "\ttotal := 0\n"
+        "\theap.Init(nil)\n"
+        "\tconst limit = 5\n"
+        "\tvar remainder int\n"
+        "\t_ = remainder\n"
+        "}\n"
+    )
+    identifiers = set(parsed.facts.identifiers)
+
+    assert {
+        "PriorityQueue", "Push", "Process", "total", "limit",
+        "remainder", "heap", "Init", "heap.Init",
+    } <= identifiers
+    assert "func" not in identifiers
+    assert "var" not in identifiers
+
+
+def test_go_identifiers_ignore_comment_and_string_content():
+    parsed = parse_go(
+        "package service\n"
+        "\n"
+        "// dijkstra := shortestPath(graph)\n"
+        "/* heappush.Call() */\n"
+        "func Handle() {\n"
+        '\tmessage := "bfsTraversal := queue.Pop()"\n'
+        "\t_ = message\n"
+        "}\n"
+    )
+    identifiers = set(parsed.facts.identifiers)
+
+    assert "Handle" in identifiers
+    assert "message" in identifiers
+    assert "dijkstra" not in identifiers
+    assert "heappush" not in identifiers
+    assert "bfsTraversal" not in identifiers
+
+
+def test_go_identifiers_are_deterministic_and_sorted():
+    source = (
+        "package service\n"
+        "\n"
+        "func Zebra() {}\n"
+        "func Alpha() {}\n"
+    )
+    first = parse_go(source).facts.identifiers
+    second = parse_go(source).facts.identifiers
+
+    assert first == second
+    assert list(first) == sorted(first)
+
+
+def test_go_cache_codec_round_trips_identifiers():
+    adapter = GoLanguageAdapter()
+    source_file = SourceFile(
+        path=Path("service.go"),
+        display_path="service.go",
+        identity_path="pkg/service.go",
+        content=(
+            "package service\n\nfunc Process(items []int) {\n"
+            "\ttotal := 0\n\t_ = total\n}\n"
+        ),
+    )
+    parsed = adapter.parse(source_file)
+
+    payload = adapter.serialize_parsed(parsed)
+    restored = adapter.deserialize_parsed(source_file, payload)
+
+    assert restored.facts == parsed.facts
+    assert restored.facts.identifiers == parsed.facts.identifiers

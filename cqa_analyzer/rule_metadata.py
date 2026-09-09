@@ -221,6 +221,36 @@ _RULES = (
         "Bind the error result and handle or explicitly return it.",
         language="go",
     ),
+    _rule(
+        "TS-COR-001",
+        "empty-catch-block",
+        "Empty catch block",
+        "An empty catch block discards a failure without recovery or context.",
+        "correctness",
+        "warning",
+        "Handle the failure, log actionable context, or rethrow the error.",
+        language="typescript",
+    ),
+    _rule(
+        "TS-PKG-001",
+        "undeclared-imported-dependency",
+        "Undeclared imported dependency",
+        "A bare module import is not declared in package.json.",
+        "package-health",
+        "warning",
+        "Declare the dependency in package.json or remove the import.",
+        language="typescript",
+    ),
+    _rule(
+        "TS-PKG-002",
+        "invalid-package-json",
+        "Invalid package.json",
+        "The project package.json cannot be read as a valid JSON object.",
+        "package-health",
+        "error",
+        "Correct the package.json syntax and run analysis again.",
+        language="typescript",
+    ),
 )
 
 _CATALOG = MappingProxyType({rule.rule_id: rule for rule in _RULES})

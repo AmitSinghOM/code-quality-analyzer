@@ -8,22 +8,26 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..findings import Finding, Location
+from ..go_patterns import GO_DESIGN_PATTERNS, GO_DSA_PATTERNS
 from ..protocols import (
     DEFAULT_CAPABILITY_VERSION,
     PLUGIN_API_VERSION,
     ParsedFile,
     ProjectContext,
     ProviderResult,
+    SignalObservation,
     SourceFile,
 )
 from ..registry import PluginRegistry
 from ..safe_io import SafeReadError, read_bounded_text
+from ..signals import FileSignals, pattern_is_present
 
-GO_ADAPTER_VERSION = "1.0.0"
-GO_CACHE_CODEC_VERSION = "1.0.0"
+GO_ADAPTER_VERSION = "1.1.0"
+GO_CACHE_CODEC_VERSION = "1.1.0"
 GO_RULE_PACK_ID = "go-core"
 _MAX_CACHED_GO_STRING = 4 * 1024 * 1024
 _MAX_CACHED_GO_IMPORTS = 100_000
+_MAX_GO_IDENTIFIERS = 20_000
 
 _PACKAGE = re.compile(r"(?m)^\s*package\s+([A-Za-z_]\w*)\s*$")
 _SINGLE_IMPORT = re.compile(
@@ -64,6 +68,50 @@ _IGNORED_ERROR = re.compile(
     rf"(?P<qualifier>[A-Za-z_]\w*)\.(?P<call>{_CALL_PATTERN})\s*\("
 )
 
+# Bounded identifier extraction from blanked Go source. Declarations are
+# named definitions; selector calls capture the qualified use sites that
+# future architecture signals corroborate against, mirroring the Python
+# adapter's identifier semantics. Comments and string contents are blanked
+# before extraction, so literals are never evidence.
+_GO_DECLARATION = re.compile(
+    r"\b(?:func|type)\s+(?:\([^)]*\)\s*)?([A-Za-z_]\w*)"
+)
+_GO_VALUE_DECLARATION = re.compile(
+    r"\b(?:var|const)\s+([A-Za-z_]\w*)"
+)
+_GO_SHORT_DECLARATION = re.compile(
+    r"\b([A-Za-z_]\w*)\s*:="
+)
+_GO_SELECTOR_CALL = re.compile(
+    r"\b([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s*\("
+)
+_GO_KEYWORDS = frozenset({
+    "break", "case", "chan", "const", "continue", "default", "defer",
+    "else", "fallthrough", "for", "func", "go", "goto", "if", "import",
+    "interface", "map", "package", "range", "return", "select", "struct",
+    "switch", "type", "var", "_",
+})
+
+
+def _go_identifiers(code_text: str) -> tuple[str, ...]:
+    """Extract bounded declared and selector-call identifiers."""
+    names: set[str] = set()
+    for pattern in (
+        _GO_DECLARATION,
+        _GO_VALUE_DECLARATION,
+        _GO_SHORT_DECLARATION,
+    ):
+        for match in pattern.finditer(code_text):
+            names.add(match.group(1))
+            if len(names) >= _MAX_GO_IDENTIFIERS:
+                break
+    for match in _GO_SELECTOR_CALL.finditer(code_text):
+        qualifier, member = match.group(1), match.group(2)
+        names.update((qualifier, member, f"{qualifier}.{member}"))
+        if len(names) >= _MAX_GO_IDENTIFIERS:
+            break
+    return tuple(sorted(names - _GO_KEYWORDS)[:_MAX_GO_IDENTIFIERS])
+
 
 @dataclass(frozen=True, slots=True, order=True)
 class GoImport:
@@ -81,6 +129,7 @@ class GoFacts:
     package_name: str
     imports: tuple[GoImport, ...]
     code_text: str
+    identifiers: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +192,7 @@ class GoLanguageAdapter:
                 package_name=package.group(1),
                 imports=_imports(metadata_text),
                 code_text=code_text,
+                identifiers=_go_identifiers(code_text),
             )
             if package is not None
             else None
@@ -177,6 +227,7 @@ class GoLanguageAdapter:
                     for imported in facts.imports
                 ],
                 "code_text": facts.code_text,
+                "identifiers": list(facts.identifiers),
             },
         }
 
@@ -196,7 +247,7 @@ class GoLanguageAdapter:
         if encoded_facts is not None:
             fact_data = _go_exact_mapping(
                 encoded_facts,
-                {"package_name", "imports", "code_text"},
+                {"package_name", "imports", "code_text", "identifiers"},
             )
             encoded_imports = fact_data["imports"]
             if (
@@ -204,12 +255,21 @@ class GoLanguageAdapter:
                 or len(encoded_imports) > _MAX_CACHED_GO_IMPORTS
             ):
                 raise ValueError("Cached Go imports are invalid")
+            encoded_identifiers = fact_data["identifiers"]
+            if (
+                not isinstance(encoded_identifiers, list)
+                or len(encoded_identifiers) > _MAX_GO_IDENTIFIERS
+            ):
+                raise ValueError("Cached Go identifiers are invalid")
             facts = GoFacts(
                 package_name=_go_string(fact_data["package_name"]),
                 imports=tuple(
                     _decode_go_import(item) for item in encoded_imports
                 ),
                 code_text=_go_string(fact_data["code_text"]),
+                identifiers=tuple(
+                    _go_string(item) for item in encoded_identifiers
+                ),
             )
         return ParsedFile(source, facts, facts, line_count, complete)
 
@@ -394,10 +454,52 @@ def _decode_go_import(value: object) -> GoImport:
     )
 
 
+class GoArchitectureSignalProvider:
+    """Extract Go DSA and design signals from blanked adapter facts.
+
+    Reuses the language-neutral pattern matcher over a signal view built
+    from the Go adapter's blanked code text, bounded identifiers, and
+    import paths, so literals are never evidence and generic patterns
+    keep the same corroboration discipline as Python.
+    """
+
+    provider_id = "go-architecture-signals"
+    language_id = "go"
+    capability_version = DEFAULT_CAPABILITY_VERSION
+    plugin_api_version = PLUGIN_API_VERSION
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[SignalObservation]:
+        facts = parsed.facts
+        if not isinstance(facts, GoFacts):
+            raise TypeError("Go signal provider requires GoFacts")
+        signals = FileSignals(
+            path=parsed.source.path,
+            line_count=parsed.line_count,
+            code_text=facts.code_text.lower(),
+            identifiers={name.lower() for name in facts.identifiers},
+            imports={imported.path.lower() for imported in facts.imports},
+        )
+        for category, definitions in (
+            ("architecture.dsa", GO_DSA_PATTERNS),
+            ("architecture.design", GO_DESIGN_PATTERNS),
+        ):
+            for signal_id, definition in definitions.items():
+                present, matched = pattern_is_present(signals, definition)
+                if present:
+                    yield SignalObservation(
+                        category=category,
+                        signal_id=signal_id,
+                        description=definition["description"],
+                        path=parsed.source.display_path,
+                        evidence=tuple(matched),
+                    )
+
+
 def register_go_plugins(registry: PluginRegistry) -> PluginRegistry:
     """Register the built-in Go pilot adapter and rules."""
     registry.register_language(GoLanguageAdapter())
     registry.register_rule_pack(GoRulePack())
+    registry.register_signal_provider(GoArchitectureSignalProvider())
     registry.register_project_provider(GoPackageGraphProvider())
     return registry
 

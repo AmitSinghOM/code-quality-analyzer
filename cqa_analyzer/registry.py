@@ -119,6 +119,10 @@ class PluginRegistry:
             if owner == language_id
         )
 
+    def signal_capable_languages(self) -> tuple[str, ...]:
+        """Return sorted language IDs with a registered signal provider."""
+        return tuple(sorted({owner for (owner, _) in self._signals}))
+
     def register_metric_provider(self, provider: MetricProvider) -> None:
         _validate_plugin_api(provider)
         _validate_version(

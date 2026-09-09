@@ -275,6 +275,20 @@ class CodeScanner:
         }
         return health
 
+    def architecture_signal_scope(self) -> dict:
+        """Describe which languages can contribute architecture signals.
+
+        The compatibility architecture signal score is meaningful only when
+        at least one file from a signal-capable language was successfully
+        analyzed; otherwise the score must be reported as not applicable
+        rather than as a floor value.
+        """
+        languages = list(self.registry.signal_capable_languages())
+        applicable = any(
+            self.parsed_files.get(language) for language in languages
+        )
+        return {"languages": languages, "applicable": applicable}
+
     def analysis_authority(self) -> dict:
         """Return deterministic qualification for the analysis result."""
         candidates = self.discovery.source_candidates

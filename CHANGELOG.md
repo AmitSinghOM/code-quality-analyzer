@@ -4,6 +4,61 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 2.29.0 - 2026-09-09
+
+### Added
+
+- `architecture_signal_scope` report field naming the signal-capable
+  languages (currently `["python"]`) and whether the score applies to
+  this analysis.
+- Exit code 5: `--fail-under` on a not-applicable score exits distinctly
+  instead of silently passing or failing.
+- Bounded Go identifier extraction: `GoFacts.identifiers` captures
+  declared func/type/var/const and short-declaration names plus selector
+  call sites from blanked source, the prerequisite for Go architecture
+  signals. Go adapter and cache codec 1.0.0 → 1.1.0 (old cache entries
+  miss safely).
+- Go architecture signals: a `go-architecture-signals` provider matches
+  Go-idiom DSA and design pattern definitions (`container/heap`,
+  `sort.Search`, corroborated BFS/DFS, `net/http`/gRPC API design,
+  `database/sql`/GORM, message queues, `sync.Once` singletons, JWT/crypto
+  auth, and more) against blanked source through the shared
+  language-neutral matcher. Go pattern IDs reuse the shared scoring
+  catalog, so Go and mixed projects now earn real architecture signal
+  scores; Go-only projects are no longer reported as not applicable.
+- TypeScript/JavaScript pilot: a bounded no-toolchain adapter for
+  `.ts`/`.tsx`/`.js`/`.jsx`/`.mjs`/`.cjs` blanks comments, strings, and
+  template literals (interpolations included), extracts bounded
+  identifiers and import specifiers, emits `TS-COR-001` for empty catch
+  blocks, and passively reads the root `package.json` to flag
+  imported-but-undeclared dependencies (`TS-PKG-001`) and invalid
+  manifests (`TS-PKG-002`). Workspace manifests skip drift analysis;
+  node builtins, path aliases, and non-npm-name specifiers are never
+  flagged. TS/JS architecture signals match ecosystem idioms
+  (`new Map`/`new Set`, memoization, express/fastify/NestJS/tRPC API
+  design, Prisma/TypeORM data access, redis/react-query caching,
+  kafkajs/bullmq queues, jsonwebtoken/next-auth authentication,
+  vitest/jest/playwright testing) through the shared scoring catalog,
+  so TS/JS-only projects earn real scores and full-stack projects
+  aggregate one score across Python, Go, and TS/JS.
+  Ruleset 2.13.0 → 2.14.0.
+- Nested `package.json` discovery: dependency-drift analysis covers
+  manifests in subdirectories (bounded), associating each TS/JS file
+  with its nearest enclosing manifest, unioning declared dependencies
+  up the ancestor chain, skipping workspace or unreadable chains, and
+  locating findings at each manifest's project-relative path.
+  TypeScript package provider capability 1.0.0 → 1.1.0.
+- Frontend build-output directories (`.next`, `.nuxt`, `.turbo`,
+  `.svelte-kit`, `out`, `coverage`, `bower_components`, `.yarn`,
+  `.pnpm-store`) are now excluded from discovery.
+
+### Changed
+
+- Projects with no successfully analyzed Python source now report the
+  architecture signal score as **not applicable** (`null` in JSON,
+  an explicit panel in text output) instead of a misleading 1.0 floor.
+  Report schema 1.10.0 → 1.11.0 (score and `rating` are now nullable).
+
 ## 2.28.0 - 2026-09-08
 
 ### Added

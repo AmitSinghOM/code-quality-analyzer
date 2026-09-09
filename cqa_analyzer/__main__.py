@@ -41,6 +41,7 @@ EXIT_BELOW_THRESHOLD = 1
 EXIT_NOTHING_ANALYZED = 2
 EXIT_COVERAGE_GAP = 3
 EXIT_FINDINGS = 4
+EXIT_SCORE_NOT_APPLICABLE = 5
 
 
 @click.command()
@@ -300,6 +301,7 @@ def _run_analysis(
         coverage_gap_ratio=gap_ratio,
     )
     rating, breakdown = rater.calculate_rating()
+    signal_scope = scanner.architecture_signal_scope()
 
     baseline_written = False
     if write_baseline_path is not None:
@@ -354,6 +356,7 @@ def _run_analysis(
         report = AnalysisReport(structured=_build_json_report(
             project_label,
             rating,
+            signal_scope,
             rater,
             breakdown,
             dsa_found,
@@ -388,6 +391,7 @@ def _run_analysis(
             _emit_text(
                 project_label,
                 rating,
+                signal_scope,
                 rater,
                 breakdown,
                 dsa_found,
@@ -411,6 +415,7 @@ def _run_analysis(
     return _exit_code(
         scanner,
         rating,
+        signal_scope,
         fail_under,
         strict,
         complexity_health=complexity_health,
@@ -422,6 +427,7 @@ def _run_analysis(
 def _exit_code(
     scanner: CodeScanner,
     rating: float,
+    signal_scope: dict,
     fail_under: float | None,
     strict: bool,
     complexity_health: dict | None = None,
@@ -436,6 +442,8 @@ def _exit_code(
         scanner.has_coverage_gaps or _health_has_gaps(complexity_health)
     ):
         return EXIT_COVERAGE_GAP
+    if fail_under is not None and not signal_scope["applicable"]:
+        return EXIT_SCORE_NOT_APPLICABLE
     if fail_under is not None and rating < fail_under:
         return EXIT_BELOW_THRESHOLD
     if (
@@ -602,6 +610,7 @@ def _project_analysis_payload(scanner, anonymized: bool) -> dict:
 def _build_json_report(
     project_label,
     rating,
+    signal_scope,
     rater,
     breakdown,
     dsa_found,
@@ -632,6 +641,13 @@ def _build_json_report(
         ]
         complexity_payload = anonymizer.complexity(complexity_data)
 
+    score_applicable = signal_scope["applicable"]
+    score_value = rating if score_applicable else None
+    score_label = (
+        rater.get_rating_label(rating)
+        if score_applicable
+        else "Not applicable"
+    )
     output = {
         "schema_version": REPORT_SCHEMA_VERSION,
         "analyzer_version": __version__,
@@ -646,10 +662,11 @@ def _build_json_report(
             redact_paths,
             scanner.cache_enabled,
         ),
-        "architecture_signal_score": rating,
-        "architecture_signal_label": rater.get_rating_label(rating),
-        "rating": rating,
-        "label": rater.get_rating_label(rating),
+        "architecture_signal_score": score_value,
+        "architecture_signal_label": score_label,
+        "architecture_signal_scope": signal_scope,
+        "rating": score_value,
+        "label": score_label,
         "breakdown": breakdown,
         "analysis_health": analysis_health,
         "scan_health": health_payload,
@@ -697,6 +714,7 @@ def _build_json_report(
 def _emit_text(
     project_label,
     rating,
+    signal_scope,
     rater,
     breakdown,
     dsa_found,
@@ -748,13 +766,25 @@ def _emit_text(
             + ", ".join(analysis_health["reasons"])
         )
 
-    rating_color = "red" if rating < 4 else "yellow" if rating < 7 else "green"
-    console.print(Panel(
-        f"[bold {rating_color}]{rating}/10[/bold {rating_color}]\n"
-        f"{rater.get_rating_label(rating)}",
-        title="[bold]Architecture Signal Score[/bold]",
-        expand=False,
-    ))
+    if signal_scope["applicable"]:
+        rating_color = (
+            "red" if rating < 4 else "yellow" if rating < 7 else "green"
+        )
+        console.print(Panel(
+            f"[bold {rating_color}]{rating}/10[/bold {rating_color}]\n"
+            f"{rater.get_rating_label(rating)}",
+            title="[bold]Architecture Signal Score[/bold]",
+            expand=False,
+        ))
+    else:
+        scope_languages = ", ".join(signal_scope["languages"])
+        console.print(Panel(
+            "[bold]Not applicable[/bold]\n"
+            f"No source from a signal-capable language ({scope_languages}) "
+            "was analyzed",
+            title="[bold]Architecture Signal Score[/bold]",
+            expand=False,
+        ))
 
     languages = ", ".join(
         f"{language}={count}"
