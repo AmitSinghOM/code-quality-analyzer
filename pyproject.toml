@@ -40,7 +40,7 @@ dev = [
     "build==1.6.0",
     # pytest <9.0.3 carries PYSEC-2026-1845; keep this at or above the fix.
     "pytest==9.1.1",
-    "pip-audit==2.7.3",
+    "pip-audit==2.10.1",
     "ruff==0.8.4",
 ]
 
