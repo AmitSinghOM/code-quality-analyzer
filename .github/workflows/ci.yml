@@ -119,9 +119,13 @@ jobs:
         shell: python
         run: |
           import glob
+          import re
           import tarfile
 
-          import cqa_analyzer
+          source = open("cqa_analyzer/__init__.py", encoding="utf-8").read()
+          schema_version = re.search(
+              r'REPORT_SCHEMA_VERSION = "([^"]+)"', source
+          ).group(1)
 
           archives = glob.glob("dist/*.tar.gz")
           assert len(archives) == 1, archives
@@ -131,9 +135,7 @@ jobs:
               name.endswith("/.pre-commit-hooks.yaml")
               for name in names
           )
-          schema_name = (
-              f"/docs/report-schema-{cqa_analyzer.REPORT_SCHEMA_VERSION}.json"
-          )
+          schema_name = f"/docs/report-schema-{schema_version}.json"
           assert any(
               name.endswith(schema_name)
               for name in names
