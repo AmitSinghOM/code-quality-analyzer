@@ -96,12 +96,27 @@ def _strip_ts_comments_and_strings(
     *,
     blank_strings: bool = True,
 ) -> tuple[str, bool]:
-    """Blank comments and optional string contents, preserving layout."""
+    """Blank comments and optional string contents, preserving layout.
+
+    Template literals are tracked through ``${...}`` interpolations with
+    nesting: an interpolation may contain strings, comments, braces, and
+    further template literals. When blanking, everything from a template's
+    opening backtick to its closing backtick — interpolated code included —
+    is blanked, so template content is never evidence.
+    """
     output = list(source)
     index = 0
     state = "code"
     quote = ""
     complete = True
+    # One entry per open template interpolation: the entry is the current
+    # unmatched `{` depth inside that interpolation. Non-empty means we are
+    # lexing code that ultimately lives inside a template literal.
+    interpolations: list[int] = []
+
+    def blank(position: int) -> None:
+        if blank_strings and source[position] != "\n":
+            output[position] = " "
 
     while index < len(source):
         current = source[index]
@@ -118,11 +133,27 @@ def _strip_ts_comments_and_strings(
                 state = "block_comment"
                 index += 2
                 continue
-            if current in {'"', "'", "`"}:
+            if current in {'"', "'"}:
                 quote = current
-                if blank_strings:
-                    output[index] = " "
-                state = "template" if current == "`" else "string"
+                blank(index)
+                state = "string"
+                index += 1
+                continue
+            if current == "`":
+                blank(index)
+                state = "template"
+                index += 1
+                continue
+            if interpolations:
+                if current == "{":
+                    interpolations[-1] += 1
+                elif current == "}":
+                    if interpolations[-1] == 0:
+                        interpolations.pop()
+                        state = "template"
+                    else:
+                        interpolations[-1] -= 1
+                blank(index)
                 index += 1
                 continue
         elif state == "line_comment":
@@ -143,46 +174,47 @@ def _strip_ts_comments_and_strings(
             index += 1
             continue
         elif state == "template":
-            # Interpolations are blanked with the rest of the literal:
-            # conservative, so interpolated code is never evidence.
             if current == "\\" and following:
-                if blank_strings:
-                    output[index] = " "
-                    if following != "\n":
-                        output[index + 1] = " "
+                blank(index)
+                if following != "\n":
+                    blank(index + 1)
+                index += 2
+                continue
+            if current == "$" and following == "{":
+                blank(index)
+                blank(index + 1)
+                interpolations.append(0)
+                state = "code"
                 index += 2
                 continue
             if current == "`":
-                if blank_strings:
-                    output[index] = " "
+                blank(index)
                 state = "code"
-            elif blank_strings and current != "\n":
-                output[index] = " "
+            else:
+                blank(index)
             index += 1
             continue
         elif state == "string":
             if current == "\\" and following:
-                if blank_strings:
-                    output[index] = " "
-                    if following != "\n":
-                        output[index + 1] = " "
+                blank(index)
+                if following != "\n":
+                    blank(index + 1)
                 index += 2
                 continue
             if current == quote:
-                if blank_strings:
-                    output[index] = " "
+                blank(index)
                 state = "code"
             elif current == "\n":
                 # Unterminated single-line string: recover at newline.
                 state = "code"
                 complete = False
-            elif blank_strings:
-                output[index] = " "
+            else:
+                blank(index)
             index += 1
             continue
         index += 1
 
-    if state in {"block_comment", "template", "string"}:
+    if state in {"block_comment", "template", "string"} or interpolations:
         complete = False
     return "".join(output), complete
 

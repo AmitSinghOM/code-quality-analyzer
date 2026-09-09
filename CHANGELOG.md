@@ -4,6 +4,33 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 2.30.1 - 2026-09-09
+
+Fixes from a staff-level review of the 2.29–2.30 changes.
+
+### Fixed
+
+- TypeScript/JavaScript blanker: template literals are now tracked
+  through `${...}` interpolations with nesting, so a nested template's
+  content can no longer leak into blanked code text and count as
+  pattern evidence, and interpolations containing strings, braces, or
+  further templates lex correctly. Unterminated interpolations mark the
+  file incomplete.
+- `requirements.txt` removed: it had drifted from `pyproject.toml`
+  after the 3.11 floor. CI now audits runtime dependencies derived from
+  the installed package metadata — one source of truth.
+- The publish workflow now attaches the built sdist and wheel to the
+  GitHub release, matching the artifacts uploaded to PyPI.
+- `duplication.py` pins every added AST for the analyzer's lifetime,
+  making the id()-based node grouping safe by construction rather than
+  by caller convention.
+
+### Added
+
+- Dependabot configuration for pip and GitHub Actions (weekly).
+- Roadmap: cross-language scoring fairness review (curves and maturity
+  gate predate multi-language scoring).
+
 ## 2.30.0 - 2026-09-09
 
 ### Added
