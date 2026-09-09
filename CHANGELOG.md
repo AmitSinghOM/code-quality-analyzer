@@ -4,6 +4,41 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 2.32.0 - 2026-09-10
+
+**Scoring policy 2.0.0 — catalog 2.0.** Scores are not comparable to
+policy 1.0.0; see
+`docs/adr/002-scoring-policy-2-production-systems-catalog.md`.
+
+### Added
+
+- 13 design patterns covering production-systems engineering and GoF:
+  `resilience` (retries with backoff, circuit breakers, bulkheads),
+  `rate_limiting`, `idempotency`, `event_sourcing_cqrs`,
+  `dead_letter_outbox`, `observability` (tracing, metrics, health
+  checks), `concurrency`, `pagination`, `strategy_pattern`,
+  `observer_pattern`, `adapter_pattern`, `decorator_pattern`,
+  `builder_pattern`.
+- 5 DSA patterns: `bit_manipulation`, `prefix_sum`, `string_matching`,
+  `consistent_hashing`, `lfu_cache`.
+- All new patterns are recognised in Python, Go, TypeScript/JavaScript,
+  Java, and C# through a shared `production_patterns.py` spec merged with
+  each language's idiomatic libraries (tenacity/resilience4j/Polly/
+  gobreaker/cockatiel, OpenTelemetry/Micrometer/prom-client, Axon/
+  MediatR/NestJS CQRS, errgroup/`java.util.concurrent`/
+  `System.Threading.Channels`, …). Pilot catalog parity is
+  regression-locked.
+- Python `database_orm` now recognises raw drivers: `sqlite3`,
+  `psycopg`/`psycopg2`, `asyncpg`, `aiosqlite`, `pymongo`/`motor`,
+  `databases`, `duckdb`, `aiomysql`/`pymysql`.
+
+### Changed
+
+- `SCORING_POLICY_VERSION` 1.0.0 → 2.0.0: DSA/design curve ceilings
+  scaled ×1.2/×1.5 and the maturity breadth target raised 20 → 28 for
+  the 56-pattern catalog (partial scaling; the new patterns are rarer
+  than the originals). Re-derive `--fail-under` thresholds once.
+
 ## 2.31.1 - 2026-09-10
 
 Precision patch from a staff-level review of the signal catalog.

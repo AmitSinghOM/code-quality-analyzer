@@ -24,6 +24,8 @@ pattern is a cross-language scoring-policy change tracked in the
 roadmap.
 """
 
+from .production_patterns import PRODUCTION_DSA_PATTERNS, production_design_patterns
+
 TS_DSA_PATTERNS = {
     "hash_map": {
         "text": ["new map(", "new map<"],
@@ -264,3 +266,28 @@ TS_DESIGN_PATTERNS = {
         "description": "Configuration management",
     },
 }
+
+# Scoring policy 2.0.0: production-systems and GoF patterns, merged from the
+# shared specs with the JavaScript ecosystem's libraries and primitives.
+TS_DSA_PATTERNS.update(PRODUCTION_DSA_PATTERNS)
+TS_DESIGN_PATTERNS.update(production_design_patterns(
+    imports={
+        "resilience": [
+            "cockatiel", "opossum", "p-retry", "async-retry",
+            "exponential-backoff", "retry-axios",
+        ],
+        "rate_limiting": [
+            "express-rate-limit", "rate-limiter-flexible", "bottleneck",
+            "p-throttle", "@upstash/ratelimit",
+        ],
+        "observability": ["@opentelemetry", "prom-client", "@sentry", "dd-trace"],
+        "event_sourcing_cqrs": ["@nestjs/cqrs"],
+        "concurrency": ["worker_threads", "p-limit", "p-queue", "p-map", "piscina"],
+    },
+    identifiers={
+        "concurrency": [
+            "promise.all", "promise.allsettled", "promise.race", "workerpool",
+        ],
+        "decorator_pattern": ["app.use"],
+    },
+))

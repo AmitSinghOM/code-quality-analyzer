@@ -14,7 +14,9 @@ COVERAGE_WARNING_THRESHOLD = 0.10
 SIZE_SATURATION_LINES = 2_000
 
 # Distinct patterns at which the maturity component maxes out.
-MATURITY_PATTERN_TARGET = 20
+# Scoring policy 2.0.0 raised this from 20 when the catalog grew from 38
+# to 56 patterns, so breadth is measured against the larger vocabulary.
+MATURITY_PATTERN_TARGET = 28
 
 
 class QualityRater:
@@ -98,8 +100,12 @@ class QualityRater:
     # -- scoring internals -------------------------------------------------
 
     # (weight_ceiling, score_at_ceiling) breakpoints
-    _DSA_CURVE = ((2, 2.0, 1.0), (5, 4.0, 0.67), (10, 6.0, 0.4), (None, 8.0, 0.1))
-    _DESIGN_CURVE = ((3, 2.0, 0.67), (8, 4.0, 0.4), (15, 6.0, 0.29), (None, 8.0, 0.1))
+    # Scoring policy 2.0.0: ceilings scaled (DSA x1.2, design x1.5) for the
+    # 56-pattern catalog. The new production-systems and GoF patterns are
+    # rarer than the originals, so scaling is partial rather than
+    # proportional to the added weight; see docs/adr/002.
+    _DSA_CURVE = ((2.4, 2.0, 0.833), (6, 4.0, 0.556), (12, 6.0, 0.333), (None, 8.0, 0.083))
+    _DESIGN_CURVE = ((4.5, 2.0, 0.444), (12, 4.0, 0.267), (22.5, 6.0, 0.19), (None, 8.0, 0.067))
 
     def _score(self, found: dict[str, list[str]], definitions: dict, curve) -> float:
         if not found:

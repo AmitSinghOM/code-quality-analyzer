@@ -19,6 +19,8 @@ approximate, so generic terms keep the same ``min_signals``
 corroboration discipline as the other languages.
 """
 
+from .production_patterns import PRODUCTION_DSA_PATTERNS, production_design_patterns
+
 JAVA_DSA_PATTERNS = {
     "hash_map": {
         "identifiers": [
@@ -298,3 +300,35 @@ JAVA_DESIGN_PATTERNS = {
         "description": "Configuration management",
     },
 }
+
+# Scoring policy 2.0.0: production-systems and GoF patterns, merged from the
+# shared specs with Java's idiomatic libraries and primitives.
+JAVA_DSA_PATTERNS.update(PRODUCTION_DSA_PATTERNS)
+JAVA_DESIGN_PATTERNS.update(production_design_patterns(
+    imports={
+        "resilience": [
+            "io.github.resilience4j", "com.netflix.hystrix",
+            "org.springframework.retry", "dev.failsafe", "net.jodah.failsafe",
+        ],
+        "rate_limiting": [
+            "io.github.bucket4j", "com.google.common.util.concurrent.ratelimiter",
+        ],
+        "observability": [
+            "io.opentelemetry", "io.micrometer", "io.prometheus", "brave",
+            "io.sentry", "org.springframework.boot.actuate",
+        ],
+        "event_sourcing_cqrs": ["org.axonframework", "com.eventstore", "io.eventuate"],
+        "pagination": ["org.springframework.data.domain.pageable"],
+        "concurrency": [
+            "java.util.concurrent", "reactor.core", "io.reactivex",
+            "kotlinx.coroutines",
+        ],
+    },
+    identifiers={
+        "concurrency": [
+            "executorservice", "completablefuture", "reentrantlock",
+            "countdownlatch", "concurrenthashmap", "forkjoinpool",
+        ],
+        "decorator_pattern": ["handlerinterceptor", "aspect", "around"],
+    },
+))

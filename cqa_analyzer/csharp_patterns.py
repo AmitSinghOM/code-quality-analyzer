@@ -17,6 +17,8 @@ Every pattern ID here MUST also exist in the Python pattern catalog
 corroboration.
 """
 
+from .production_patterns import PRODUCTION_DSA_PATTERNS, production_design_patterns
+
 CSHARP_DSA_PATTERNS = {
     "hash_map": {
         "identifiers": [
@@ -285,3 +287,35 @@ CSHARP_DESIGN_PATTERNS = {
         "description": "Configuration management",
     },
 }
+
+# Scoring policy 2.0.0: production-systems and GoF patterns, merged from the
+# shared specs with .NET's idiomatic libraries and primitives.
+CSHARP_DSA_PATTERNS.update(PRODUCTION_DSA_PATTERNS)
+CSHARP_DESIGN_PATTERNS.update(production_design_patterns(
+    imports={
+        "resilience": [
+            "polly", "microsoft.extensions.http.resilience",
+            "microsoft.extensions.resilience",
+        ],
+        "rate_limiting": [
+            "system.threading.ratelimiting", "aspnetcoreratelimit",
+            "microsoft.aspnetcore.ratelimiting",
+        ],
+        "observability": [
+            "opentelemetry", "system.diagnostics", "prometheus", "app.metrics",
+            "sentry", "microsoft.extensions.diagnostics.healthchecks",
+        ],
+        "event_sourcing_cqrs": ["mediatr", "eventstore.client", "marten"],
+        "concurrency": [
+            "system.threading.tasks", "system.threading.channels",
+            "system.collections.concurrent", "system.threading.tasks.dataflow",
+        ],
+    },
+    identifiers={
+        "concurrency": [
+            "task.whenall", "task.whenany", "semaphoreslim", "parallel.foreach",
+            "parallel.for", "concurrentqueue", "concurrentbag",
+        ],
+        "decorator_pattern": ["actionfilter", "iactionfilter", "app.use", "usemiddleware"],
+    },
+))
