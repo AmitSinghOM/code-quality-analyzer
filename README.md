@@ -3,7 +3,7 @@
 **Prove the health of a codebase without a single byte leaving the machine.**
 
 Code Quality Analyzer is a privacy-first static analysis tool for Python
-packages, with bounded Go, TypeScript/JavaScript, Java, and C#/.NET
+packages, with bounded Go, TypeScript/JavaScript, Java, Kotlin, and C#/.NET
 pilots, built for
 environments where source code
 cannot leave the trusted development boundary: regulated industries,
@@ -44,9 +44,9 @@ See [`docs/PRIVACY.md`](docs/PRIVACY.md) for the exact data boundary.
   (`PY-DUP-001`) detected by exact AST structure, so renamed copies still
   report and docstring changes cannot hide one
 - **Data Structures & Algorithms (DSA)** patterns in Python, Go,
-  TypeScript/JavaScript, Java, and C#
+  TypeScript/JavaScript, Java, Kotlin, and C#
 - **System Design** principles implemented in Python, Go,
-  TypeScript/JavaScript, Java, and C#
+  TypeScript/JavaScript, Java, Kotlin, and C#
 - A compatibility **architecture signal score from 1-10**
 
 Reports render as text, versioned JSON, or SARIF 2.1.0, and gate CI through
@@ -92,6 +92,8 @@ code-quality-analyzer/
 │   ├── go_patterns.py   # Go-idiom signal definitions for the shared catalog
 │   ├── ts_patterns.py   # TypeScript/JavaScript signal definitions
 │   ├── java_patterns.py # Java signal definitions
+│   ├── kotlin_patterns.py # Kotlin signal definitions (extends Java)
+│   ├── production_patterns.py # Shared production-systems and GoF specs
 │   ├── csharp_patterns.py # C#/.NET signal definitions
 │   ├── manifests.py     # Shared nested-manifest discovery and hardened XML
 │   ├── package_intelligence.py # Metadata, modules, imports, cycles
@@ -780,13 +782,24 @@ ASP.NET Core, EF Core/Dapper, MassTransit/Kafka, `IServiceCollection`
 DI, Serilog/ILogger, xUnit/NUnit/Moq, and the BCL collections feed the
 shared catalog.
 
-Neither pilot executes `javac`, Maven, Gradle, `dotnet`, or MSBuild, and
-both parse build XML fail-closed: documents declaring a DOCTYPE or
+The Kotlin pilot (`.kt`, `.kts`) shares the JVM ecosystem with Java, so
+it reuses the Maven/Gradle module intelligence (`KT-PKG-001`/`KT-PKG-002`)
+and extends the Java signal catalog with Kotlin idioms —
+`kotlinx.coroutines`, Ktor/http4k, Exposed/Room/Ktorm, Koin/Hilt,
+kotest/MockK, and the `mapOf`/`mutableListOf` collection builders. Its
+lexer handles nested block comments, `$name`/`${expr}` string templates
+(lexed as code holes, blanked), raw `"""` strings whose terminator is the
+last quote of a run, and semicolon-free imports with `as` aliases.
+`KT-COR-001` reports empty catch blocks.
+
+None of the JVM or .NET pilots execute `javac`, `kotlinc`, Maven, Gradle,
+`dotnet`, or MSBuild, and all parse build XML fail-closed: documents
+declaring a DOCTYPE or
 entities are rejected before parsing. Build output (`target`, `obj`,
 `.gradle`, `TestResults`) is excluded from discovery.
 
 The architecture signal score covers Python, Go, TypeScript/JavaScript,
-Java, and C# signals. A project where
+Java, Kotlin, and C# signals. A project where
 no signal-capable source was successfully analyzed reports the score as
 **not applicable** — `null` in JSON with an explicit
 `architecture_signal_scope` field — rather than a misleading floor value,

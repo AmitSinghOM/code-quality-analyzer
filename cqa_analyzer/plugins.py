@@ -4,6 +4,7 @@ from .languages import (
     register_csharp_plugins,
     register_go_plugins,
     register_java_plugins,
+    register_kotlin_plugins,
     register_python_plugins,
     register_typescript_plugins,
 )
@@ -17,5 +18,6 @@ def create_default_registry() -> PluginRegistry:
     registry = register_go_plugins(registry)
     registry = register_typescript_plugins(registry)
     registry = register_java_plugins(registry)
+    registry = register_kotlin_plugins(registry)
     registry = register_csharp_plugins(registry)
     return register_standard_reporters(registry)

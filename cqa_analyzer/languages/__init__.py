@@ -20,6 +20,12 @@ from .java import (
     JavaRulePack,
     register_java_plugins,
 )
+from .kotlin import (
+    KotlinLanguageAdapter,
+    KotlinPackageProvider,
+    KotlinRulePack,
+    register_kotlin_plugins,
+)
 from .python import (
     PythonComplexityProvider,
     PythonArchitectureSignalProvider,
@@ -47,6 +53,9 @@ __all__ = [
     "JavaLanguageAdapter",
     "JavaPackageProvider",
     "JavaRulePack",
+    "KotlinLanguageAdapter",
+    "KotlinPackageProvider",
+    "KotlinRulePack",
     "PythonArchitectureSignalProvider",
     "PythonComplexityProvider",
     "PythonLanguageAdapter",
@@ -58,6 +67,7 @@ __all__ = [
     "register_csharp_plugins",
     "register_go_plugins",
     "register_java_plugins",
+    "register_kotlin_plugins",
     "register_python_plugins",
     "register_typescript_plugins",
 ]

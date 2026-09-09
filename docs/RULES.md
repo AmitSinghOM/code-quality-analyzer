@@ -461,3 +461,33 @@ FastEndpoints); such findings are still worth reviewing under a
 A `.csproj` cannot be read as XML, or declares a DOCTYPE or entities
 (rejected fail-closed). Files under an invalid project skip drift
 analysis.
+
+## KT-COR-001: Empty catch block
+
+**Category:** Correctness
+**Default severity:** Warning
+**Confidence:** High
+
+A Kotlin `catch` block whose body is empty after comment blanking.
+Matched on blanked source; string templates, raw strings, and nested
+block comments are never evidence.
+
+## KT-PKG-001: Undeclared direct library
+
+**Category:** Package health
+**Default severity:** Warning
+**Confidence:** Medium
+
+Kotlin sources are checked against the same Maven/Gradle manifests and
+curated direct-library set as `JAVA-PKG-001`; see that rule for the
+transitive-dependency rationale. In a mixed Java/Kotlin module the two
+rules report independently per source language.
+
+## KT-PKG-002: Invalid build manifest
+
+**Category:** Package health
+**Default severity:** Error
+**Confidence:** High
+
+The governing `pom.xml` or Gradle build file cannot be read; identical
+semantics to `JAVA-PKG-002`.

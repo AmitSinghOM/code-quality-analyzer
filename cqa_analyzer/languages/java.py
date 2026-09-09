@@ -421,7 +421,11 @@ class JavaArchitectureSignalProvider:
 
 
 class JavaPackageProvider:
-    """Passive Maven/Gradle module discovery and conservative drift."""
+    """Passive Maven/Gradle module discovery and conservative drift.
+
+    Kotlin shares the JVM build manifests, so its package provider is a
+    subclass overriding only the plugin identity and rule IDs.
+    """
 
     provider_id = "java-package"
     language_id = "java"
@@ -429,6 +433,8 @@ class JavaPackageProvider:
     capability_version = DEFAULT_CAPABILITY_VERSION
     plugin_api_version = PLUGIN_API_VERSION
     enabled_by_default = True
+    drift_rule_id = "JAVA-PKG-001"
+    invalid_rule_id = "JAVA-PKG-002"
 
     def analyze(self, project: ProjectContext) -> ProviderResult:
         manifest_dirs, truncated = discover_manifest_dirs(
@@ -452,7 +458,7 @@ class JavaPackageProvider:
                     project.redact_paths,
                 )
                 findings.append(Finding(
-                    rule_id="JAVA-PKG-002",
+                    rule_id=self.invalid_rule_id,
                     category="package-health",
                     severity="error",
                     confidence="high",
@@ -473,7 +479,7 @@ class JavaPackageProvider:
             )
             for prefix, coordinates, example in undeclared[directory]:
                 findings.append(Finding(
-                    rule_id="JAVA-PKG-001",
+                    rule_id=self.drift_rule_id,
                     category="package-health",
                     severity="warning",
                     confidence="medium",

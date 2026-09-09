@@ -39,7 +39,7 @@ def test_version_flag_reports_analyzer_version():
 
     assert result.exit_code == EXIT_OK
     assert result.output.strip() == (
-        "code-quality-analyzer, version 2.32.0"
+        "code-quality-analyzer, version 2.33.0"
     )
 
 
@@ -51,14 +51,15 @@ def test_json_output_is_valid_and_includes_health(project):
 
     assert result.exit_code == EXIT_OK
     assert payload["schema_version"] == "1.11.0"
-    assert payload["analyzer_version"] == "2.32.0"
-    assert payload["ruleset_version"] == "2.15.0"
+    assert payload["analyzer_version"] == "2.33.0"
+    assert payload["ruleset_version"] == "2.16.0"
     assert payload["scoring_policy_version"] == "2.0.0"
     assert len(payload["configuration_fingerprint"]) == 64
     assert payload["language_adapters"] == {
         "csharp": "1.0.0",
         "go": "1.1.0",
         "java": "1.0.0",
+        "kotlin": "1.0.0",
         "typescript": "1.0.0",
         "python": "1.0.0",
     }

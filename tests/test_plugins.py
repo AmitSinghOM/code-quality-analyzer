@@ -256,6 +256,13 @@ def test_python_project_providers_are_registered_and_cached(project):
             "enabled_by_default": True,
         },
         {
+            "language_id": "kotlin",
+            "capability": "package",
+            "provider_id": "kotlin-package",
+            "capability_version": "1.0.0",
+            "enabled_by_default": True,
+        },
+        {
             "language_id": "python",
             "capability": "complexity",
             "provider_id": "python-complexity",

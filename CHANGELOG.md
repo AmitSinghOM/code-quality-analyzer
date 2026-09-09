@@ -4,6 +4,32 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 2.33.0 - 2026-09-10
+
+### Added
+
+- **Kotlin pilot** (`.kt`, `.kts`): shares the JVM ecosystem with Java,
+  so it reuses the Maven/Gradle package provider (drift `KT-PKG-001`,
+  invalid manifests `KT-PKG-002`) and extends the Java signal catalog
+  with Kotlin idioms (`kotlinx.coroutines`, Ktor/http4k, Exposed/Room/
+  Ktorm, Koin/Hilt, kotest/MockK, collection builders). Kotlin-specific
+  lexer: nested block comments, `$name`/`${expr}` templates lexed as
+  code holes, raw `"""` strings terminated by the last quote of a run
+  (edge found live in ktor-samples), semicolon-free imports with `as`
+  aliases; `KT-COR-001` empty catch. Calibrated on ktor-samples.
+- Roadmap: C and C++ recorded as decision-gated (preprocessor defeats
+  regex blanking; no manifest standard; design catalog mismatch) with
+  the two admissible paths spelled out.
+
+### Changed
+
+- Ruleset 2.15.0 → 2.16.0 (three Kotlin rules). Six signal-capable
+  languages; `architecture_signal_scope` lists
+  `["csharp", "go", "java", "kotlin", "python", "typescript"]`.
+- Java package provider rule IDs are now class attributes so JVM
+  languages can share it; the shared `signal_observations` helper
+  lives in `languages/_shared.py`.
+
 ## 2.32.0 - 2026-09-10
 
 **Scoring policy 2.0.0 — catalog 2.0.** Scores are not comparable to
