@@ -231,6 +231,54 @@ DSA_PATTERNS = {
         "weight": 2.0,
         "min_signals": 1,
         "description": "Interval merging and overlap detection"
+    },
+    # --- Scoring policy 2.0.0 additions ---
+    "bit_manipulation": {
+        "identifiers": [
+            "bitmask", "popcount", "bit_count", "bitcount", "lowbit", "xor",
+            "bit_length", "set_bit", "clear_bit", "toggle_bit",
+        ],
+        "text": ["1 <<", "& (1 <<", "^= 1 <<", ">> 1) & 1"],
+        "weight": 2.0,
+        "min_signals": 1,
+        "description": "Bit manipulation and bitmask techniques"
+    },
+    "prefix_sum": {
+        "identifier_contains": [
+            "prefix_sum", "prefixsum", "cumsum", "cumulative_sum", "running_sum",
+            "runningsum", "prefix_sums",
+        ],
+        "identifiers": ["accumulate"],
+        "imports": ["itertools.accumulate"],
+        "weight": 2.0,
+        "min_signals": 1,
+        "description": "Prefix sums and cumulative arrays"
+    },
+    "string_matching": {
+        "identifiers": [
+            "kmp", "rabin_karp", "rabinkarp", "rolling_hash", "rollinghash",
+            "z_function", "zfunction", "lps", "failure_function", "aho_corasick",
+            "ahocorasick", "suffix_array", "suffixarray", "suffix_automaton",
+        ],
+        "weight": 2.5,
+        "min_signals": 1,
+        "description": "String matching algorithms (KMP, Rabin-Karp, Z, Aho-Corasick)"
+    },
+    "consistent_hashing": {
+        "identifier_contains": [
+            "consistenthash", "consistent_hash", "hashring", "hash_ring",
+            "virtual_node", "virtualnode", "vnode", "rendezvous",
+        ],
+        "weight": 3.0,
+        "min_signals": 1,
+        "description": "Consistent hashing and hash rings"
+    },
+    "lfu_cache": {
+        "identifier_contains": ["lfu"],
+        "identifiers": ["min_freq", "minfreq", "frequency_map", "freq_map", "freq_to_keys"],
+        "weight": 2.0,
+        "min_signals": 1,
+        "description": "LFU cache with frequency buckets"
     }
 }
 
@@ -250,7 +298,11 @@ SYSTEM_DESIGN_PATTERNS = {
             "sessionmaker", "column", "querySet",
         ],
         "text": ["base.metadata", "session.query", "objects.filter"],
-        "imports": ["sqlalchemy", "django.db", "peewee", "tortoise", "sqlmodel"],
+        "imports": [
+            "sqlalchemy", "django.db", "peewee", "tortoise", "sqlmodel", "sqlite3",
+            "psycopg", "psycopg2", "asyncpg", "aiosqlite", "pymongo", "motor",
+            "databases", "duckdb", "aiomysql", "pymysql",
+        ],
         "weight": 2.0,
         "min_signals": 1,
         "description": "Database ORM patterns"
@@ -352,5 +404,123 @@ SYSTEM_DESIGN_PATTERNS = {
         "weight": 1.5,
         "min_signals": 2,
         "description": "Configuration management"
+    },
+    # --- Scoring policy 2.0.0: production-systems and GoF patterns ---
+    "resilience": {
+        "identifier_contains": [
+            "circuitbreaker", "circuit_breaker", "retrypolicy", "retry_policy",
+            "backoff", "bulkhead",
+        ],
+        "identifiers": ["jitter", "max_retries", "max_attempts", "half_open", "retry_after"],
+        "imports": ["tenacity", "backoff", "pybreaker", "aiobreaker", "stamina", "circuitbreaker"],
+        "weight": 2.5,
+        "min_signals": 1,
+        "description": "Resilience: retries with backoff, circuit breakers, bulkheads"
+    },
+    "rate_limiting": {
+        "identifier_contains": ["ratelimit", "rate_limit", "throttl"],
+        "identifiers": ["token_bucket", "leaky_bucket", "sliding_log", "requests_per_second"],
+        "imports": ["limits", "slowapi", "ratelimit", "aiolimiter", "throttled"],
+        "weight": 2.0,
+        "min_signals": 1,
+        "description": "Rate limiting and throttling"
+    },
+    "idempotency": {
+        "identifier_contains": ["idempot"],
+        "identifiers": ["dedupe", "deduplicate", "exactly_once", "at_least_once"],
+        "weight": 2.5,
+        "min_signals": 1,
+        "description": "Idempotency keys and duplicate suppression"
+    },
+    "event_sourcing_cqrs": {
+        "identifier_contains": [
+            "eventstore", "event_store", "eventsourc", "event_sourc", "cqrs",
+            "commandhandler", "command_handler", "queryhandler", "query_handler",
+            "projection", "aggregateroot", "aggregate_root",
+        ],
+        "identifiers": ["append_event", "replay", "snapshot", "read_model", "write_model"],
+        "weight": 3.0,
+        "min_signals": 2,
+        "description": "Event sourcing and CQRS"
+    },
+    "dead_letter_outbox": {
+        "identifier_contains": [
+            "deadletter", "dead_letter", "outbox", "redrive", "poisonmessage",
+            "poison_message",
+        ],
+        "identifiers": ["dlq"],
+        "weight": 2.5,
+        "min_signals": 1,
+        "description": "Dead-letter queues, redrive, and transactional outbox"
+    },
+    "observability": {
+        "identifier_contains": ["healthcheck", "health_check", "tracer", "start_span", "startspan"],
+        "identifiers": ["readiness", "liveness", "histogram", "span", "trace_id", "correlation_id"],
+        "imports": [
+            "opentelemetry", "prometheus_client", "statsd", "datadog", "sentry_sdk",
+            "ddtrace", "aws_xray_sdk",
+        ],
+        "weight": 2.0,
+        "min_signals": 1,
+        "description": "Observability: tracing, metrics, health checks"
+    },
+    "concurrency": {
+        "identifiers": [
+            "threadpoolexecutor", "processpoolexecutor", "semaphore", "gather",
+            "create_task", "taskgroup", "as_completed", "boundedsemaphore",
+        ],
+        "imports": [
+            "asyncio", "concurrent.futures", "threading", "multiprocessing", "anyio",
+            "trio",
+        ],
+        "weight": 2.0,
+        "min_signals": 2,
+        "description": "Concurrency and parallelism primitives"
+    },
+    "pagination": {
+        "identifier_contains": [
+            "paginat", "page_size", "pagesize", "next_token", "nexttoken",
+            "page_token", "pagetoken", "next_cursor", "nextcursor",
+        ],
+        "identifiers": ["cursor", "has_more", "hasmore"],
+        "weight": 1.5,
+        "min_signals": 2,
+        "description": "Cursor or page-based pagination"
+    },
+    "strategy_pattern": {
+        "identifier_contains": ["strategy"],
+        "weight": 1.5,
+        "min_signals": 1,
+        "description": "Strategy pattern: interchangeable algorithms behind one interface"
+    },
+    "observer_pattern": {
+        "identifier_contains": [
+            "observer", "subscriber", "eventemitter", "event_emitter", "pubsub",
+            "eventbus", "event_bus",
+        ],
+        "identifiers": ["subscribe", "unsubscribe", "publish", "notify_observers", "emit"],
+        "weight": 1.5,
+        "min_signals": 2,
+        "description": "Observer / publish-subscribe pattern"
+    },
+    "adapter_pattern": {
+        "identifier_contains": ["adapter"],
+        "weight": 1.5,
+        "min_signals": 1,
+        "description": "Adapter pattern: interface translation at boundaries"
+    },
+    "decorator_pattern": {
+        "identifier_contains": ["decorator", "middleware", "interceptor"],
+        "identifiers": ["wraps"],
+        "imports": ["functools.wraps"],
+        "weight": 1.5,
+        "min_signals": 1,
+        "description": "Decorator / middleware / interceptor layering"
+    },
+    "builder_pattern": {
+        "identifier_contains": ["builder"],
+        "weight": 1.2,
+        "min_signals": 1,
+        "description": "Builder pattern: stepwise construction"
     }
 }

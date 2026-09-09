@@ -65,7 +65,12 @@ same privacy contract.
 
 Architecture signal scores from 2.x are **not comparable** to 1.x ratings. Detection got stricter
 and project size no longer adds score, so most projects will score lower than
-they did before. See [Scoring](#scoring).
+they did before. Scores under **scoring policy 2.0.0** (analyzer 2.32.0+) are
+likewise not comparable to policy 1.0.0: the catalog grew from 38 to 56
+patterns to cover production-systems engineering, and the rating curves were
+rescaled. Every JSON report carries `scoring_policy_version`. See
+[Scoring](#scoring) and
+[`docs/adr/002-scoring-policy-2-production-systems-catalog.md`](docs/adr/002-scoring-policy-2-production-systems-catalog.md).
 
 ## Project Structure
 
@@ -513,6 +518,14 @@ Past that, more code adds nothing.
 not be read or parsed, the rating is scaled down and reported as a lower bound
 with an explicit warning.
 
+**Scoring policy 2.0.0.** The DSA and design curves map total matched pattern
+weight to a 1–10 score. When the catalog grew to 56 patterns, the curve
+ceilings were scaled ×1.2 (DSA) and ×1.5 (design) and the maturity breadth
+target rose from 20 to 28 distinct patterns — partial rather than
+proportional scaling, because the added production-systems patterns are rarer
+than the originals. Re-derive any `--fail-under` threshold once after
+upgrading.
+
 ## Scan Safety
 
 File reads go through `cqa_analyzer/discovery.py`, which refuses to:
@@ -642,7 +655,7 @@ The confidence score indicates how reliable the complexity estimate is.
 
 ## What It Detects
 
-### DSA Patterns (24 patterns)
+### DSA Patterns (29 patterns)
 
 **Data Structures:**
 - Hash maps (Counter, defaultdict)
@@ -673,13 +686,19 @@ The confidence score indicates how reliable the complexity estimate is.
 - Monotonic stack
 - Interval operations
 - Manual LRU cache
+- LFU cache
+- Bit manipulation and bitmasks
+- Prefix sums
+- String matching (KMP, Rabin-Karp, Z, Aho-Corasick)
+- Consistent hashing
 
-### System Design Patterns (14 patterns)
+### System Design Patterns (27 patterns)
 - API design (FastAPI, Flask, Django, Starlette)
-- Database ORM
+- Database access (ORMs and raw drivers)
 - Caching layers
 - Message queues
-- Factory, Singleton, Repository patterns
+- Factory, Singleton, Repository, Strategy, Observer, Adapter, Decorator,
+  Builder patterns
 - Dependency injection
 - Error handling
 - Logging
@@ -687,6 +706,21 @@ The confidence score indicates how reliable the complexity estimate is.
 - Testing
 - Microservices/service clients
 - Configuration management
+- Resilience: retries with backoff, circuit breakers, bulkheads
+- Rate limiting and throttling
+- Idempotency and duplicate suppression
+- Event sourcing and CQRS
+- Dead-letter queues, redrive, and transactional outbox
+- Observability: tracing, metrics, health checks
+- Concurrency and parallelism primitives
+- Pagination
+
+Production-systems patterns are recognized primarily through naming
+conventions (`CircuitBreaker`, `RetryPolicy`, `DeadLetterQueue`,
+`EventStore`, `HealthCheck`, …) and well-known library imports (tenacity,
+resilience4j, Polly, OpenTelemetry, Micrometer, …) in every supported
+language. Tokens that are common words in other contexts (`projection`,
+`cursor`, `subscribe`) require corroboration before a pattern is reported.
 
 Python receives actionable rules, package intelligence, architecture signals,
 and experimental complexity analysis. The Go pilot discovers `.go` files,

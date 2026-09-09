@@ -24,6 +24,8 @@ yet because the shared scoring catalog has no such ID; adding one is a
 cross-language scoring-policy change tracked in the roadmap.
 """
 
+from .production_patterns import PRODUCTION_DSA_PATTERNS, production_design_patterns
+
 GO_DSA_PATTERNS = {
     "set_operations": {
         "text": ["]struct{}{"],
@@ -291,3 +293,36 @@ GO_DESIGN_PATTERNS = {
         "description": "Configuration management",
     },
 }
+
+# Scoring policy 2.0.0: production-systems and GoF patterns, merged from the
+# shared specs with Go's idiomatic libraries and primitives.
+GO_DSA_PATTERNS.update(PRODUCTION_DSA_PATTERNS)
+GO_DESIGN_PATTERNS.update(production_design_patterns(
+    imports={
+        "resilience": [
+            "github.com/sony/gobreaker", "github.com/cenkalti/backoff",
+            "github.com/avast/retry-go", "github.com/failsafe-go",
+            "github.com/eapache/go-resiliency",
+        ],
+        "rate_limiting": [
+            "golang.org/x/time/rate", "github.com/ulule/limiter",
+            "github.com/uber-go/ratelimit",
+        ],
+        "observability": [
+            "go.opentelemetry.io", "github.com/prometheus/client_golang",
+            "github.com/getsentry/sentry-go", "github.com/datadog/dd-trace-go",
+        ],
+        "concurrency": [
+            "golang.org/x/sync/errgroup", "golang.org/x/sync/semaphore",
+        ],
+    },
+    identifiers={
+        "concurrency": [
+            "waitgroup", "sync.waitgroup", "errgroup", "sync.mutex",
+            "sync.rwmutex", "mutex", "semaphore",
+        ],
+        "decorator_pattern": ["handlerfunc"],
+    },
+    text={"concurrency": ["go func", "select {", "<-"]},
+    min_signals={"concurrency": 1},
+))
