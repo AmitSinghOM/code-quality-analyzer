@@ -151,7 +151,13 @@ def test_sarif_encodes_relative_uri_characters():
 
 def test_catalog_covers_every_current_builtin_rule():
     assert builtin_rule_ids() == (
+        "CS-COR-001",
+        "CS-PKG-001",
+        "CS-PKG-002",
         "GO-COR-001",
+        "JAVA-COR-001",
+        "JAVA-PKG-001",
+        "JAVA-PKG-002",
         "PY-COR-001",
         "PY-COR-002",
         "PY-COR-003",

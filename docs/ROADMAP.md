@@ -151,7 +151,43 @@ a `scoring_policy_version` bump with a migration note, following the
 UI-component pattern ID (currently unrepresentable) belongs to this
 review.
 
-## 6. Explicit non-goals
+## 6. Java and C#/.NET pilots (✅ entries shipped in 2.31.0)
+
+Together with Python, Go, and TypeScript/JavaScript these cover the
+languages most professional developers work in. Both follow the proven
+pilot shape — no-toolchain adapter, one high-confidence launch rule,
+passive package intelligence, and signal definitions mapped onto the
+shared scoring catalog.
+
+**Java** (`.java`): blanking covers comments, strings, char literals,
+and `"""` text blocks; imports, bounded identifiers (declarations,
+annotations, generic type uses, calls). `JAVA-COR-001` empty catch.
+Package intelligence discovers `pom.xml` and `build.gradle(.kts)`
+modules with the nested-manifest machinery, fails closed on XML that
+declares a DOCTYPE or entities, and reports invalid manifests
+(`JAVA-PKG-002`). Dependency drift (`JAVA-PKG-001`) is deliberately
+conservative: Java imports name packages while manifests name
+artifacts, and Maven/Gradle make transitively-provided classes
+importable, so drift is checked only against a curated map of
+libraries that are almost always direct dependencies.
+
+**C#/.NET** (`.cs`): blanking covers comments, regular, verbatim
+(`@""`), interpolated (`$""` with nested braces), and raw (`"""`)
+strings, and char literals; `using` directives (including `static`,
+alias, and `global`), bounded identifiers (declarations, attributes,
+generic type uses, calls). `CS-COR-001` empty catch. Package
+intelligence reads `.csproj` `PackageReference`s with the same XML
+hardening (`CS-PKG-002` on invalid project files). Drift (`CS-PKG-001`)
+matches `using` namespaces against declared packages by prefix in either
+direction, skipping `System.*`, shared-framework `Microsoft.*`
+namespaces, and namespaces the analyzed source itself declares.
+
+Remaining for both: architecture signals landed with the entries; the
+next rules per language (Java: resource leaks outside try-with-
+resources; C#: `async void`, un-awaited tasks) and Gradle Kotlin-DSL
+edge cases are the open items.
+
+## 7. Explicit non-goals
 
 - Executing `go build`, `go vet`, `tsc`, `node`, or any language
   toolchain — ever.

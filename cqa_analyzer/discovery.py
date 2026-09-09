@@ -30,6 +30,7 @@ SKIP_DIRS = frozenset({
     'dist', 'build', '.idea', '.vscode',
     '.next', '.nuxt', '.turbo', '.svelte-kit', 'out', 'coverage',
     'bower_components', '.yarn', '.pnpm-store',
+    'target', 'obj', '.gradle', '.mvn', 'TestResults',
 })
 
 # 2 MB. Anything bigger is generated, vendored, or a data blob.

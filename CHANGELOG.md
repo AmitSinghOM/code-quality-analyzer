@@ -4,6 +4,43 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 2.31.0 - 2026-09-09
+
+### Added
+
+- **Java pilot** (`.java`): no-toolchain adapter (comments, strings,
+  char literals, and `"""` text blocks blanked; imports; bounded
+  identifiers from declarations, annotations, generic uses, `new`
+  targets, and calls; safe cache codec), `JAVA-COR-001` empty catch
+  blocks, Java-idiom architecture signals through the shared catalog,
+  and passive Maven/Gradle module intelligence: nested `pom.xml` /
+  `build.gradle(.kts)` discovery, `JAVA-PKG-002` invalid manifests, and
+  deliberately conservative `JAVA-PKG-001` drift limited to a curated
+  set of almost-always-direct libraries (Maven/Gradle make transitive
+  classes importable, so common starter-provided libraries are never
+  flagged).
+- **C#/.NET pilot** (`.cs`): no-toolchain adapter blanking regular,
+  verbatim, interpolated (nested holes), and raw strings plus char
+  literals; `using` directives (static/alias/global), declared
+  namespaces, bounded identifiers; `CS-COR-001` empty catch blocks
+  (including `when` filters); .NET-idiom architecture signals; and
+  `.csproj` intelligence: nested project discovery, `CS-PKG-002` invalid
+  project files, and `CS-PKG-001` drift matching `using` namespaces to
+  `PackageReference`s by prefix in either direction while skipping
+  `System.*`, shared-framework `Microsoft.*`, and self-declared
+  namespaces.
+- Shared `manifests.py`: bounded nested-manifest discovery and hardened
+  XML parsing that rejects any document declaring a DOCTYPE or entities
+  before parsing.
+- Build-output directories `target`, `obj`, `.gradle`, `.mvn`, and
+  `TestResults` are excluded from discovery.
+
+### Changed
+
+- Ruleset 2.14.0 → 2.15.0 (six new rules). The architecture signal
+  score now aggregates five languages; `architecture_signal_scope`
+  lists `["csharp", "go", "java", "python", "typescript"]`.
+
 ## 2.30.1 - 2026-09-09
 
 Fixes from a staff-level review of the 2.29–2.30 changes.

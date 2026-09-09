@@ -378,3 +378,86 @@ project-relative path.
 
 The root `package.json` exists but cannot be read as a valid JSON object.
 Correct the syntax and run analysis again.
+
+## JAVA-COR-001: Empty catch block
+
+**Category:** Correctness
+**Default severity:** Warning
+**Confidence:** High
+
+A `catch` block whose body is empty after comment blanking discards the
+exception without recovery or context. Matched on blanked source, so
+string, char, and text-block mentions are never evidence.
+
+## JAVA-PKG-001: Undeclared direct library
+
+**Category:** Package health
+**Default severity:** Warning
+**Confidence:** Medium
+
+A commonly direct third-party library (Guava, Gson, Commons Lang/IO,
+Lombok, OkHttp, Retrofit, MapStruct, JJWT, Caffeine, AssertJ, Mockito,
+Testcontainers, HikariCP, Flyway, Liquibase) is imported but no
+dependency with the matching `groupId`/`artifactId` prefix is declared
+in the governing `pom.xml` or Gradle build file, including parent
+manifests up the module chain. The check is deliberately limited to
+this curated set: Java imports name packages while manifests name
+artifacts, and Maven/Gradle make transitively provided classes
+importable, so libraries commonly supplied by starters (Jackson, SLF4J,
+Hibernate) are never flagged.
+
+## JAVA-PKG-002: Invalid build manifest
+
+**Category:** Package health
+**Default severity:** Error
+**Confidence:** High
+
+A `pom.xml`, `build.gradle`, or `build.gradle.kts` cannot be read.
+`pom.xml` parsing fails closed on any document declaring a DOCTYPE or
+entities, so entity expansion and external-entity retrieval cannot
+occur. Files under an invalid manifest skip drift analysis.
+
+## CS-COR-001: Empty catch block
+
+**Category:** Correctness
+**Default severity:** Warning
+**Confidence:** High
+
+A `catch` block — with or without an exception declaration or `when`
+filter — whose body is empty after comment blanking. Matched on blanked
+source; regular, verbatim, interpolated, and raw strings are never
+evidence.
+
+## CS-PKG-001: Undeclared package namespace
+
+**Category:** Package health
+**Default severity:** Warning
+**Confidence:** Medium
+
+A `using` directive names a namespace with no matching
+`PackageReference` in the nearest enclosing `.csproj` (or its parents).
+Matching is case-insensitive by prefix in either direction, so
+`using Microsoft.EntityFrameworkCore` is satisfied by the
+`Microsoft.EntityFrameworkCore.SqlServer` package and
+`using Serilog.Events` by `Serilog`. Never flagged: `System.*`,
+shared-framework `Microsoft.AspNetCore`/`Microsoft.Extensions`/
+`Microsoft.NET` namespaces, any namespace whose root segment the
+analyzed source itself declares or the project's `RootNamespace`/
+`AssemblyName` names, and any namespace sharing a root segment with a
+declared package (vendors split one namespace across many packages).
+Declared packages flow transitively through `ProjectReference`s and from
+ancestor `Directory.Build.props`/`Directory.Packages.props` files.
+Confidence is medium because a namespace can be legitimately provided by
+a declared package's own transitive dependencies (FluentValidation via
+FastEndpoints); such findings are still worth reviewing under a
+"declare what you use" policy.
+
+## CS-PKG-002: Invalid project file
+
+**Category:** Package health
+**Default severity:** Error
+**Confidence:** High
+
+A `.csproj` cannot be read as XML, or declares a DOCTYPE or entities
+(rejected fail-closed). Files under an invalid project skip drift
+analysis.
