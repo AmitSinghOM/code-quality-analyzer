@@ -11,6 +11,15 @@ name: Publish to PyPI
 on:
   release:
     types: [published]
+  # Release events read the workflow from the tag's commit, so releases
+  # tagged before this file existed cannot trigger it. Dispatch runs the
+  # main-branch workflow against any existing release tag instead.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to publish (e.g. v2.29.0)"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -21,6 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
           persist-credentials: false
 
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -30,7 +40,7 @@ jobs:
       - name: Verify the tag matches the package version
         shell: bash
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: |
           set -euo pipefail
           package_version=$(python -c 'import cqa_analyzer; print(cqa_analyzer.__version__)')
