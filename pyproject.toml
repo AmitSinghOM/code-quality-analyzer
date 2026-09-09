@@ -26,7 +26,7 @@ classifiers = [
 dependencies = [
     # click <8.3.3 carries PYSEC-2026-2132; keep this at or above the fix.
     "click==8.5.0",
-    "rich==14.3.4",
+    "rich==15.0.0",
 ]
 
 [project.urls]
