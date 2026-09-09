@@ -82,6 +82,62 @@ def test_comments_strings_and_template_interpolations_are_blanked():
     assert len(blanked.splitlines()) == len(source.splitlines())
 
 
+def test_nested_template_literal_content_never_leaks():
+    # Regression: the first backtick inside ${...} used to close the
+    # outer template, leaking the nested literal's content into code_text.
+    source = "const a = `outer ${ `inner secret` } tail`;\nrun();\n"
+    blanked, complete = _strip_ts_comments_and_strings(source)
+
+    assert complete
+    assert "inner" not in blanked
+    assert "secret" not in blanked
+    assert "outer" not in blanked
+    assert "tail" not in blanked
+    assert "run" in blanked
+    assert len(blanked) == len(source)
+
+
+def test_interpolation_string_containing_brace_does_not_close_early():
+    source = "const a = `x ${ f('}') } y`; visited();\n"
+    blanked, complete = _strip_ts_comments_and_strings(source)
+
+    assert complete
+    assert "visited" in blanked
+    assert " y`" not in blanked
+
+
+def test_interpolation_with_object_literal_braces():
+    source = "const a = `v ${ JSON.stringify({depth: {inner: 1}}) } w`; ok();\n"
+    blanked, complete = _strip_ts_comments_and_strings(source)
+
+    assert complete
+    assert "stringify" not in blanked
+    assert "ok" in blanked
+
+
+def test_escaped_backtick_and_dollar_do_not_end_template():
+    source = "const a = `uses \\` and \\${ literally`; after();\n"
+    blanked, complete = _strip_ts_comments_and_strings(source)
+
+    assert complete
+    assert "literally" not in blanked
+    assert "after" in blanked
+
+
+def test_metadata_pass_keeps_content_with_same_structure():
+    source = "const a = `x ${ `y` } z`;\nimport w from 'zod';\n"
+    kept, complete = _strip_ts_comments_and_strings(source, blank_strings=False)
+
+    assert complete
+    assert kept == source
+
+
+def test_unterminated_interpolation_marks_incomplete():
+    _, complete = _strip_ts_comments_and_strings("const a = `x ${ 1 + ;\n")
+
+    assert complete is False
+
+
 def test_unterminated_block_comment_marks_file_incomplete():
     parsed = parse_ts("const a = 1;\n/* unterminated\n")
 

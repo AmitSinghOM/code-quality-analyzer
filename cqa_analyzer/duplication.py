@@ -83,6 +83,10 @@ class PythonDuplicationAnalyzer:
     def __init__(self) -> None:
         self._groups: dict[str, list[_Occurrence]] = {}
         self._suppressions: dict[str, frozenset[tuple[int, str]]] = {}
+        # Occurrences reference AST nodes by id(); pinning every added tree
+        # guarantees no node is garbage-collected (and its id reused by a
+        # different node) between add_file() and analyze().
+        self._pinned_trees: list[ast.AST] = []
         self.functions_analyzed = 0
 
     def add_file(
@@ -93,6 +97,7 @@ class PythonDuplicationAnalyzer:
         suppressed: frozenset[tuple[int, str]] = frozenset(),
     ) -> None:
         """Register one parsed module's significant functions."""
+        self._pinned_trees.append(tree)
         self._suppressions[identity_path] = suppressed
         for node, ancestors in _walk_functions(tree):
             body = _stripped_body(node)

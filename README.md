@@ -102,7 +102,6 @@ code-quality-analyzer/
 ├── CHANGELOG.md
 ├── MANIFEST.in
 ├── pyproject.toml
-├── requirements.txt
 ├── README.md
 └── .gitignore
 ```

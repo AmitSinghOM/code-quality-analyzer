@@ -136,7 +136,22 @@ Remaining for the pilot, in order:
   from the repository root now reports frontend dependency drift at
   `frontend/package.json`.
 
-## 5. Explicit non-goals
+## 5. Cross-language scoring fairness review
+
+The rating curves and the maturity component predate multi-language
+scoring: maturity saturates at 2,000 lines, and the DSA/design curves
+were calibrated when only Python could contribute signals. Go and TS/JS
+fire subsets of the shared catalog, so signal density differs by
+language and mixed-language projects are scored on a curve tuned for a
+different distribution. Review the weights, curves, and maturity gate
+against a corpus of single- and mixed-language projects; any change is
+a `scoring_policy_version` bump with a migration note, following the
+2.x score-migration precedent (see
+`docs/adr/001-analysis-authority-and-score-migration.md`). A shared
+UI-component pattern ID (currently unrepresentable) belongs to this
+review.
+
+## 6. Explicit non-goals
 
 - Executing `go build`, `go vet`, `tsc`, `node`, or any language
   toolchain — ever.
