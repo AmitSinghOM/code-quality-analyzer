@@ -4,6 +4,25 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 2.31.1 - 2026-09-10
+
+Precision patch from a staff-level review of the signal catalog.
+
+### Fixed
+
+- Go, TypeScript/JavaScript, Java, and C# `two_pointers` and `union_find`
+  definitions used generic tokens (`left`, `right`, `find`, `union`,
+  `parent`, `rank`) that fired on any binary-tree or DOM-shaped code.
+  They now use the Python catalog's specific tokens (`left_pointer`,
+  `tortoise_hare`, `find_root`, `union_by_rank`, …); a cross-language
+  regression test asserts tree-shaped code fires no algorithmic pattern.
+- Java `config_management` no longer counts the ubiquitous `value`
+  identifier; C# `error_handling` anchors `try {` instead of the bare
+  substring `try`.
+- Java and C# adapters now capture typed field, local, and parameter
+  names (`ILogger logger;`, `int[] findParent;`), closing a recall gap
+  where declared-but-uncalled names were invisible to signals.
+
 ## 2.31.0 - 2026-09-09
 
 ### Added

@@ -97,8 +97,9 @@ GO_DSA_PATTERNS = {
     },
     "union_find": {
         "identifiers": [
-            "unionfind", "union_find", "disjointset", "find", "union",
-            "parent", "rank",
+            "unionfind", "union_find", "disjointset", "disjoint_set",
+            "findparent", "findroot", "find_parent", "find_root",
+            "pathcompression", "unionbyrank", "union_by_rank",
         ],
         "min_signals": 2,
         "description": "Union-Find / Disjoint Set structures",
@@ -117,7 +118,11 @@ GO_DSA_PATTERNS = {
         "description": "Sliding window technique",
     },
     "two_pointers": {
-        "identifiers": ["left", "right", "slow", "fast", "twopointer"],
+        "identifiers": [
+            "twopointer", "twopointers", "leftpointer", "rightpointer",
+            "slowpointer", "fastpointer", "tortoisehare", "two_pointers",
+            "left_pointer", "right_pointer",
+        ],
         "min_signals": 2,
         "description": "Two-pointer technique",
     },
