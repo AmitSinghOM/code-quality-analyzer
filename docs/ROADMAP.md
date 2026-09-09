@@ -136,20 +136,30 @@ Remaining for the pilot, in order:
   from the repository root now reports frontend dependency drift at
   `frontend/package.json`.
 
-## 5. Cross-language scoring fairness review (partially addressed in 2.32.0)
+## 5. Cross-language scoring fairness review (round 1 ✅ in 2.35.0)
 
-Scoring policy 2.0.0 (ADR 002) expanded the vocabulary to 56 patterns —
-resilience, rate limiting, idempotency, event sourcing/CQRS,
-dead-letter/outbox, observability, concurrency, pagination, and five GoF
-patterns — and rescaled the curves, closing the review's recall finding:
-production-systems engineering that was invisible now scores. Still
-open: per-language signal density. Go, TS/JS, Java, and C# fire subsets
-of the catalog with different densities, so mixed-language projects are
-scored on a curve calibrated against Python-heavy corpora. Review the
-weights against a corpus of single- and mixed-language projects; any
-change is a further `scoring_policy_version` bump with a migration note.
-A shared UI-component pattern ID (currently unrepresentable) belongs to
-this review.
+Scoring policy 2.0.0 (ADR 002) expanded the vocabulary to 56 patterns
+and rescaled the curves, closing the review's recall finding. Round 1 of
+the fairness calibration (`docs/CALIBRATION.md`, reproducible with
+`scripts/calibration_corpus.py`) then asked whether the score depends on
+language rather than on what a project does, using the same two domains
+— a Redis client and a web framework — in all seven languages.
+
+Findings: the curve is not the constraint (full marks need a fraction
+of any catalog); catalog reach was unequal (Go lacked `hash_map`, TS
+lacked three IDs) and is now 56/56 everywhere, locked by
+`tests/test_fairness.py`; and every non-authoritative corpus result was
+a language-specific lexer bug (TS regex literals, Kotlin backtick
+identifiers and Kotlin 2.2 `$$` interpolation) — the most direct form of
+unfairness, since a language whose files fail lexing is scored on a
+lower bound. All fixed; 14/14 corpus projects are authoritative. Within
+each domain, comparably sized projects now score within ~1 point across
+languages; the remaining spread tracks project scope.
+
+Still open: anchor *depth* differs (Python 527 anchor strings, Go 331)
+without demonstrated bias — a second corpus domain would settle it; a
+shared UI-component pattern ID remains unrepresentable. Any weight or
+curve change is a `scoring_policy_version` bump with a migration note.
 
 ## 6. Java and C#/.NET pilots (✅ entries shipped in 2.31.0)
 

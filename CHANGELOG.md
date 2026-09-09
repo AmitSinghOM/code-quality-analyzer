@@ -4,6 +4,32 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 2.35.0 - 2026-09-10
+
+### Added
+
+- `docs/CALIBRATION.md` and `scripts/calibration_corpus.py`: round 1 of
+  the cross-language fairness review (roadmap 5) — the same two domains
+  (Redis client, web framework) in all seven languages, with pattern
+  matrices and root causes for every non-authoritative result.
+- `tests/test_fairness.py` locks catalog reach (every language can fire
+  every one of the 56 IDs) and the curve-ceiling invariant.
+- TypeScript/JavaScript: regular-expression literals are now lexed
+  (previous-significant-token rule) and blanked, closing the documented
+  minified-bundle bound. Go: `hash_map` anchored on map literal shapes.
+  TypeScript: `segment_tree`, `fenwick_tree`, `minimum_spanning_tree`.
+
+### Fixed
+
+- Kotlin lexer: backtick identifiers containing apostrophes
+  (``fun `can't …`()``) opened a char literal (javalin: 15 files
+  non-authoritative); Kotlin 2.2 multi-dollar interpolation `$$"""`
+  treated a literal `${` as a template (ktor). Trailing-lambda calls
+  (`items.sortedBy { }`) are now captured as identifiers.
+- Calibration effect: javalin 6.7 → 7.1, gin 5.2 → 5.6, 14/14 corpus
+  projects authoritative; no project moved down. No weight or curve
+  changed (scoring policy remains 2.0.0).
+
 ## 2.34.0 - 2026-09-10
 
 ### Added

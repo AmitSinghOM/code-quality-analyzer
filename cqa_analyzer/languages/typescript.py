@@ -86,6 +86,46 @@ _NODE_BUILTINS = frozenset({
 })
 
 
+_REGEX_PRECEDING_KEYWORDS = frozenset({
+    "return", "typeof", "case", "do", "else", "in", "of", "instanceof",
+    "new", "delete", "void", "throw", "yield", "await",
+})
+# `<` and `>` are deliberately absent: in TSX `</p>` is a closing tag and
+# `<T>/x/` is vanishingly rare, so `<` before `/` is treated as JSX.
+_REGEX_PRECEDING_CHARS = frozenset("(,=:[!&|?{;+-*%~^")
+
+
+def _regex_allowed(last_sig: str, last_word: str, prev_sig: str = "") -> bool:
+    """A ``/`` starts a regex literal unless it follows a value."""
+    if last_sig == ">" and prev_sig == "=":
+        return True  # arrow function body: `x => /re/.test(x)`
+    if last_sig == "" or last_sig in _REGEX_PRECEDING_CHARS:
+        return True
+    return last_word in _REGEX_PRECEDING_KEYWORDS
+
+
+def _regex_end(source: str, start: int) -> int | None:
+    """Return the index of the closing ``/`` of a regex literal, or None."""
+    index = start + 1
+    in_class = False
+    while index < len(source):
+        char = source[index]
+        if char == "\\":
+            index += 2
+            continue
+        if char == "\n":
+            return None
+        if in_class:
+            if char == "]":
+                in_class = False
+        elif char == "[":
+            in_class = True
+        elif char == "/":
+            return index
+        index += 1
+    return None
+
+
 def _strip_ts_comments_and_strings(
     source: str,
     *,
@@ -98,12 +138,20 @@ def _strip_ts_comments_and_strings(
     further template literals. When blanking, everything from a template's
     opening backtick to its closing backtick — interpolated code included —
     is blanked, so template content is never evidence.
+
+    Regular-expression literals are recognised by the previous significant
+    token (a ``/`` after a value is division; after an operator, opening
+    bracket, or keyword such as ``return`` it starts a regex) and blanked
+    like strings, so quotes inside ``/"/`` no longer open a string.
     """
     output = list(source)
     index = 0
     state = "code"
     quote = ""
     complete = True
+    last_sig = ""  # last significant (non-space) code character
+    prev_sig = ""  # the significant character before last_sig
+    last_word = ""  # identifier/keyword token ending at last_sig
     # One entry per open template interpolation: the entry is the current
     # unmatched `{` depth inside that interpolation. Non-empty means we are
     # lexing code that ultimately lives inside a template literal.
@@ -128,6 +176,16 @@ def _strip_ts_comments_and_strings(
                 state = "block_comment"
                 index += 2
                 continue
+            if current == "/" and _regex_allowed(last_sig, last_word, prev_sig):
+                end = _regex_end(source, index)
+                if end is not None:
+                    for position in range(index, end + 1):
+                        blank(position)
+                    index = end + 1
+                    prev_sig, last_sig, last_word = last_sig, ")", ""
+                    continue
+                # No closing `/` on this line: not a regex after all
+                # (JSX `</p>`, a stray operator). Treat as ordinary code.
             if current in {'"', "'"}:
                 quote = current
                 blank(index)
@@ -139,6 +197,9 @@ def _strip_ts_comments_and_strings(
                 state = "template"
                 index += 1
                 continue
+            if not current.isspace():
+                prev_sig, last_sig = last_sig, current
+                last_word = last_word + current if (current.isalnum() or current in "_$") else ""
             if interpolations:
                 if current == "{":
                     interpolations[-1] += 1
@@ -185,6 +246,7 @@ def _strip_ts_comments_and_strings(
             if current == "`":
                 blank(index)
                 state = "code"
+                prev_sig, last_sig, last_word = last_sig, ")", ""
             else:
                 blank(index)
             index += 1
@@ -199,6 +261,7 @@ def _strip_ts_comments_and_strings(
             if current == quote:
                 blank(index)
                 state = "code"
+                prev_sig, last_sig, last_word = last_sig, ")", ""
             elif current == "\n":
                 # Unterminated single-line string: recover at newline.
                 state = "code"

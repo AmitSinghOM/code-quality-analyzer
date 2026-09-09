@@ -838,8 +838,15 @@ no signal-capable source was successfully analyzed reports the score as
 **not applicable** — `null` in JSON with an explicit
 `architecture_signal_scope` field — rather than a misleading floor value,
 and `--fail-under` exits with code 5 instead of silently passing or failing.
-[`docs/ROADMAP.md`](docs/ROADMAP.md) tracks what comes next: a
-TypeScript/JavaScript pilot and decision-gated Go duplication depth.
+
+Is the score fair across languages? [`docs/CALIBRATION.md`](docs/CALIBRATION.md)
+scans the same two domains — a Redis client and a web framework — in all
+seven languages and root-causes every gap; comparably sized projects score
+within about a point of each other regardless of language, and the
+remaining spread tracks project scope. The corpus is reproducible with
+`scripts/calibration_corpus.py`. [`docs/ROADMAP.md`](docs/ROADMAP.md)
+tracks what comes next, including the decision-gated tree-sitter path to
+duplication and complexity metrics for Go and C/C++.
 
 ## Development
 

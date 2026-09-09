@@ -64,6 +64,40 @@ def test_adapter_extracts_bounded_identifiers():
     assert "const" not in identifiers
 
 
+def test_jsx_closing_tags_and_arrow_regexes_are_lexed_correctly():
+    # HUMM: `</p>` and `{children}</AppShell>` were read as regex starts,
+    # making 31 TSX files non-authoritative. `=> /re/` must still work.
+    source = (
+        "export default function Page({ children }) {\n"
+        "  return (<div><p className=\"x\">YOUR trie</p>\n"
+        "    <AppShell>{children}</AppShell> <b>{dijkstra}</b> <i>{y}</i></div>);\n"
+        "}\n"
+        "const ok = items.filter(x => /bloom/.test(x));\n"
+    )
+    blanked, complete = _strip_ts_comments_and_strings(source)
+    assert complete
+    assert "children" in blanked and "dijkstra" in blanked and "y}" in blanked
+    assert "bloom" not in blanked and "filter" in blanked
+
+
+def test_regex_literals_are_blanked_and_division_is_not():
+    # ioredis DataHandler.ts: a regex containing quotes opened a string and
+    # marked the file incomplete; minified bundles hit the same bound.
+    source = (
+        "const parts = replyStr.split('\" \"').map((elem) => elem.replace(/\\\\\"/g, '\"'));\n"
+        "const ratio = total / count / 2;\n"
+        "return /trie|dijkstra/i.test(value);\n"
+        "const cls = /[/\"']+/.source;\n"
+        "next();\n"
+    )
+    blanked, complete = _strip_ts_comments_and_strings(source)
+    assert complete
+    assert "trie" not in blanked and "dijkstra" not in blanked
+    assert "total / count / 2" in blanked
+    assert "next" in blanked and "replace" in blanked
+    assert len(blanked.splitlines()) == len(source.splitlines())
+
+
 def test_comments_strings_and_template_interpolations_are_blanked():
     source = (
         "// dijkstra := shortestPath\n"

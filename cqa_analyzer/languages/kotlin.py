@@ -46,8 +46,10 @@ _VALUE_DECLARATION = re.compile(r"\b(?:val|var)\s+([A-Za-z_]\w*)")
 _TYPE_ANNOTATION = re.compile(r":\s*([A-Z]\w*)")
 _ANNOTATION = re.compile(r"@([A-Za-z_]\w*)")
 _GENERIC_USE = re.compile(r"\b([A-Z]\w*)\s*<")
-_SELECTOR_CALL = re.compile(r"\b([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s*\(")
-_BARE_CALL = re.compile(r"\b([A-Za-z_]\w*)\s*(?:<[^<>()]*>)?\s*\(")
+# Kotlin calls may take a trailing lambda instead of parentheses:
+# `items.sortedBy { it.key }`, `cache.getOrPut(k) { load() }`.
+_SELECTOR_CALL = re.compile(r"\b([A-Za-z_]\w*)\??\.([A-Za-z_]\w*)\s*(?:<[^<>()]*>)?\s*[({]")
+_BARE_CALL = re.compile(r"\b([A-Za-z_]\w*)\s*(?:<[^<>()]*>)?\s*[({]")
 _EMPTY_CATCH = re.compile(r"\bcatch\s*\([^)]*\)\s*\{\s*\}")
 _KEYWORDS = frozenset({
     "as", "break", "class", "continue", "do", "else", "false", "for", "fun",
@@ -82,6 +84,15 @@ def _strip_kotlin_comments_and_strings(
     comment_depth = 0
     # Open template holes: (unmatched brace depth, string state to resume).
     holes: list[tuple[int, str]] = []
+    # Kotlin 2.2 multi-dollar interpolation: `$$"..."` makes `$${` the
+    # template marker and a lone `${` literal text.
+    marker = "${"
+
+    def dollar_prefix(position: int) -> int:
+        count = 0
+        while position - count - 1 >= 0 and source[position - count - 1] == "$":
+            count += 1
+        return max(1, count)
 
     def blank(position: int) -> None:
         if blank_strings and source[position] != "\n":
@@ -108,11 +119,13 @@ def _strip_kotlin_comments_and_strings(
                 index += 2
                 continue
             if source.startswith('"""', index):
+                marker = "$" * dollar_prefix(index) + "{"
                 blank_run(index, 3)
                 state = "raw"
                 index += 3
                 continue
             if current == '"':
+                marker = "$" * dollar_prefix(index) + "{"
                 blank(index)
                 state = "string"
                 index += 1
@@ -121,6 +134,16 @@ def _strip_kotlin_comments_and_strings(
                 blank(index)
                 state = "char"
                 index += 1
+                continue
+            if current == "`":
+                # Backtick-quoted identifier (common in test names); may
+                # contain apostrophes and quotes. Keep it as code text.
+                end = source.find("`", index + 1)
+                if end == -1 or "\n" in source[index:end]:
+                    complete = False
+                    index += 1
+                    continue
+                index = end + 1
                 continue
             if holes:
                 depth, resume = holes[-1]
@@ -166,11 +189,15 @@ def _strip_kotlin_comments_and_strings(
                     blank(index + 1)
                 index += 2
                 continue
-            if current == "$" and following == "{":
-                blank_run(index, 2)
+            if (
+                current == "$"
+                and source.startswith(marker, index)
+                and (index == 0 or source[index - 1] != "$")
+            ):
+                blank_run(index, len(marker))
                 holes.append((0, state))
                 state = "code"
-                index += 2
+                index += len(marker)
                 continue
             if state == "raw" and source.startswith('"""', index):
                 # Kotlin: the terminator is the LAST three quotes of a run;
