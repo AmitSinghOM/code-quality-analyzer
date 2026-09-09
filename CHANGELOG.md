@@ -4,7 +4,7 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
-## 2.29.0 - 2026-09-08
+## 2.29.0 - 2026-09-09
 
 ### Added
 
