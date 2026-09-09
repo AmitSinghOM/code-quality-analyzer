@@ -206,8 +206,10 @@ jobs:
       - name: Audit resolved local environment
         # --skip-editable: the project itself is installed editable and is
         # not (yet) auditable against PyPI; its declared dependencies are
-        # audited by the previous step.
-        run: pip-audit --local --strict --skip-editable
+        # audited strictly by the previous step. No --strict here because
+        # strict mode turns the deliberate editable skip into an error;
+        # found vulnerabilities still fail the step.
+        run: pip-audit --local --skip-editable
 
   self-check:
     # Dogfood: the analyzer rates its own source and gates on the result.
