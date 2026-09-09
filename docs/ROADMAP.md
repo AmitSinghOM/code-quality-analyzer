@@ -126,6 +126,15 @@ Remaining for the pilot, in order:
 - Regex-literal lexing hardening in the blanker (a regex containing
   quote or comment delimiters can currently over-blank its line).
 - `tsconfig.json` path-alias awareness for drift analysis.
+- Nested `package.json` discovery: the package provider reads only the
+  scan root's manifest today, so scanning a full-stack repository whose
+  frontend lives in a subdirectory (for example `frontend/package.json`)
+  skips dependency-drift analysis unless that subdirectory is scanned
+  directly. Planned shape: discover bounded non-excluded nested
+  manifests, associate each source file with its nearest enclosing
+  manifest, evaluate drift per manifest, and keep the existing
+  workspaces skip per manifest. Findings would locate at each nested
+  manifest's project-relative path.
 
 ## 5. Explicit non-goals
 
