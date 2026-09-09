@@ -3,7 +3,8 @@
 **Prove the health of a codebase without a single byte leaving the machine.**
 
 Code Quality Analyzer is a privacy-first static analysis tool for Python
-packages, with bounded Go and TypeScript/JavaScript pilots, built for
+packages, with bounded Go, TypeScript/JavaScript, Java, and C#/.NET
+pilots, built for
 environments where source code
 cannot leave the trusted development boundary: regulated industries,
 air-gapped networks, client codebases under NDA, and anyone who refuses to
@@ -42,10 +43,10 @@ See [`docs/PRIVACY.md`](docs/PRIVACY.md) for the exact data boundary.
   locations — including cross-file **duplicate function implementations**
   (`PY-DUP-001`) detected by exact AST structure, so renamed copies still
   report and docstring changes cannot hide one
-- **Data Structures & Algorithms (DSA)** patterns in Python, Go, and
-  TypeScript/JavaScript
-- **System Design** principles implemented in Python, Go, and
-  TypeScript/JavaScript
+- **Data Structures & Algorithms (DSA)** patterns in Python, Go,
+  TypeScript/JavaScript, Java, and C#
+- **System Design** principles implemented in Python, Go,
+  TypeScript/JavaScript, Java, and C#
 - A compatibility **architecture signal score from 1-10**
 
 Reports render as text, versioned JSON, or SARIF 2.1.0, and gate CI through
@@ -84,6 +85,10 @@ code-quality-analyzer/
 │   ├── python_rules.py  # Source-located Python correctness rules
 │   ├── patterns.py      # DSA & System Design pattern definitions
 │   ├── go_patterns.py   # Go-idiom signal definitions for the shared catalog
+│   ├── ts_patterns.py   # TypeScript/JavaScript signal definitions
+│   ├── java_patterns.py # Java signal definitions
+│   ├── csharp_patterns.py # C#/.NET signal definitions
+│   ├── manifests.py     # Shared nested-manifest discovery and hardened XML
 │   ├── package_intelligence.py # Metadata, modules, imports, cycles
 │   ├── protocols.py     # Source, parse, rule, provider, and reporter contracts
 │   ├── registry.py      # Versioned plugin and capability negotiation registry
@@ -716,7 +721,38 @@ jsonwebtoken/next-auth authentication, vitest/jest/playwright testing)
 through the same shared scoring catalog, so full-stack projects
 aggregate one score across all three languages.
 
-The architecture signal score covers Python and Go signals. A project where
+The Java pilot (`.java`) blanks comments, strings, char literals, and
+`"""` text blocks; extracts imports and bounded identifiers
+(declarations, annotations, generic type uses, `new` targets, calls);
+emits `JAVA-COR-001` for empty catch blocks; and passively discovers
+`pom.xml` and `build.gradle(.kts)` modules with the same nested-manifest
+machinery, reporting invalid manifests (`JAVA-PKG-002`) and — for a
+curated set of almost-always-direct libraries only, because Maven and
+Gradle make transitive classes importable — undeclared dependencies
+(`JAVA-PKG-001`). Spring/JAX-RS, JPA/Hibernate/JDBC, Kafka/JMS,
+`@Autowired`/Guice, SLF4J/Log4j, JUnit/Mockito, and the `java.util`
+collections feed the shared catalog.
+
+The C#/.NET pilot (`.cs`) blanks comments and every string form —
+regular, verbatim `@""`, interpolated `$""` with nested holes, raw
+`"""`, and char literals; extracts `using` directives (static, alias,
+global), declared namespaces, and bounded identifiers; emits
+`CS-COR-001` for empty catch blocks (including `when`-filtered); and
+reads `.csproj` `PackageReference`s (`CS-PKG-002` on invalid files),
+flagging `using` namespaces with no package matching by prefix in
+either direction (`CS-PKG-001`) while skipping `System.*`,
+shared-framework `Microsoft.*`, and the project's own namespaces.
+ASP.NET Core, EF Core/Dapper, MassTransit/Kafka, `IServiceCollection`
+DI, Serilog/ILogger, xUnit/NUnit/Moq, and the BCL collections feed the
+shared catalog.
+
+Neither pilot executes `javac`, Maven, Gradle, `dotnet`, or MSBuild, and
+both parse build XML fail-closed: documents declaring a DOCTYPE or
+entities are rejected before parsing. Build output (`target`, `obj`,
+`.gradle`, `TestResults`) is excluded from discovery.
+
+The architecture signal score covers Python, Go, TypeScript/JavaScript,
+Java, and C# signals. A project where
 no signal-capable source was successfully analyzed reports the score as
 **not applicable** — `null` in JSON with an explicit
 `architecture_signal_scope` field — rather than a misleading floor value,

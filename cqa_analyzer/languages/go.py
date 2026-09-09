@@ -21,6 +21,7 @@ from ..protocols import (
 from ..registry import PluginRegistry
 from ..safe_io import SafeReadError, read_bounded_text
 from ..signals import FileSignals, pattern_is_present
+from ._shared import line_column
 
 GO_ADAPTER_VERSION = "1.1.0"
 GO_CACHE_CODEC_VERSION = "1.1.0"
@@ -289,7 +290,7 @@ class GoIgnoredErrorRule:
             if (qualifier, call) not in allowed_calls:
                 continue
             offset = match.start("ignored")
-            line, column = _line_column(parsed.facts.code_text, offset)
+            line, column = line_column(parsed.facts.code_text, offset)
             yield Finding(
                 rule_id=self.rule_id,
                 category="correctness",
@@ -577,12 +578,6 @@ def _local_import_directory(module_path: str, imported: str) -> str | None:
         return "."
     prefix = f"{module_path}/"
     return imported[len(prefix):] if imported.startswith(prefix) else None
-
-
-def _line_column(source: str, offset: int) -> tuple[int, int]:
-    line = source.count("\n", 0, offset) + 1
-    line_start = source.rfind("\n", 0, offset) + 1
-    return line, offset - line_start + 1
 
 
 def _strip_comments_and_strings(

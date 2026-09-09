@@ -35,6 +35,7 @@ from ..registry import PluginRegistry
 from ..safe_io import SafeReadError, read_bounded_text
 from ..signals import FileSignals, pattern_is_present
 from ..ts_patterns import TS_DESIGN_PATTERNS, TS_DSA_PATTERNS
+from ._shared import RegexRulePackBase, line_column
 
 TS_ADAPTER_VERSION = "1.0.0"
 TS_CACHE_CODEC_VERSION = "1.0.0"
@@ -83,12 +84,6 @@ _NODE_BUILTINS = frozenset({
     "repl", "stream", "string_decoder", "sys", "timers", "tls", "trace_events",
     "tty", "url", "util", "v8", "vm", "worker_threads", "zlib",
 })
-
-
-def _line_column(source: str, offset: int) -> tuple[int, int]:
-    line = source.count("\n", 0, offset) + 1
-    line_start = source.rfind("\n", 0, offset) + 1
-    return line, offset - line_start + 1
 
 
 def _strip_ts_comments_and_strings(
@@ -348,7 +343,7 @@ class TsEmptyCatchRule:
         if not isinstance(parsed.facts, TsFacts):
             return
         for match in _EMPTY_CATCH.finditer(parsed.facts.code_text):
-            line, column = _line_column(
+            line, column = line_column(
                 parsed.facts.code_text,
                 match.start(),
             )
@@ -373,7 +368,7 @@ class TsEmptyCatchRule:
             )
 
 
-class TypeScriptRulePack:
+class TypeScriptRulePack(RegexRulePackBase):
     """Run the bounded built-in TypeScript/JavaScript pilot rules."""
 
     rule_pack_id = TS_RULE_PACK_ID
@@ -383,14 +378,6 @@ class TypeScriptRulePack:
 
     def __init__(self) -> None:
         self.rules = (TsEmptyCatchRule(),)
-
-    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
-        if not parsed.complete:
-            return ()
-        findings: list[Finding] = []
-        for rule in self.rules:
-            findings.extend(rule.evaluate(parsed))
-        return findings
 
 
 class TsArchitectureSignalProvider:
