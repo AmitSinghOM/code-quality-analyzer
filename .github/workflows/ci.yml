@@ -119,7 +119,13 @@ jobs:
         shell: python
         run: |
           import glob
+          import re
           import tarfile
+
+          source = open("cqa_analyzer/__init__.py", encoding="utf-8").read()
+          schema_version = re.search(
+              r'REPORT_SCHEMA_VERSION = "([^"]+)"', source
+          ).group(1)
 
           archives = glob.glob("dist/*.tar.gz")
           assert len(archives) == 1, archives
@@ -129,10 +135,11 @@ jobs:
               name.endswith("/.pre-commit-hooks.yaml")
               for name in names
           )
+          schema_name = f"/docs/report-schema-{schema_version}.json"
           assert any(
-              name.endswith("/docs/report-schema-1.10.0.json")
+              name.endswith(schema_name)
               for name in names
-          )
+          ), schema_name
 
       - name: Verify wheel and source distribution installations
         shell: bash
@@ -140,6 +147,8 @@ jobs:
           set -euo pipefail
           wheel_path=$(printf '%s\n' dist/*.whl)
           sdist_path=$(printf '%s\n' dist/*.tar.gz)
+          EXPECTED_VERSION=$(python -c 'import cqa_analyzer; print(cqa_analyzer.__version__)')
+          export EXPECTED_VERSION
           python -m venv "$RUNNER_TEMP/wheel-venv"
           python -m venv "$RUNNER_TEMP/sdist-venv"
           "$RUNNER_TEMP/wheel-venv/bin/python" -m pip install "$wheel_path"
@@ -147,25 +156,29 @@ jobs:
 
           pushd "$RUNNER_TEMP" >/dev/null
           "$RUNNER_TEMP/wheel-venv/bin/python" -c '
+          import os
           import sys
           from importlib.metadata import version
           from pathlib import Path
           import cqa_analyzer
 
-          assert version("cqa-analyzer") == "2.27.0"
-          assert cqa_analyzer.__version__ == "2.27.0"
+          expected = os.environ["EXPECTED_VERSION"]
+          assert version("cqa-analyzer") == expected, version("cqa-analyzer")
+          assert cqa_analyzer.__version__ == expected, cqa_analyzer.__version__
           assert Path(cqa_analyzer.__file__).resolve().is_relative_to(Path(sys.prefix).resolve())
           '
           "$RUNNER_TEMP/wheel-venv/bin/code-quality-analyzer" \
             "$GITHUB_WORKSPACE" --strict --output-format json --offline --anonymize
           "$RUNNER_TEMP/sdist-venv/bin/python" -c '
+          import os
           import sys
           from importlib.metadata import version
           from pathlib import Path
           import cqa_analyzer
 
-          assert version("cqa-analyzer") == "2.27.0"
-          assert cqa_analyzer.__version__ == "2.27.0"
+          expected = os.environ["EXPECTED_VERSION"]
+          assert version("cqa-analyzer") == expected, version("cqa-analyzer")
+          assert cqa_analyzer.__version__ == expected, cqa_analyzer.__version__
           assert Path(cqa_analyzer.__file__).resolve().is_relative_to(Path(sys.prefix).resolve())
           '
           "$RUNNER_TEMP/sdist-venv/bin/code-quality-analyzer" \
@@ -191,7 +204,12 @@ jobs:
         run: pip-audit --requirement requirements.txt --strict
 
       - name: Audit resolved local environment
-        run: pip-audit --local --strict
+        # --skip-editable: the project itself is installed editable and is
+        # not (yet) auditable against PyPI; its declared dependencies are
+        # audited strictly by the previous step. No --strict here because
+        # strict mode turns the deliberate editable skip into an error;
+        # found vulnerabilities still fail the step.
+        run: pip-audit --local --skip-editable
 
   self-check:
     # Dogfood: the analyzer rates its own source and gates on the result.
