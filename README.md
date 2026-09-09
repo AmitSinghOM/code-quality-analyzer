@@ -109,18 +109,29 @@ code-quality-analyzer/
 
 ## Installation
 
+Install from [PyPI](https://pypi.org/project/cqa-analyzer/) — the
+distribution is named `cqa-analyzer`, the command it installs is
+`code-quality-analyzer`:
+
+```bash
+pip install cqa-analyzer
+code-quality-analyzer /path/to/project
+```
+
+Releases are published through PyPI Trusted Publishing with digital
+attestations, so every artifact is provably built from this
+repository's tagged source by CI — no maintainer-held upload token
+exists.
+
+To work on the analyzer itself, install from a source checkout:
+
 ```bash
 cd code-quality-analyzer
 python3 -m venv .venv
 .venv/bin/pip install -e .
 ```
 
-That installs a `code-quality-analyzer` command. Running as a module works too:
-
-```bash
-.venv/bin/pip install -r requirements.txt
-.venv/bin/python -m cqa_analyzer /path/to/project
-```
+Running as a module works too: `python -m cqa_analyzer /path/to/project`.
 
 ## Pre-commit
 
@@ -129,7 +140,7 @@ Pin a released tag in `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/AmitSinghOM/code-quality-analyzer
-    rev: v2.27.0
+    rev: v2.29.0
     hooks:
       - id: code-quality-analyzer
 ```
