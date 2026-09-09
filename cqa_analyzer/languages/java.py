@@ -60,6 +60,10 @@ _GENERIC_USE = re.compile(r"\b([A-Z][\w$]*)\s*<")
 _NEW_TARGET = re.compile(r"\bnew\s+([A-Za-z_$][\w$.]*)\s*[(<\[]")
 _SELECTOR_CALL = re.compile(r"\b([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\s*\(")
 _BARE_CALL = re.compile(r"\b([A-Za-z_$][\w$]*)\s*\(")
+# ``Type name`` where a terminator follows: fields, locals, parameters.
+_VARIABLE_DECLARATION = re.compile(
+    r"\b[A-Za-z_$][\w$.]*(?:<[^<>;{}]*>)?(?:\[\])*\s+([a-z_$][\w$]*)\s*(?=[;=,)])"
+)
 _EMPTY_CATCH = re.compile(r"\bcatch\s*\([^)]*\)\s*\{\s*\}")
 _GRADLE_DEPENDENCY = re.compile(
     r"""\b(?:implementation|api|compileOnly|runtimeOnly|testImplementation|"""
@@ -214,7 +218,10 @@ def _java_imports(metadata_text: str) -> tuple[str, ...]:
 
 def _java_identifiers(code_text: str) -> tuple[str, ...]:
     names: set[str] = set()
-    for pattern in (_TYPE_DECLARATION, _ANNOTATION, _GENERIC_USE, _BARE_CALL):
+    for pattern in (
+        _TYPE_DECLARATION, _ANNOTATION, _GENERIC_USE, _BARE_CALL,
+        _VARIABLE_DECLARATION,
+    ):
         for match in pattern.finditer(code_text):
             names.add(match.group(1))
             if len(names) >= _MAX_JAVA_IDENTIFIERS:
