@@ -200,31 +200,38 @@ last quote of a run, semicolon-free imports with `as` aliases.
 `KT-COR-001` empty catch. Calibrated on ktor-samples (204 Kotlin files,
 score 7.3, API/coroutines/DI/DB/logging/testing/observability all fire).
 
-## 8. C and C++ (decision-gated; not started)
+## 8. C and C++ (✅ decided: bounded pilot, shipped in 2.34.0)
 
-C/C++ would be the first pilot where the regex-facts approach is in
-genuine doubt, so it is gated on an explicit design decision rather
-than scheduled:
+C/C++ was the first language where the regex-facts approach was in
+genuine doubt, so it was gated on an explicit decision. **Decision:
+path (a), a bounded "C-family lite" pilot**, with these limits stated in
+the adapter docstring and README:
 
-- **The preprocessor defeats regex blanking.** `#include`, `#define`
-  macros that rewrite syntax, conditional compilation, and token pasting
-  mean blanked text may not correspond to any compiled program. No
-  language so far has this property.
-- **No manifest standard.** CMake, Conan, vcpkg, Bazel, Meson, and plain
-  Makefiles each need their own parser; package intelligence would
-  start with CMake only.
-- **The design catalog is a poor fit.** C/C++ idioms — RAII, smart
-  pointers, templates and concepts, lock-free structures, allocator
-  strategies, ABI boundaries — have no shared catalog IDs; scoring them
-  honestly is a `scoring_policy_version` change, not a pattern file.
+- **The preprocessor is not modelled.** Every `#` directive line
+  (with `\`-continuations) is blanked from code text, so macro bodies
+  are never evidence and macro-generated syntax is never matched.
+  Conditional compilation is not evaluated: code under `#if 0` remains
+  visible, which can only over-report signals, never hide a finding.
+  `#include` paths are the file's imports and the strongest evidence.
+- **CMake only.** `CMakeLists.txt` is the sole manifest; a curated
+  header→token map drives `C-PKG-001` (medium confidence) when none of
+  a library's tokens appear anywhere in the governing manifest chain.
+  Conan, vcpkg, Bazel, Meson, and Makefiles are out of scope.
+- **One lexical rule** (`C-COR-001` empty catch). Nothing claims to
+  understand types, ownership, or lifetimes.
+- **Full catalog, include-anchored.** The design catalog was expected to
+  be a poor fit; in practice the production-systems specs (concurrency,
+  resilience, observability, message queues, caching) map cleanly onto
+  C/C++ library headers, so the full shared catalog is scored with
+  `min_signals` 2 wherever identifiers alone would be weak. C/C++
+  idioms without a shared ID (RAII, smart pointers, allocators) are
+  simply not scored — the same stance as Go's idioms.
 
-Decision required before any work: either (a) accept a bounded
-"C-family lite" pilot limited to comment/string blanking, `#include`
-graph facts, a small empty-`catch` / ignored-`errno` rule set, and DSA
-signals only (no design score), or (b) adopt a real parser
-(tree-sitter-c/cpp — the same dependency question as Go depth, item 3)
-before attempting design signals. Until decided, `.c`/`.cc`/`.cpp`/`.h`
-files are not discovered.
+Calibrated on drogon (445 files, 7.9, 18 design patterns) and hiredis
+(53 files, 4.1). Calibration fixed one shared-catalog precision bug
+(`lfu` substring matched `...SSLFuncs`) and two C-specific weak anchors
+(`interval`, bare `dp`). Path (b) — tree-sitter — remains the route to
+duplication and complexity metrics for C/C++, tied to item 3.
 
 ## 9. Explicit non-goals
 

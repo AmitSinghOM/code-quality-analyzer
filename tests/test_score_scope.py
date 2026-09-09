@@ -45,7 +45,7 @@ def test_go_only_project_score_is_now_applicable(project):
     assert result.exit_code == EXIT_OK
     assert isinstance(payload["architecture_signal_score"], float)
     assert payload["architecture_signal_scope"] == {
-        "languages": ["csharp", "go", "java", "kotlin", "python", "typescript"],
+        "languages": ["c_cpp", "csharp", "go", "java", "kotlin", "python", "typescript"],
         "applicable": True,
     }
 
@@ -93,7 +93,7 @@ def test_python_project_score_remains_applicable(project):
     assert result.exit_code == EXIT_OK
     assert isinstance(payload["architecture_signal_score"], float)
     assert payload["architecture_signal_scope"] == {
-        "languages": ["csharp", "go", "java", "kotlin", "python", "typescript"],
+        "languages": ["c_cpp", "csharp", "go", "java", "kotlin", "python", "typescript"],
         "applicable": True,
     }
 

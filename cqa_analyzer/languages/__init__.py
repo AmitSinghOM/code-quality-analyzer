@@ -1,5 +1,11 @@
 """Built-in language adapters."""
 
+from .c_family import (
+    CCMakePackageProvider,
+    CLanguageAdapter,
+    CRulePack,
+    register_c_plugins,
+)
 from .csharp import (
     CSharpLanguageAdapter,
     CSharpPackageProvider,
@@ -42,6 +48,9 @@ from .typescript import (
 )
 
 __all__ = [
+    "CCMakePackageProvider",
+    "CLanguageAdapter",
+    "CRulePack",
     "CSharpLanguageAdapter",
     "CSharpPackageProvider",
     "CSharpRulePack",
@@ -66,6 +75,7 @@ __all__ = [
     "TypeScriptRulePack",
     "register_csharp_plugins",
     "register_go_plugins",
+    "register_c_plugins",
     "register_java_plugins",
     "register_kotlin_plugins",
     "register_python_plugins",
