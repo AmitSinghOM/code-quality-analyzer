@@ -1,0 +1,61 @@
+# Maintenance Policy
+
+This document records what keeps the analyzer trustworthy over years,
+what rots without attention, and the minimum cadence that prevents it.
+It exists because the project's durability is a design feature: the
+same properties that make analysis air-gap-safe (no network, no
+toolchain execution, two runtime dependencies, stdlib analysis core)
+make an installed copy keep working long after release.
+
+## What does not rot
+
+- **The shipped artifact.** Pure-Python wheels (`py3-none-any`) with
+  two pinned runtime dependencies (`click`, `rich`) install and run for
+  as long as a supported Python exists. There is no server, telemetry
+  endpoint, or external service whose shutdown can break analysis.
+- **New Python syntax support.** Parsing uses the host interpreter's
+  `ast`, so running under a newer Python parses that Python's syntax
+  automatically.
+- **Report contracts.** Schema and ruleset versions are explicit;
+  consumers built against a schema keep working. Cache entries from
+  older versions miss safely by construction.
+
+## What rots, and the response cadence
+
+| Surface | Rots how | Cadence |
+|---|---|---|
+| Supported Pythons | CPython versions reach end-of-life yearly | Drop an EOL Python in the first release after its EOL date; add the new stable within two releases |
+| Architecture patterns | Design patterns name today's frameworks; new frameworks go unrecognized (under-reporting, never breakage) | Review `patterns.py`, `go_patterns.py`, `ts_patterns.py` yearly against current ecosystem defaults |
+| Dependency pins | Runtime pins (`click`, `rich`) and dev pins (`pytest`, `ruff`, `build`, `twine`, `pip-audit`) accumulate CVEs and staleness | CI runs `pip-audit` on every push; act on findings immediately, review pins yearly |
+| CI infrastructure | Pinned action SHAs and runner images deprecate | Refresh action pins (real SHAs only, fetched from the GitHub API) and runner labels yearly |
+| Release pipeline | PyPI/GitHub policy changes (2FA, Trusted Publishing claims) | Verify one end-to-end publish per year at minimum |
+
+**Minimum viable maintenance: one small release per year** covering the
+table above. The automated pipeline (green CI matrix, publish-on-release
+via Trusted Publishing with attestations, no tokens) is designed to make
+that release a sub-hour task.
+
+## Python version policy
+
+`requires-python` tracks CPython's supported window: the floor rises to
+exclude a version in the first release after that version's end-of-life.
+Dropping a floor is a minor version bump and a CHANGELOG entry; code may
+then rely on the new floor's stdlib (as happened when `tomli` was
+removed in favor of `tomllib` at the 3.11 floor).
+
+## Security response
+
+Vulnerability reports follow [`SECURITY.md`](../SECURITY.md). A
+dependency CVE with a fix ships as a patch release as soon as the gate
+is green; the pinned-dependency comments in `pyproject.toml` record the
+advisory that forced each floor.
+
+## Continuity notes
+
+- The project is single-maintainer; everything needed to release lives
+  in this repository (`docs/RELEASING.md`) and requires only the GitHub
+  and PyPI accounts — no local state, keys, or tokens.
+- If the project is abandoned: the last release keeps installing and
+  scanning correctly; the README's honest-contract sections remain
+  accurate; nothing phones home to fail. Pattern staleness degrades
+  recall gradually, never correctness.

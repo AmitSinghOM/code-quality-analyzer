@@ -8,10 +8,7 @@ import stat
 from dataclasses import dataclass, field
 from pathlib import Path
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - Python 3.10
-    import tomli as tomllib
+import tomllib
 
 from .findings import Finding, Location
 from .safe_io import SafeReadError, read_bounded_text

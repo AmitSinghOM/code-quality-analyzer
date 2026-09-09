@@ -4,6 +4,21 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 2.30.0 - 2026-09-09
+
+### Added
+
+- `docs/MAINTENANCE.md`: the maintenance policy — what does not rot
+  (pure-Python artifact, host-`ast` parsing, versioned contracts), what
+  does (Python EOL, pattern relevance, pins, CI infrastructure), the
+  yearly minimum cadence, and the Python version policy.
+
+### Removed
+
+- Python 3.10 support, ahead of its October 2026 end-of-life.
+  `requires-python` is now `>=3.11`; the `tomli` conditional dependency
+  is gone in favor of the standard-library `tomllib` everywhere.
+
 ## 2.29.0 - 2026-09-09
 
 ### Added

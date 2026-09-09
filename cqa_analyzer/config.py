@@ -8,10 +8,7 @@ import re
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - Python 3.10
-    import tomli as tomllib
+import tomllib
 
 from .safe_io import SafeReadError, read_bounded_text
 
