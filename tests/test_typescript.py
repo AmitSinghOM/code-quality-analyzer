@@ -405,7 +405,7 @@ def test_ts_only_project_now_earns_a_real_score(project):
     assert result.exit_code == 0
     assert isinstance(payload["architecture_signal_score"], float)
     assert payload["architecture_signal_scope"] == {
-        "languages": ["csharp", "go", "java", "kotlin", "python", "typescript"],
+        "languages": ["c_cpp", "csharp", "go", "java", "kotlin", "python", "typescript"],
         "applicable": True,
     }
     assert [f["rule_id"] for f in payload["findings"]] == ["TS-COR-001"]

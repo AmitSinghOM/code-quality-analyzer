@@ -287,6 +287,29 @@ _RULES = (
         language="kotlin",
     ),
     _rule(
+        "C-COR-001",
+        "empty-catch-block",
+        "Empty catch block",
+        "An empty catch block discards a failure without recovery or context.",
+        "correctness",
+        "warning",
+        "Handle the failure, log actionable context, or rethrow the exception.",
+        language="c_cpp",
+    ),
+    _rule(
+        "C-PKG-001",
+        "undeclared-third-party-header",
+        "Undeclared third-party header",
+        "A well-known third-party header is included but no matching "
+        "find_package, FetchContent, target, or pkg-config token appears in "
+        "the governing CMakeLists.txt chain.",
+        "package-health",
+        "warning",
+        "Declare the library in CMake or remove the include.",
+        language="c_cpp",
+        confidence="medium",
+    ),
+    _rule(
         "CS-COR-001",
         "empty-catch-block",
         "Empty catch block",

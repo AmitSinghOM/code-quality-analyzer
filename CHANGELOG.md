@@ -4,6 +4,34 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 2.34.0 - 2026-09-10
+
+### Added
+
+- **C/C++ pilot** (`.c`, `.cc`, `.cpp`, `.cxx`, `.h`, `.hh`, `.hpp`,
+  `.hxx`), resolving roadmap item 8 as a bounded "C-family lite":
+  preprocessor directives are blanked (macro bodies are never evidence)
+  and `#include` paths become imports; lexer handles `\`-continued
+  comments, encoding prefixes, C++11 raw strings, and C++14 digit
+  separators; `C-COR-001` empty catch; `C-PKG-001` conservative
+  third-party header drift against the governing `CMakeLists.txt`
+  chain (medium confidence); full shared catalog scored with
+  include-anchored specs. Seven signal-capable languages. Calibrated on
+  drogon (7.9) and hiredis (4.1).
+
+### Fixed
+
+- Shared catalog precision: `lfu_cache` matched any identifier containing
+  `lfu` — including `redisContextSSLFuncs` (found live in hiredis). The
+  substring anchors are now `lfucache`/`lfu_cache`/`lfu_` with `lfu` as
+  a whole identifier; applies to every language.
+
+### Changed
+
+- Ruleset 2.16.0 → 2.17.0 (two C rules). `architecture_signal_scope`
+  lists `["c_cpp", "csharp", "go", "java", "kotlin", "python",
+  "typescript"]`.
+
 ## 2.33.0 - 2026-09-10
 
 ### Added

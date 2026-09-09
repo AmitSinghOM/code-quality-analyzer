@@ -151,6 +151,8 @@ def test_sarif_encodes_relative_uri_characters():
 
 def test_catalog_covers_every_current_builtin_rule():
     assert builtin_rule_ids() == (
+        "C-COR-001",
+        "C-PKG-001",
         "CS-COR-001",
         "CS-PKG-001",
         "CS-PKG-002",

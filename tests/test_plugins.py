@@ -235,6 +235,13 @@ def test_python_project_providers_are_registered_and_cached(project):
     assert first.payload["total_functions"] == 1
     assert scanner.registry.capabilities()["project_providers"] == [
         {
+            "language_id": "c_cpp",
+            "capability": "package",
+            "provider_id": "c-cmake-package",
+            "capability_version": "1.0.0",
+            "enabled_by_default": True,
+        },
+        {
             "language_id": "csharp",
             "capability": "package",
             "provider_id": "csharp-package",

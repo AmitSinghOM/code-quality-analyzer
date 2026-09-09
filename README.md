@@ -3,8 +3,8 @@
 **Prove the health of a codebase without a single byte leaving the machine.**
 
 Code Quality Analyzer is a privacy-first static analysis tool for Python
-packages, with bounded Go, TypeScript/JavaScript, Java, Kotlin, and C#/.NET
-pilots, built for
+packages, with bounded Go, TypeScript/JavaScript, Java, Kotlin, C#/.NET,
+and C/C++ pilots, built for
 environments where source code
 cannot leave the trusted development boundary: regulated industries,
 air-gapped networks, client codebases under NDA, and anyone who refuses to
@@ -44,9 +44,9 @@ See [`docs/PRIVACY.md`](docs/PRIVACY.md) for the exact data boundary.
   (`PY-DUP-001`) detected by exact AST structure, so renamed copies still
   report and docstring changes cannot hide one
 - **Data Structures & Algorithms (DSA)** patterns in Python, Go,
-  TypeScript/JavaScript, Java, Kotlin, and C#
+  TypeScript/JavaScript, Java, Kotlin, C#, and C/C++
 - **System Design** principles implemented in Python, Go,
-  TypeScript/JavaScript, Java, Kotlin, and C#
+  TypeScript/JavaScript, Java, Kotlin, C#, and C/C++
 - A compatibility **architecture signal score from 1-10**
 
 Reports render as text, versioned JSON, or SARIF 2.1.0, and gate CI through
@@ -93,6 +93,7 @@ code-quality-analyzer/
 │   ├── ts_patterns.py   # TypeScript/JavaScript signal definitions
 │   ├── java_patterns.py # Java signal definitions
 │   ├── kotlin_patterns.py # Kotlin signal definitions (extends Java)
+│   ├── c_patterns.py    # C/C++ signal definitions (include-anchored)
 │   ├── production_patterns.py # Shared production-systems and GoF specs
 │   ├── csharp_patterns.py # C#/.NET signal definitions
 │   ├── manifests.py     # Shared nested-manifest discovery and hardened XML
@@ -798,8 +799,41 @@ declaring a DOCTYPE or
 entities are rejected before parsing. Build output (`target`, `obj`,
 `.gradle`, `TestResults`) is excluded from discovery.
 
+### C and C++ (bounded pilot)
+
+The C-family pilot (`.c`, `.cc`, `.cpp`, `.cxx`, `.h`, `.hh`, `.hpp`,
+`.hxx`) is deliberately narrower than the others, and says so:
+
+- **The preprocessor is not modelled.** Every `#` directive line
+  (including `\`-continued lines) is blanked from the code text, so
+  macro bodies are never evidence and macro-generated syntax is never
+  matched. Conditional compilation is not evaluated — code under
+  `#if 0` remains visible, which can only over-report signals, never
+  hide a finding. `#include` paths are captured as the file's imports
+  and are the strongest evidence in C-family code.
+- **CMake only.** `CMakeLists.txt` is the sole manifest understood.
+  `C-PKG-001` (medium confidence) reports a well-known third-party
+  header (Boost, GoogleTest, fmt, spdlog, OpenSSL, gRPC, …) whose CMake
+  tokens appear nowhere in the governing manifest chain — `find_package`,
+  imported targets, `FetchContent`, and `pkg_check_modules` all count.
+  Conan, vcpkg, Bazel, Meson, and Makefiles are not read.
+- **One lexical rule.** `C-COR-001` reports empty C++ catch blocks.
+  Nothing here claims to understand types, ownership, or lifetimes; no
+  compiler is executed.
+
+The lexer honours `\`-newline continuation inside `//` comments,
+encoding prefixes and C++11 raw strings (`R"delim(...)delim"`), and
+treats a `'` between two hexadecimal digits as a C++14 digit separator
+rather than a character literal. Signals are anchored on STL headers
+and identifiers (`std::unordered_map`, `priority_queue`, `std::mutex`,
+`lock_guard`, `pthread_create`, `co_await`) and on library headers
+(spdlog/glog, gtest/Catch2/cmocka, gRPC/Crow/Drogon/Pistache,
+sqlite3/libpq/pqxx/RocksDB, librdkafka/ZeroMQ/NATS, OpenSSL/libsodium,
+yaml-cpp/toml++/cxxopts, OpenTelemetry/prometheus-cpp, libuv/libevent/
+Asio/TBB/liburing). Calibrated on drogon and hiredis.
+
 The architecture signal score covers Python, Go, TypeScript/JavaScript,
-Java, Kotlin, and C# signals. A project where
+Java, Kotlin, C#, and C/C++ signals. A project where
 no signal-capable source was successfully analyzed reports the score as
 **not applicable** — `null` in JSON with an explicit
 `architecture_signal_scope` field — rather than a misleading floor value,

@@ -45,8 +45,9 @@ PRODUCTION_DSA_PATTERNS = {
         "description": "Consistent hashing and hash rings",
     },
     "lfu_cache": {
-        "identifier_contains": ["lfu"],
-        "identifiers": ["minfreq", "min_freq", "frequencymap", "freq_map"],
+        # Substring "lfu" alone matched "...SSLFuncs" (found live in hiredis).
+        "identifier_contains": ["lfucache", "lfu_cache", "lfu_"],
+        "identifiers": ["lfu", "minfreq", "min_freq", "frequencymap", "freq_map"],
         "min_signals": 1,
         "description": "LFU cache with frequency buckets",
     },
