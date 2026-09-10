@@ -66,15 +66,21 @@ _TYPE_DECLARATION = re.compile(
 # backtracking (found by tests/test_lexer_fuzz.py — 42 s on 200 KB).
 _TYPEDEF = re.compile(r"\btypedef\b(?:[^;{]|\{[^{}]*+\})*?\b([A-Za-z_]\w*+)\s*+;")
 _USING = re.compile(r"\busing\s++(?:namespace\s++)?([A-Za-z_][\w:]*+)")
+# `(?<!::)(?<!\w)`: attempt only at a chain start. Without it finditer retries
+# from every `\b` inside `a::a::a::…` and each failed attempt re-consumes the
+# rest of the chain — quadratic, and a real DoS within the 2 MB cap.
+_CHAIN_START = r"(?<!::)(?<!\w)"
 _QUALIFIED_CALL = re.compile(
-    r"\b((?:[A-Za-z_]\w*+::)++[A-Za-z_]\w*+)\s*+(?:<[^<>()]*+>)?\s*+\("
+    _CHAIN_START + r"((?:[A-Za-z_]\w*+::)++[A-Za-z_]\w*+)\s*+(?:<[^<>()]*+>)?\s*+\("
 )
-_QUALIFIED_TYPE = re.compile(r"\b((?:[A-Za-z_]\w*+::)++[A-Za-z_]\w*+)\b")
+_QUALIFIED_TYPE = re.compile(_CHAIN_START + r"((?:[A-Za-z_]\w*+::)++[A-Za-z_]\w*+)\b")
 _MEMBER_CALL = re.compile(r"(?:\.|->)\s*+([A-Za-z_]\w*+)\s*+(?:<[^<>()]*+>)?\s*+\(")
 _BARE_CALL = re.compile(r"\b([A-Za-z_]\w*+)\s*+(?:<[^<>()]*+>)?\s*+\(")
 _TEMPLATE_USE = re.compile(r"\b([A-Za-z_]\w*+)\s*+<")
 _DECLARED_NAME = re.compile(
-    r"(?m)\b(?:[A-Za-z_]\w*+(?:::\w++)*+(?:<[^<>;]*+>)?[\s*&]++)([a-z_]\w*+)\s*+(?:[=;\[({,)]|$)"
+    r"(?m)"
+    + _CHAIN_START
+    + r"(?:[A-Za-z_]\w*+(?:::\w++)*+(?:<[^<>;]*+>)?[\s*&]++)([a-z_]\w*+)\s*+(?:[=;\[({,)]|$)"
 )
 _EMPTY_CATCH = re.compile(r"\bcatch\s*\([^)]*\)\s*\{\s*\}")
 _STRING_PREFIX = re.compile(r"(?:u8|u|U|L)?R?$")

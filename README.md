@@ -183,6 +183,34 @@ code-quality-analyzer --version   # code-quality-analyzer, version X.Y.Z
 code-quality-analyzer /path/to/project
 ```
 
+### Upgrade
+
+Upgrade the same way you installed. The installed command name does not
+change between versions, so nothing else needs updating.
+
+```bash
+# pipx
+pipx upgrade cqa-analyzer
+pipx upgrade --include-injected cqa-analyzer   # if you also installed [deep]
+
+# pip (use the same interpreter you installed into)
+python3 -m pip install --upgrade cqa-analyzer
+python3 -m pip install --upgrade 'cqa-analyzer[deep]'   # with the optional extra
+
+# a specific version
+pipx install --force 'cqa-analyzer==2.37.0'
+python3 -m pip install 'cqa-analyzer==2.37.0'
+```
+
+Check with `code-quality-analyzer --version`. If the number does not
+change, you upgraded a different interpreter than the one on your PATH —
+see Troubleshooting below. Nothing else needs migrating: cache entries
+are keyed on the adapter and codec versions that produced them, so a
+release that changes a language adapter simply recomputes its entries;
+baselines are keyed on finding fingerprints and persist, so a release
+that adds a rule surfaces its findings as new until you re-baseline. The
+[CHANGELOG](CHANGELOG.md) lists anything that changes a score or a rule.
+
 ### Troubleshooting
 
 **`zsh: command not found: code-quality-analyzer`** — the shell cannot

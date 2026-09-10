@@ -1,6 +1,6 @@
 """Code Quality Analyzer package and public contract versions."""
 
-__version__ = "2.37.0"
+__version__ = "2.38.0"
 REPORT_SCHEMA_VERSION = "1.12.0"
-RULESET_VERSION = "2.19.0"
+RULESET_VERSION = "2.20.0"
 SCORING_POLICY_VERSION = "2.0.0"

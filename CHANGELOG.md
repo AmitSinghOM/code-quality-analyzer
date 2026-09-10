@@ -4,6 +4,35 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 2.38.0 - 2026-09-10
+
+### Added
+
+- **Cognitive complexity for Go and C/C++** (`GO-MAINT-002`,
+  `C-MAINT-002`, `[deep]` extra), computed by exactly `PY-MAINT-002`'s
+  rules on tree-sitter nodes: branches add `1 + nesting` with bodies one
+  level deeper (so `else if` costs one more), switches add once with
+  cases deeper, a same-operator boolean chain counts once, function
+  literals and lambdas are not entered. Shared limit 15. The complexity
+  payload gains `average_cognitive`, `over_cognitive_limit`,
+  `cognitive_limit`, and per-function `cognitive`.
+- README **Upgrade** section: pipx and pip upgrade commands, pinning a
+  version, and what happens to caches and baselines across releases.
+
+### Changed
+
+- Ruleset 2.19.0 → 2.20.0 (two rules).
+
+### Fixed
+
+- The remaining quadratic term in C/Java/C# identifier extraction: even
+  with possessive quantifiers, `finditer` retried the qualified-chain
+  regexes from every word boundary inside `a::a::a::…`, each attempt
+  re-consuming the rest of the chain (3–4 s on CI runners for a 45 KB
+  line). Chain regexes now attempt only at a chain start; the
+  pathological case takes 0.02 s, and the fuzz test asserts linear
+  scaling (doubling input must not quadruple time) instead of wall-clock.
+
 ## 2.37.0 - 2026-09-10
 
 Staff-level review release: every finding from the 2.36.0 review

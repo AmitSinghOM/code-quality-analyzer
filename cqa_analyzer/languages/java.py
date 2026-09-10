@@ -62,7 +62,9 @@ _BARE_CALL = re.compile(r"\b([A-Za-z_$][\w$]*)\s*\(")
 # ``Type name`` where a terminator follows: fields, locals, parameters.
 _VARIABLE_DECLARATION = re.compile(
     # Possessive runs: `a.a.a.…` chains must not backtrack (test_lexer_fuzz).
-    r"\b[A-Za-z_$][\w$.]*+(?:<[^<>;{}]*+>)?(?:\[\])*+\s++([a-z_$][\w$]*+)\s*+(?=[;=,)])"
+    # `(?<![\w$.])`: attempt only at a chain start, not at every `\b` inside
+    # `a.b.c.d…` (each failed attempt would re-consume the chain: quadratic).
+    r"(?<![\w$.])[A-Za-z_$][\w$.]*+(?:<[^<>;{}]*+>)?(?:\[\])*+\s++([a-z_$][\w$]*+)\s*+(?=[;=,)])"
 )
 _EMPTY_CATCH = re.compile(r"\bcatch\s*\([^)]*\)\s*\{\s*\}")
 _GRADLE_DEPENDENCY = re.compile(

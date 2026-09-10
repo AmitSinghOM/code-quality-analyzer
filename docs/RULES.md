@@ -570,3 +570,21 @@ function literals contribute to their enclosing function. C code
 routinely exceeds 10 (hiredis averages 4.4 with 49 of 635 functions
 over; jq averages 6.0) — the limit is the same standard applied to
 every language, not a claim that the code is wrong.
+
+## GO-MAINT-002 / C-MAINT-002: High cognitive complexity (requires `[deep]`)
+
+**Category:** Maintainability
+**Default severity:** Warning
+**Confidence:** High
+
+Cognitive complexity per function against the shared limit of 15,
+computed by exactly `PY-MAINT-002`'s rules on tree-sitter nodes: each
+branch (`if`, `for`, `while`, `do`, range-`for`, `?:`, `catch`) adds
+`1 + nesting`, with its condition at the current nesting and its bodies
+one level deeper — so `else if` costs one more than the `if` it follows;
+a `switch`/`select` adds `1 + nesting` once with its cases one deeper; a
+boolean-operator sequence adds 1 regardless of nesting, and a chain of
+the same operator (`a && b && c`) counts once, as Python's single
+`BoolOp` node does; Go `func` literals and C++ lambdas are not entered.
+Unlike cyclomatic complexity, this metric is what makes a function hard
+to *read*: six flat `if`s score 6, six nested ones score 21.

@@ -42,7 +42,7 @@ from ..duplication import (
     _Occurrence,
 )
 from ..findings import Finding, Location
-from ..maintainability import CYCLOMATIC_COMPLEXITY_LIMIT
+from ..maintainability import COGNITIVE_COMPLEXITY_LIMIT, CYCLOMATIC_COMPLEXITY_LIMIT
 from ..protocols import (
     DEFAULT_CAPABILITY_VERSION,
     PLUGIN_API_VERSION,
@@ -68,6 +68,15 @@ class GrammarSpec:
     name_types: frozenset[str]
     comment_types: frozenset[str]
     default_case_types: frozenset[str]
+    # Cognitive complexity (mirrors maintainability._ComplexityCounter):
+    # branch_types add 1 + nesting and nest the fields in nested_fields;
+    # switch_types add 1 + nesting once and nest their case children;
+    # nested_function_types are not entered (Python skips nested defs).
+    branch_types: frozenset[str] = frozenset()
+    nested_fields: frozenset[str] = frozenset({"consequence", "alternative", "body"})
+    switch_types: frozenset[str] = frozenset()
+    case_types: frozenset[str] = frozenset()
+    nested_function_types: frozenset[str] = frozenset()
 
 
 GO_SPEC = GrammarSpec(
@@ -88,6 +97,15 @@ GO_SPEC = GrammarSpec(
     name_types=frozenset({"identifier", "field_identifier"}),
     comment_types=frozenset({"comment"}),
     default_case_types=frozenset({"default_case"}),
+    branch_types=frozenset({"if_statement", "for_statement"}),
+    switch_types=frozenset(
+        {"expression_switch_statement", "type_switch_statement", "select_statement"}
+    ),
+    case_types=frozenset({"expression_case", "type_case", "communication_case", "default_case"}),
+    nested_function_types=frozenset({"func_literal"}),
+)
+_C_BRANCHES = frozenset(
+    {"if_statement", "for_statement", "while_statement", "do_statement", "conditional_expression"}
 )
 C_SPEC = GrammarSpec(
     module="tree_sitter_c",
@@ -107,6 +125,9 @@ C_SPEC = GrammarSpec(
     name_types=frozenset({"identifier", "field_identifier"}),
     comment_types=frozenset({"comment"}),
     default_case_types=frozenset(),
+    branch_types=_C_BRANCHES,
+    switch_types=frozenset({"switch_statement"}),
+    case_types=frozenset({"case_statement"}),
 )
 CPP_SPEC = GrammarSpec(
     module="tree_sitter_cpp",
@@ -136,6 +157,10 @@ CPP_SPEC = GrammarSpec(
     ),
     comment_types=frozenset({"comment"}),
     default_case_types=frozenset(),
+    branch_types=_C_BRANCHES | {"for_range_loop", "catch_clause"},
+    switch_types=frozenset({"switch_statement"}),
+    case_types=frozenset({"case_statement"}),
+    nested_function_types=frozenset({"lambda_expression"}),
 )
 _BOOLEAN_OPERATORS = frozenset({"&&", "||"})
 _CPP_EXTENSIONS = frozenset({".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx"})
@@ -325,6 +350,57 @@ def _statement_count(body) -> int:
     return len(statements)
 
 
+def _cognitive(body, spec: GrammarSpec) -> int:
+    """Cognitive complexity with exactly the Python counter's rules.
+
+    - a branch (if/for/while/do/?:/catch) adds ``1 + nesting``; its
+      condition is visited at the current nesting, its bodies one deeper —
+      so ``else if`` costs one more than the ``if`` it follows;
+    - a switch/select adds ``1 + nesting`` once; cases are one deeper;
+    - a boolean-operator sequence adds 1 regardless of nesting, counting a
+      chain of the same operator (``a && b && c``) once, as Python's
+      single ``BoolOp`` node does;
+    - nested function literals and lambdas are not entered.
+    """
+    total = 0
+
+    def visit(node, nesting: int, bool_parent: str | None = None) -> None:
+        nonlocal total
+        node_type = node.type
+        if node_type in spec.nested_function_types or node_type in spec.comment_types:
+            return
+        if node_type in spec.branch_types:
+            total += 1 + nesting
+            for index, child in enumerate(node.children):
+                deeper = node.field_name_for_child(index) in spec.nested_fields
+                visit(child, nesting + 1 if deeper else nesting)
+            return
+        if node_type in spec.switch_types:
+            total += 1 + nesting
+            for child in node.children:
+                deeper = child.type in spec.case_types or child.type in {
+                    "compound_statement",
+                    "block",
+                }
+                visit(child, nesting + 1 if deeper else nesting)
+            return
+        if node_type == "binary_expression":
+            operator = node.child_by_field_name("operator")
+            operator_text = _text(operator) if operator is not None else ""
+            if operator_text in _BOOLEAN_OPERATORS:
+                if bool_parent != operator_text:
+                    total += 1
+                for child in node.children:
+                    visit(child, nesting, operator_text)
+                return
+        for child in node.children:
+            visit(child, nesting)
+
+    for child in body.children:
+        visit(child, 0)
+    return total
+
+
 def _cyclomatic(body, spec: GrammarSpec) -> int:
     complexity = 1
     for node in _walk(body):
@@ -487,22 +563,30 @@ class DeepDuplicationProvider(_DeepProviderBase):
 
 
 class DeepComplexityProvider(_DeepProviderBase):
-    """Cyclomatic complexity per function via tree-sitter."""
+    """Cyclomatic and cognitive complexity per function via tree-sitter.
+
+    Mirrors ``PY-MAINT-001``/``PY-MAINT-002``: the same two metrics, the
+    same limits, computed by the same rules on tree-sitter nodes.
+    """
 
     capability = "complexity"
 
-    def __init__(self, language_id: str, rule_id: str) -> None:
+    def __init__(self, language_id: str, rule_id: str, cognitive_rule_id: str) -> None:
         self.language_id = language_id
         self.rule_id = rule_id
+        self.cognitive_rule_id = cognitive_rule_id
         self.provider_id = f"{language_id}-deep-complexity"
         self._parse_errors = 0
         self._skipped_generated = 0
 
     def _analyze(self, project: ProjectContext) -> ProviderResult:
         findings: list[Finding] = []
-        complex_functions: list[dict] = []
+        reported: list[dict] = []
         functions = 0
-        total = 0
+        total_cyclomatic = 0
+        total_cognitive = 0
+        over_cyclomatic = 0
+        over_cognitive = 0
         for _, parsed, spec, tree, _errored in self._trees(project):
             for function in _walk(tree.root_node):
                 if function.type not in spec.function_types:
@@ -511,55 +595,79 @@ class DeepComplexityProvider(_DeepProviderBase):
                 if body is None:
                     continue
                 functions += 1
-                complexity = _cyclomatic(body, spec)
-                total += complexity
-                if complexity <= CYCLOMATIC_COMPLEXITY_LIMIT:
+                cyclomatic = _cyclomatic(body, spec)
+                cognitive = _cognitive(body, spec)
+                total_cyclomatic += cyclomatic
+                total_cognitive += cognitive
+                cyclomatic_over = cyclomatic > CYCLOMATIC_COMPLEXITY_LIMIT
+                cognitive_over = cognitive > COGNITIVE_COMPLEXITY_LIMIT
+                if not (cyclomatic_over or cognitive_over):
                     continue
                 name = _function_name(function, spec)
-                line = function.start_point[0] + 1
-                column = function.start_point[1] + 1
-                complex_functions.append(
+                location = Location(
+                    path=parsed.source.display_path,
+                    line=function.start_point[0] + 1,
+                    column=function.start_point[1] + 1,
+                    end_line=function.end_point[0] + 1,
+                    end_column=function.end_point[1] + 1,
+                    identity_path=parsed.source.identity_path,
+                )
+                reported.append(
                     {
                         "path": parsed.source.display_path,
-                        "line": line,
+                        "line": location.line,
                         "function": name,
-                        "cyclomatic": complexity,
+                        "cyclomatic": cyclomatic,
+                        "cognitive": cognitive,
                     }
                 )
-                findings.append(
-                    Finding(
-                        rule_id=self.rule_id,
-                        category="maintainability",
-                        severity="warning",
-                        confidence="high",
-                        message=(
-                            f"Function '{name}' has cyclomatic complexity "
-                            f"{complexity} (limit {CYCLOMATIC_COMPLEXITY_LIMIT})."
-                        ),
-                        location=Location(
-                            path=parsed.source.display_path,
-                            line=line,
-                            column=column,
-                            end_line=function.end_point[0] + 1,
-                            end_column=function.end_point[1] + 1,
-                            identity_path=parsed.source.identity_path,
-                        ),
-                        remediation=(
+                if cyclomatic_over:
+                    over_cyclomatic += 1
+                    findings.append(
+                        _complexity_finding(
+                            self.rule_id,
+                            name,
+                            "cyclomatic",
+                            cyclomatic,
+                            CYCLOMATIC_COMPLEXITY_LIMIT,
+                            location,
                             "Split the function into smaller units, each with a "
-                            "single decision path."
-                        ),
+                            "single decision path.",
+                        )
                     )
-                )
-        complex_functions.sort(key=lambda item: (-item["cyclomatic"], item["path"], item["line"]))
+                if cognitive_over:
+                    over_cognitive += 1
+                    findings.append(
+                        _complexity_finding(
+                            self.cognitive_rule_id,
+                            name,
+                            "cognitive",
+                            cognitive,
+                            COGNITIVE_COMPLEXITY_LIMIT,
+                            location,
+                            "Flatten nested branches with early returns or extract "
+                            "the inner levels into named helpers.",
+                        )
+                    )
+        reported.sort(
+            key=lambda item: (
+                -max(item["cyclomatic"], item["cognitive"]),
+                item["path"],
+                item["line"],
+            )
+        )
         payload = {
             "available": True,
             "engine": self._engine(),
             "functions_analyzed": functions,
-            "average_cyclomatic": round(total / functions, 2) if functions else 0.0,
-            "over_limit": len(complex_functions),
+            "average_cyclomatic": round(total_cyclomatic / functions, 2) if functions else 0.0,
+            "average_cognitive": round(total_cognitive / functions, 2) if functions else 0.0,
+            "over_limit": over_cyclomatic,
+            "over_cognitive_limit": over_cognitive,
             "limit": CYCLOMATIC_COMPLEXITY_LIMIT,
-            "functions": complex_functions[:MAX_REPORTED_COMPLEX_FUNCTIONS],
-            "functions_truncated": len(complex_functions) > MAX_REPORTED_COMPLEX_FUNCTIONS,
+            "cognitive_limit": COGNITIVE_COMPLEXITY_LIMIT,
+            "functions": reported[:MAX_REPORTED_COMPLEX_FUNCTIONS],
+            "functions_truncated": len(reported) > MAX_REPORTED_COMPLEX_FUNCTIONS,
             "files_with_parse_errors": self._parse_errors,
             "files_skipped_generated": self._skipped_generated,
         }
@@ -573,10 +681,32 @@ class DeepComplexityProvider(_DeepProviderBase):
         return ProviderResult(payload=payload, health=health, findings=tuple(findings))
 
 
+def _complexity_finding(
+    rule_id: str,
+    name: str,
+    metric: str,
+    value: int,
+    limit: int,
+    location: Location,
+    remediation: str,
+) -> Finding:
+    return Finding(
+        rule_id=rule_id,
+        category="maintainability",
+        severity="warning",
+        confidence="high",
+        message=f"Function '{name}' has {metric} complexity {value} (limit {limit}).",
+        location=location,
+        remediation=remediation,
+    )
+
+
 def register_deep_plugins(registry: PluginRegistry) -> PluginRegistry:
     """Register Go and C/C++ deep providers (they self-report availability)."""
     registry.register_project_provider(DeepDuplicationProvider("go", "GO-DUP-001"))
-    registry.register_project_provider(DeepComplexityProvider("go", "GO-MAINT-001"))
+    registry.register_project_provider(DeepComplexityProvider("go", "GO-MAINT-001", "GO-MAINT-002"))
     registry.register_project_provider(DeepDuplicationProvider("c_cpp", "C-DUP-001"))
-    registry.register_project_provider(DeepComplexityProvider("c_cpp", "C-MAINT-001"))
+    registry.register_project_provider(
+        DeepComplexityProvider("c_cpp", "C-MAINT-001", "C-MAINT-002")
+    )
     return registry
