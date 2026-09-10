@@ -117,8 +117,9 @@ localized SIMD-intrinsic errors.
 
 Calibrated on gin (1,323 functions, 15 over limit, two duplicate groups
 that are byte-identical benchmark bodies), hiredis, and jq. Cognitive
-complexity (`PY-MAINT-002`) is not mirrored yet. Python itself does
-not use tree-sitter; its `ast` remains the source of truth.
+complexity (`GO-MAINT-002`/`C-MAINT-002`) mirrors `PY-MAINT-002` rule
+for rule since 2.38.0. Python itself does not use tree-sitter; its `ast`
+remains the source of truth.
 
 ## 4. TypeScript/JavaScript pilot (✅ entry shipped in 2.29.0)
 

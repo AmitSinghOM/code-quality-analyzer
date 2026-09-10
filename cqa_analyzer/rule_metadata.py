@@ -246,6 +246,18 @@ _RULES = (
         language="go",
     ),
     _rule(
+        "GO-MAINT-002",
+        "high-cognitive-complexity",
+        "High cognitive complexity",
+        "A function exceeds the supported cognitive complexity limit "
+        "(nesting-weighted branches). Requires the optional [deep] extra.",
+        "maintainability",
+        "warning",
+        "Flatten nested branches with early returns or extract the inner "
+        "levels into named helpers.",
+        language="go",
+    ),
+    _rule(
         "JAVA-COR-001",
         "empty-catch-block",
         "Empty catch block",
@@ -340,6 +352,18 @@ _RULES = (
         "maintainability",
         "warning",
         "Extract independent decisions into focused helper functions.",
+        language="c_cpp",
+    ),
+    _rule(
+        "C-MAINT-002",
+        "high-cognitive-complexity",
+        "High cognitive complexity",
+        "A function exceeds the supported cognitive complexity limit "
+        "(nesting-weighted branches). Requires the optional [deep] extra.",
+        "maintainability",
+        "warning",
+        "Flatten nested branches with early returns or extract the inner "
+        "levels into named helpers.",
         language="c_cpp",
     ),
     _rule(

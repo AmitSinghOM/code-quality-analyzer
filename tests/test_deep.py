@@ -96,12 +96,60 @@ def test_go_cyclomatic_complexity_matches_gocyclo_rules(project):
     assert "complexity 14" in findings[0]["message"]
     result = payload["project_analyses"]["go:complexity"]["result"]
     assert result["functions_analyzed"] == 2 and result["over_limit"] == 1
+    # Six flat `if`s with `||` (6×(1+0) + 6) + one switch at nesting 0 = 13.
     assert result["functions"][0] == {
         "path": "a.go",
         "line": 3,
         "function": "Complex",
         "cyclomatic": 14,
+        "cognitive": 13,
     }
+
+
+@needs_deep
+def test_cognitive_complexity_mirrors_python_rules(project):
+    # PY-MAINT-002 parity: nesting increments, `else if` costs one more,
+    # a same-operator boolean chain counts once, lambdas are not entered.
+    go = (
+        "package x\n\nfunc Nested(xs []int, a, b, c bool) int {\n"
+        "    total := 0\n"
+        "    for _, x := range xs {\n"  # +1 (nesting 0)
+        "        if x > 0 && a && b && c {\n"  # +2 (nesting 1) +1 (one && chain)
+        "            if b {\n"  # +3 (nesting 2)
+        "                total++\n"
+        "            } else if c {\n"  # +4 (nesting 3: alternative is one deeper)
+        "                total--\n"
+        "            }\n"
+        "        }\n"
+        "    }\n"
+        "    f := func() { if a { total++ } }\n"  # not entered
+        "    f()\n"
+        "    return total\n}\n"
+    )
+    root = project({"go.mod": "module x\n", "a.go": go})
+    payload = scan_json(root)
+    result = payload["project_analyses"]["go:complexity"]["result"]
+    assert result["functions_analyzed"] == 1
+    assert result["average_cognitive"] == 11.0  # 1 + 2 + 1 + 3 + 4
+    # gocyclo counts the closure into its enclosing function:
+    # 1 + for + if + 3×&& + if + else-if + closure if = 9.
+    assert result["average_cyclomatic"] == 9.0
+    assert not [f for f in payload["findings"] if f["rule_id"] == "GO-MAINT-002"]
+
+    deep_nest = (
+        "\n".join("    " * (i + 1) + f"if (x > {i}) {{" for i in range(6))
+        + "\n        return 1;\n"
+        + "\n".join("    " * (6 - i) + "}" for i in range(6))
+    )
+    c = f"int deep(int x) {{\n{deep_nest}\n    return 0;\n}}\n"
+    root = project({"CMakeLists.txt": "project(d)\n", "a.c": c})
+    payload = scan_json(root)
+    cognitive = [f for f in payload["findings"] if f["rule_id"] == "C-MAINT-002"]
+    # 1+2+3+4+5+6 = 21 > 15 (cyclomatic is only 7, so no C-MAINT-001).
+    assert len(cognitive) == 1 and "cognitive complexity 21" in cognitive[0]["message"]
+    assert not [f for f in payload["findings"] if f["rule_id"] == "C-MAINT-001"]
+    result = payload["project_analyses"]["c_cpp:complexity"]["result"]
+    assert result["over_cognitive_limit"] == 1 and result["cognitive_limit"] == 15
 
 
 @needs_deep
