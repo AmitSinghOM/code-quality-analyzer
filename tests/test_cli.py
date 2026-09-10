@@ -775,19 +775,23 @@ def test_anonymization_preserves_analysis_authority_contract(project):
     )
 
 
-def test_text_reporter_survives_markup_and_control_chars_in_paths(project):
-    # Staff review round 2, A2/D3: `arr[/i].py` crashed Rich with MarkupError.
-    root = project(
-        {
-            "arr[/i].py": "def f(x=[]):\n    return x\n",
-            "ctl\x1b[31m.py": "def g(y={}):\n    return y\n",
-        }
-    )
+def test_text_reporter_survives_markup_in_paths(project):
+    # Staff review round 2, A2: `arr[/i].py` crashed Rich with MarkupError.
+    root = project({"arr[/i].py": "def f(x=[]):\n    return x\n"})
     result = CliRunner().invoke(main, [str(root)])
     assert result.exit_code in {0, 4}, result.output
     assert "MarkupError" not in result.output and "Traceback" not in result.output
     assert "arr[/i].py" in result.output
-    assert "\x1b[31m.py" not in result.output
+
+
+def test_safe_strips_control_characters_and_escapes_markup():
+    # Round 2, D3. Windows cannot even create a file named with ESC, so this
+    # is checked on the helper rather than through the filesystem.
+    from cqa_analyzer.__main__ import _safe
+
+    assert _safe("ctl\x1b[31m.py") == "ctl[31m.py"  # ESC dropped; `[31m` cannot be a tag
+    assert _safe("tab\there\x00\x7f") == "tab\there"  # \t kept, NUL/DEL dropped
+    assert _safe("arr[/i].py") == "arr\\[/i].py"
 
 
 def test_config_flags_pin_the_gate_outside_the_scanned_tree(project, tmp_path):
