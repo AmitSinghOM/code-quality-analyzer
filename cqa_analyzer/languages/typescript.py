@@ -93,6 +93,8 @@ _REGEX_PRECEDING_KEYWORDS = frozenset({
 # `<` and `>` are deliberately absent: in TSX `</p>` is a closing tag and
 # `<T>/x/` is vanishingly rare, so `<` before `/` is treated as JSX.
 _REGEX_PRECEDING_CHARS = frozenset("(,=:[!&|?{;+-*%~^")
+# Keywords a string literal may follow with no space (minified code).
+_STRING_PRECEDING_KEYWORDS = _REGEX_PRECEDING_KEYWORDS | frozenset({"import", "from", "export"})
 
 
 def _regex_allowed(last_sig: str, last_word: str, prev_sig: str = "") -> bool:
@@ -190,9 +192,11 @@ def _strip_ts_comments_and_strings(
             if current in {'"', "'"}:
                 # An apostrophe glued to an identifier character cannot open a
                 # string in JS/TS (`x'a'` is invalid); it is JSX text
-                # (`<p>Don't have an account?</p>`). Leave it as code.
+                # (`<p>Don't have an account?</p>`). Leave it as code — unless
+                # the identifier is a keyword: `return'x'`, `case'a':` and
+                # `typeof'a'` are valid (and common in minified bundles).
                 glued = index and (source[index - 1].isalnum() or source[index - 1] == "_")
-                if current == "'" and glued:
+                if current == "'" and glued and last_word not in _STRING_PRECEDING_KEYWORDS:
                     prev_sig, last_sig, last_word = last_sig, current, ""
                     index += 1
                     continue

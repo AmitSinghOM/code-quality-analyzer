@@ -38,9 +38,7 @@ def test_version_flag_reports_analyzer_version():
     result = run(["--version"])
 
     assert result.exit_code == EXIT_OK
-    assert result.output.strip() == (
-        "code-quality-analyzer, version 2.38.1"
-    )
+    assert result.output.strip() == ("code-quality-analyzer, version 2.39.0")
 
 
 def test_json_output_is_valid_and_includes_health(project):
@@ -51,8 +49,8 @@ def test_json_output_is_valid_and_includes_health(project):
 
     assert result.exit_code == EXIT_OK
     assert payload["schema_version"] == "1.12.0"
-    assert payload["analyzer_version"] == "2.38.1"
-    assert payload["ruleset_version"] == "2.20.0"
+    assert payload["analyzer_version"] == "2.39.0"
+    assert payload["ruleset_version"] == "2.21.0"
     assert payload["scoring_policy_version"] == "2.0.0"
     assert len(payload["configuration_fingerprint"]) == 64
     assert payload["language_adapters"] == {
@@ -116,10 +114,12 @@ def test_fail_under_gates_ci(project):
 
 
 def test_strict_flags_unreadable_files(project):
-    root = project({
-        "ok.py": RICH_SOURCE,
-        "broken.py": "def f(:\n    pass\n",
-    })
+    root = project(
+        {
+            "ok.py": RICH_SOURCE,
+            "broken.py": "def f(:\n    pass\n",
+        }
+    )
 
     result = run([str(root), "--strict"])
 
@@ -127,10 +127,12 @@ def test_strict_flags_unreadable_files(project):
 
 
 def test_report_paths_are_project_relative_and_never_absolute(project):
-    root = project({
-        "ok.py": "",
-        "pkg/too_large.py": RICH_SOURCE,
-    })
+    root = project(
+        {
+            "ok.py": "",
+            "pkg/too_large.py": RICH_SOURCE,
+        }
+    )
 
     result = run([str(root), "-f", "json", "--max-file-size", "1"])
     payload = json.loads(result.output)
@@ -138,27 +140,32 @@ def test_report_paths_are_project_relative_and_never_absolute(project):
     assert result.exit_code == EXIT_OK
     assert str(root) not in result.output
     assert payload["project"] == root.name
-    assert payload["scan_health"]["skipped_examples"]["too_large"] == [
-        "pkg/too_large.py"
-    ]
+    assert payload["scan_health"]["skipped_examples"]["too_large"] == ["pkg/too_large.py"]
 
 
 def test_redact_paths_keeps_absolute_paths_out_of_json(project):
-    root = project({
-        "ok.py": "",
-        "pkg/too_large.py": RICH_SOURCE,
-    })
+    root = project(
+        {
+            "ok.py": "",
+            "pkg/too_large.py": RICH_SOURCE,
+        }
+    )
 
-    result = run([
-        str(root), "-f", "json", "--redact-paths", "--max-file-size", "1",
-    ])
+    result = run(
+        [
+            str(root),
+            "-f",
+            "json",
+            "--redact-paths",
+            "--max-file-size",
+            "1",
+        ]
+    )
     payload = json.loads(result.output)
 
     assert str(root) not in result.output
     assert payload["project"] == root.name
-    assert payload["scan_health"]["skipped_examples"]["too_large"] == [
-        "too_large.py"
-    ]
+    assert payload["scan_health"]["skipped_examples"]["too_large"] == ["too_large.py"]
 
 
 def test_complexity_flag_adds_a_section(project):
@@ -172,10 +179,12 @@ def test_complexity_flag_adds_a_section(project):
 
 
 def test_strict_flags_truncated_scan(project):
-    root = project({
-        "a.py": "x = 1\n",
-        "b.py": "y = 2\n",
-    })
+    root = project(
+        {
+            "a.py": "x = 1\n",
+            "b.py": "y = 2\n",
+        }
+    )
 
     result = run([str(root), "--strict", "--max-files", "1"])
 
@@ -188,16 +197,20 @@ def test_strict_includes_complexity_health(project, monkeypatch):
     root = project({"lib.py": "def f():\n    return 1\n"})
     monkeypatch.setattr(ProjectComplexityAnalyzer, "MAX_FUNCTIONS_PER_FILE", 0)
 
-    result = run([
-        str(root), "--strict", "--complexity", "--output-format", "json",
-    ])
+    result = run(
+        [
+            str(root),
+            "--strict",
+            "--complexity",
+            "--output-format",
+            "json",
+        ]
+    )
     payload = json.loads(result.output)
 
     assert result.exit_code == EXIT_COVERAGE_GAP
     assert payload["analysis_health"]["authoritative"] is False
-    assert payload["analysis_health"]["reasons"] == [
-        "project_analysis_incomplete"
-    ]
+    assert payload["analysis_health"]["reasons"] == ["project_analysis_incomplete"]
 
 
 def test_numeric_options_reject_out_of_range_values(project):
@@ -226,9 +239,11 @@ def test_text_output_does_not_print_absolute_project_path(project):
 
 
 def test_json_includes_actionable_findings(project):
-    root = project({
-        "service.py": "def add(item, items=[]):\n    items.append(item)\n",
-    })
+    root = project(
+        {
+            "service.py": "def add(item, items=[]):\n    items.append(item)\n",
+        }
+    )
 
     result = run([str(root), "--output-format", "json"])
     payload = json.loads(result.output)
@@ -259,11 +274,13 @@ def test_text_output_shows_actionable_finding(project):
 
 
 def test_json_includes_package_intelligence(project):
-    root = project({
-        "pyproject.toml": "[project]\nname = 'demo'\ndependencies = ['click']\n",
-        "demo/__init__.py": "",
-        "demo/core.py": "VALUE = 1\n",
-    })
+    root = project(
+        {
+            "pyproject.toml": "[project]\nname = 'demo'\ndependencies = ['click']\n",
+            "demo/__init__.py": "",
+            "demo/core.py": "VALUE = 1\n",
+        }
+    )
 
     result = run([str(root), "--output-format", "json"])
     payload = json.loads(result.output)
@@ -277,10 +294,12 @@ def test_json_includes_package_intelligence(project):
 
 
 def test_strict_fails_for_invalid_package_metadata(project):
-    root = project({
-        "pyproject.toml": "[project\nname = 'broken'\n",
-        "module.py": "VALUE = 1\n",
-    })
+    root = project(
+        {
+            "pyproject.toml": "[project\nname = 'broken'\n",
+            "module.py": "VALUE = 1\n",
+        }
+    )
 
     result = run([str(root), "--strict", "--output-format", "json"])
     payload = json.loads(result.output)
@@ -294,24 +313,40 @@ def test_strict_fails_for_invalid_package_metadata(project):
 
 
 def test_baseline_supports_new_findings_only_ci_gate(project, tmp_path):
-    root = project({
-        "existing.py": "def existing(items=[]):\n    return items\n",
-    })
+    root = project(
+        {
+            "existing.py": "def existing(items=[]):\n    return items\n",
+        }
+    )
     baseline = tmp_path / "baseline.json"
 
-    written = run([
-        str(root), "--output-format", "json", "--write-baseline", str(baseline),
-    ])
+    written = run(
+        [
+            str(root),
+            "--output-format",
+            "json",
+            "--write-baseline",
+            str(baseline),
+        ]
+    )
     written_payload = json.loads(written.output)
 
     assert written.exit_code == EXIT_OK
     assert written_payload["baseline"]["written"] is True
     assert "existing.py" not in baseline.read_text(encoding="utf-8")
 
-    unchanged = run([
-        str(root), "--output-format", "json", "--baseline", str(baseline),
-        "--new-findings-only", "--fail-on", "warning",
-    ])
+    unchanged = run(
+        [
+            str(root),
+            "--output-format",
+            "json",
+            "--baseline",
+            str(baseline),
+            "--new-findings-only",
+            "--fail-on",
+            "warning",
+        ]
+    )
     unchanged_payload = json.loads(unchanged.output)
 
     assert unchanged.exit_code == EXIT_OK
@@ -322,10 +357,18 @@ def test_baseline_supports_new_findings_only_ci_gate(project, tmp_path):
         "def introduced(cache={}):\n    return cache\n",
         encoding="utf-8",
     )
-    changed = run([
-        str(root), "--output-format", "json", "--baseline", str(baseline),
-        "--new-findings-only", "--fail-on", "warning",
-    ])
+    changed = run(
+        [
+            str(root),
+            "--output-format",
+            "json",
+            "--baseline",
+            str(baseline),
+            "--new-findings-only",
+            "--fail-on",
+            "warning",
+        ]
+    )
     changed_payload = json.loads(changed.output)
 
     assert changed.exit_code == EXIT_FINDINGS
@@ -372,15 +415,17 @@ def test_invalid_baseline_fails_without_traceback(project, tmp_path):
 
 
 def test_error_gate_fails_for_package_error(project):
-    root = project({
-        "pyproject.toml": (
-            "[project]\n"
-            "name = 'demo'\n\n"
-            "[project.scripts]\n"
-            "demo = 'demo.missing:main'\n"
-        ),
-        "demo/__init__.py": "",
-    })
+    root = project(
+        {
+            "pyproject.toml": (
+                "[project]\n"
+                "name = 'demo'\n\n"
+                "[project.scripts]\n"
+                "demo = 'demo.missing:main'\n"
+            ),
+            "demo/__init__.py": "",
+        }
+    )
 
     result = run([str(root), "--fail-on", "error"])
 
@@ -388,34 +433,45 @@ def test_error_gate_fails_for_package_error(project):
 
 
 def _private_project(project):
-    return project({
-        "pyproject.toml": (
-            "[project]\n"
-            "name = 'acme-private'\n"
-            "dependencies = ['internal-dependency']\n\n"
-            "[project.scripts]\n"
-            "secret-command = 'secret_pkg.missing:main'\n"
-        ),
-        "secret_pkg/__init__.py": "",
-        "secret_pkg/private_module.py": (
-            "def proprietary_engine(secret_items=[]):\n"
-            "    dp = {}\n"
-            "    for secret_outer in secret_items:\n"
-            "        for secret_inner in secret_items:\n"
-            "            dp[secret_outer] = secret_inner\n"
-            "    return dp\n"
-        ),
-        "private/oversized.py": "PRIVATE_MARKER = '" + ("x" * 2000) + "'\n",
-    })
+    return project(
+        {
+            "pyproject.toml": (
+                "[project]\n"
+                "name = 'acme-private'\n"
+                "dependencies = ['internal-dependency']\n\n"
+                "[project.scripts]\n"
+                "secret-command = 'secret_pkg.missing:main'\n"
+            ),
+            "secret_pkg/__init__.py": "",
+            "secret_pkg/private_module.py": (
+                "def proprietary_engine(secret_items=[]):\n"
+                "    dp = {}\n"
+                "    for secret_outer in secret_items:\n"
+                "        for secret_inner in secret_items:\n"
+                "            dp[secret_outer] = secret_inner\n"
+                "    return dp\n"
+            ),
+            "private/oversized.py": "PRIVATE_MARKER = '" + ("x" * 2000) + "'\n",
+        }
+    )
 
 
 def test_anonymized_json_removes_source_identifiers(project):
     root = _private_project(project)
 
-    result = run([
-        str(root), "--output-format", "json", "--anonymize", "--offline",
-        "--verbose", "--complexity", "--max-file-size", "500",
-    ])
+    result = run(
+        [
+            str(root),
+            "--output-format",
+            "json",
+            "--anonymize",
+            "--offline",
+            "--verbose",
+            "--complexity",
+            "--max-file-size",
+            "500",
+        ]
+    )
     payload = json.loads(result.output)
     rendered = result.output
 
@@ -427,9 +483,7 @@ def test_anonymized_json_removes_source_identifiers(project):
         "offline_enforced": True,
         "cache_enabled": False,
     }
-    assert payload["scan_health"]["skipped_examples"]["too_large"] == [
-        "file-0001"
-    ]
+    assert payload["scan_health"]["skipped_examples"]["too_large"] == ["file-0001"]
     finding = payload["findings"][0]
     assert finding["location"]["path"].startswith("file-")
     evidence = payload["dsa_patterns"]["dynamic_programming"]["evidence"][0]
@@ -458,10 +512,17 @@ def test_anonymized_json_removes_source_identifiers(project):
 def test_anonymized_text_removes_source_identifiers(project):
     root = _private_project(project)
 
-    result = run([
-        str(root), "--anonymize", "--offline", "--verbose", "--complexity",
-        "--max-file-size", "500",
-    ])
+    result = run(
+        [
+            str(root),
+            "--anonymize",
+            "--offline",
+            "--verbose",
+            "--complexity",
+            "--max-file-size",
+            "500",
+        ]
+    )
 
     assert result.exit_code == EXIT_OK
     assert "Analyzing: anonymized-project" in result.output
@@ -486,9 +547,14 @@ def test_anonymization_does_not_change_baseline_fingerprints(project, tmp_path):
     anonymous = tmp_path / "anonymous.json"
 
     first = run([str(root), "--write-baseline", str(normal)])
-    second = run([
-        str(root), "--anonymize", "--write-baseline", str(anonymous),
-    ])
+    second = run(
+        [
+            str(root),
+            "--anonymize",
+            "--write-baseline",
+            str(anonymous),
+        ]
+    )
 
     assert first.exit_code == EXIT_OK
     assert second.exit_code == EXIT_OK
@@ -525,17 +591,19 @@ def test_offline_cli_stops_network_attempt_before_connection(project, monkeypatc
 
 
 def test_mixed_python_go_report_uses_one_findings_contract(project):
-    root = project({
-        "service.py": "def add(items=[]):\n    return items\n",
-        "worker.go": (
-            "package worker\n\n"
-            'import "os"\n\n'
-            "func load(privatePath string) []byte {\n"
-            "    privateData, _ := os.ReadFile(privatePath)\n"
-            "    return privateData\n"
-            "}\n"
-        ),
-    })
+    root = project(
+        {
+            "service.py": "def add(items=[]):\n    return items\n",
+            "worker.go": (
+                "package worker\n\n"
+                'import "os"\n\n'
+                "func load(privatePath string) []byte {\n"
+                "    privateData, _ := os.ReadFile(privatePath)\n"
+                "    return privateData\n"
+                "}\n"
+            ),
+        }
+    )
 
     result = run([str(root), "--output-format", "json"])
     payload = json.loads(result.output)
@@ -552,20 +620,28 @@ def test_mixed_python_go_report_uses_one_findings_contract(project):
 
 
 def test_anonymized_go_finding_removes_source_identifiers(project):
-    root = project({
-        "private/worker.go": (
-            "package privateworker\n\n"
-            'import "os"\n\n'
-            "func load(privatePath string) []byte {\n"
-            "    privateData, _ := os.ReadFile(privatePath)\n"
-            "    return privateData\n"
-            "}\n"
-        ),
-    })
+    root = project(
+        {
+            "private/worker.go": (
+                "package privateworker\n\n"
+                'import "os"\n\n'
+                "func load(privatePath string) []byte {\n"
+                "    privateData, _ := os.ReadFile(privatePath)\n"
+                "    return privateData\n"
+                "}\n"
+            ),
+        }
+    )
 
-    result = run([
-        str(root), "--output-format", "json", "--anonymize", "--offline",
-    ])
+    result = run(
+        [
+            str(root),
+            "--output-format",
+            "json",
+            "--anonymize",
+            "--offline",
+        ]
+    )
     payload = json.loads(result.output)
 
     assert result.exit_code == EXIT_OK
@@ -613,9 +689,15 @@ def test_unknown_output_format_lists_registered_reporters(project):
 def test_all_skipped_sources_exit_three_and_are_non_authoritative(project):
     root = project({"large.py": "VALUE = '" + ("x" * 100) + "'\n"})
 
-    result = run([
-        str(root), "--output-format", "json", "--max-file-size", "8",
-    ])
+    result = run(
+        [
+            str(root),
+            "--output-format",
+            "json",
+            "--max-file-size",
+            "8",
+        ]
+    )
     payload = json.loads(result.output)
 
     assert result.exit_code == EXIT_COVERAGE_GAP
@@ -646,10 +728,12 @@ def test_all_malformed_sources_exit_three_without_strict(project):
 
 
 def test_partial_analysis_is_qualified_without_forcing_non_strict_failure(project):
-    root = project({
-        "good.py": "VALUE = 1\n",
-        "broken.py": "def broken(:\n",
-    })
+    root = project(
+        {
+            "good.py": "VALUE = 1\n",
+            "broken.py": "def broken(:\n",
+        }
+    )
 
     result = run([str(root), "--output-format", "json"])
     payload = json.loads(result.output)
@@ -667,16 +751,94 @@ def test_partial_analysis_is_qualified_without_forcing_non_strict_failure(projec
 
 
 def test_anonymization_preserves_analysis_authority_contract(project):
-    root = project({
-        "private/good.py": "VALUE = 1\n",
-        "private/broken.py": "def broken(:\n",
-    })
+    root = project(
+        {
+            "private/good.py": "VALUE = 1\n",
+            "private/broken.py": "def broken(:\n",
+        }
+    )
 
     normal = run([str(root), "--output-format", "json"])
-    anonymous = run([
-        str(root), "--output-format", "json", "--anonymize", "--offline",
-    ])
-
-    assert json.loads(normal.output)["analysis_health"] == (
-        json.loads(anonymous.output)["analysis_health"]
+    anonymous = run(
+        [
+            str(root),
+            "--output-format",
+            "json",
+            "--anonymize",
+            "--offline",
+        ]
     )
+
+    assert (
+        json.loads(normal.output)["analysis_health"]
+        == (json.loads(anonymous.output)["analysis_health"])
+    )
+
+
+def test_text_reporter_survives_markup_in_paths(project):
+    # Staff review round 2, A2: `arr[/i].py` crashed Rich with MarkupError.
+    root = project({"arr[/i].py": "def f(x=[]):\n    return x\n"})
+    result = CliRunner().invoke(main, [str(root)])
+    assert result.exit_code in {0, 4}, result.output
+    assert "MarkupError" not in result.output and "Traceback" not in result.output
+    assert "arr[/i].py" in result.output
+
+
+def test_safe_strips_control_characters_and_escapes_markup():
+    # Round 2, D3. Windows cannot even create a file named with ESC, so this
+    # is checked on the helper rather than through the filesystem.
+    from cqa_analyzer.__main__ import _safe
+
+    assert _safe("ctl\x1b[31m.py") == "ctl[31m.py"  # ESC dropped; `[31m` cannot be a tag
+    assert _safe("tab\there\x00\x7f") == "tab\there"  # \t kept, NUL/DEL dropped
+    assert _safe("arr[/i].py") == "arr\\[/i].py"
+
+
+def test_config_flags_pin_the_gate_outside_the_scanned_tree(project, tmp_path):
+    # Staff review round 2, A1: a PR could disable rules via the repo's
+    # own .code-quality.toml; the workflow can now pin or bypass it.
+    root = project(
+        {
+            ".code-quality.toml": '[rules."PY-COR-001"]\nenabled = false\n',
+            "a.py": "def f(x=[]):\n    return x\n",
+        }
+    )
+    # Repo config honoured by default: the finding is suppressed.
+    default = json.loads(CliRunner().invoke(main, [str(root), "-f", "json"]).output)
+    assert not [f for f in default["findings"] if f["rule_id"] == "PY-COR-001"]
+    # --no-project-config: defaults only, finding is back.
+    bypass = json.loads(
+        CliRunner().invoke(main, [str(root), "-f", "json", "--no-project-config"]).output
+    )
+    assert [f["rule_id"] for f in bypass["findings"]] == ["PY-COR-001"]
+    # --config: an explicit file outside the tree wins over the repo's.
+    pinned = tmp_path / "gate.toml"
+    pinned.write_text('[rules."PY-COR-001"]\nseverity = "error"\n')
+    explicit = json.loads(
+        CliRunner().invoke(main, [str(root), "-f", "json", "--config", str(pinned)]).output
+    )
+    assert [f["severity"] for f in explicit["findings"] if f["rule_id"] == "PY-COR-001"] == [
+        "error"
+    ]
+    # --expect-config-fingerprint: mismatch is a distinct exit code before analysis.
+    fingerprint = explicit["configuration_fingerprint"]
+    ok = CliRunner().invoke(
+        main,
+        [
+            str(root),
+            "-f",
+            "json",
+            "--config",
+            str(pinned),
+            "--expect-config-fingerprint",
+            fingerprint,
+        ],
+    )
+    assert ok.exit_code in {0, 4}
+    tampered = CliRunner().invoke(
+        main, [str(root), "-f", "json", "--expect-config-fingerprint", fingerprint]
+    )
+    assert tampered.exit_code == 6
+    assert "fingerprint mismatch" in tampered.output
+    both = CliRunner().invoke(main, [str(root), "--config", str(pinned), "--no-project-config"])
+    assert both.exit_code == 2 and "mutually exclusive" in both.output

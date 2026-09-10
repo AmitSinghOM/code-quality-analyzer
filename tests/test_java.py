@@ -323,3 +323,30 @@ def test_java_only_project_earns_a_real_score(project):
     assert isinstance(payload["architecture_signal_score"], float)
     assert payload["scan_health"]["languages"] == {"java": 1}
     assert "heap_priority" in payload["dsa_patterns"]
+
+
+def test_version_catalog_dotted_keys_flatten_to_dashed_aliases(project):
+    # Round 2, C3: `groovy.core = {...}` is TOML nesting; Gradle reads it as
+    # alias `groovy-core`, accessor `libs.groovy.core`.
+    root = project(
+        {
+            "gradle/libs.versions.toml": (
+                "[libraries]\n"
+                'groovy.core = { module = "org.codehaus.groovy:groovy", version = "3.0.5" }\n'
+                'groovy.json = { module = "org.codehaus.groovy:groovy-json", version = "3.0.5" }\n'
+                'gson = "com.google.code.gson:gson:2.11.0"\n'
+            ),
+            "build.gradle.kts": (
+                "dependencies {\n    implementation(libs.groovy.core)\n"
+                "    implementation(libs.gson)\n}\n"
+            ),
+            "src/A.java": "import com.google.gson.Gson;\nclass A {}\n",
+        }
+    )
+    _, payload = scan_json(root)
+    manifest = payload["project_analyses"]["java:package"]["result"]["manifests"][0]
+    assert manifest["unresolved_catalog_refs"] == 0
+    assert {"org.codehaus.groovy:groovy", "com.google.code.gson:gson"} <= set(
+        manifest["declared_dependencies"]
+    )
+    assert not [f for f in payload["findings"] if f["rule_id"] == "JAVA-PKG-001"]

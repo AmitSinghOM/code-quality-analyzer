@@ -39,6 +39,9 @@ class AnalysisConfig:
     exclude: tuple[str, ...] = ()
     respect_gitignore: bool = True
     gitignore: tuple[str, ...] = field(default=(), repr=False)
+    # Directory names to scan even though they are in the built-in skip list
+    # (`external/`, `vendor/`, … are first-party in some projects).
+    keep_directories: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,6 +62,13 @@ class AnalyzerConfig:
                 "exclude": list(self.analysis.exclude),
                 "respect_gitignore": self.analysis.respect_gitignore,
                 "gitignore": list(self.analysis.gitignore),
+                # Only when set: fingerprints of configurations that predate
+                # this key must not change, or every pinned gate would break.
+                **(
+                    {"keep_directories": list(self.analysis.keep_directories)}
+                    if self.analysis.keep_directories
+                    else {}
+                ),
             },
             "rules": {
                 rule_id: {
@@ -76,13 +86,34 @@ class AnalyzerConfig:
         return hashlib.sha256(encoded).hexdigest()
 
 
-def load_config(root: Path) -> AnalyzerConfig:
-    """Load only the project-root configuration and effective ignore rules."""
+def load_config(
+    root: Path,
+    *,
+    config_path: Path | None = None,
+    use_project_config: bool = True,
+) -> AnalyzerConfig:
+    """Load the effective configuration and ignore rules.
+
+    By default the project root's ``.code-quality.toml`` is used. A CI gate
+    should not trust the tree it is gating: ``config_path`` loads an
+    explicit file instead (the repository's own file is ignored), and
+    ``use_project_config=False`` runs with defaults only. Either way the
+    root ``.gitignore`` still applies when ``respect_gitignore`` is set.
+    """
     root = Path(root).resolve()
-    path = root / CONFIG_NAME
-    if path.exists() or path.is_symlink():
-        data = _load_toml(path, root)
+    if config_path is not None:
+        explicit = Path(config_path).resolve()
+        if not explicit.is_file():
+            raise ConfigError(f"--config file not found: {explicit}")
+        data = _load_toml(explicit, explicit.parent)
         config = _parse_config(data)
+    elif use_project_config:
+        path = root / CONFIG_NAME
+        if path.exists() or path.is_symlink():
+            data = _load_toml(path, root)
+            config = _parse_config(data)
+        else:
+            config = AnalyzerConfig()
     else:
         config = AnalyzerConfig()
 
@@ -100,9 +131,7 @@ def path_is_selected(relative_path: str, analysis: AnalysisConfig) -> bool:
     path = relative_path.replace("\\", "/")
     while path.startswith("./"):
         path = path[2:]
-    if analysis.include and not any(
-        _glob_matches(pattern, path) for pattern in analysis.include
-    ):
+    if analysis.include and not any(_glob_matches(pattern, path) for pattern in analysis.include):
         return False
     if any(_glob_matches(pattern, path) for pattern in analysis.exclude):
         return False
@@ -136,7 +165,7 @@ def _parse_config(data: dict) -> AnalyzerConfig:
     analysis_data = _table(data.get("analysis"), "analysis")
     _reject_unknown(
         analysis_data,
-        {"include", "exclude", "respect_gitignore"},
+        {"include", "exclude", "respect_gitignore", "keep_directories"},
         "analysis",
     )
     analysis = AnalysisConfig(
@@ -146,6 +175,9 @@ def _parse_config(data: dict) -> AnalyzerConfig:
             analysis_data.get("respect_gitignore"),
             "analysis.respect_gitignore",
             default=True,
+        ),
+        keep_directories=_directory_names(
+            analysis_data.get("keep_directories"), "analysis.keep_directories"
         ),
     )
 
@@ -158,20 +190,20 @@ def _parse_config(data: dict) -> AnalyzerConfig:
         _reject_unknown(policy, {"enabled", "severity"}, f"rules.{rule_id}")
         severity = policy.get("severity")
         if severity is not None and severity not in {"warning", "error"}:
-            raise ConfigError(
-                f"rules.{rule_id}.severity must be 'warning' or 'error'."
-            )
-        rules.append((
-            rule_id,
-            RulePolicy(
-                enabled=_boolean(
-                    policy.get("enabled"),
-                    f"rules.{rule_id}.enabled",
-                    default=True,
+            raise ConfigError(f"rules.{rule_id}.severity must be 'warning' or 'error'.")
+        rules.append(
+            (
+                rule_id,
+                RulePolicy(
+                    enabled=_boolean(
+                        policy.get("enabled"),
+                        f"rules.{rule_id}.enabled",
+                        default=True,
+                    ),
+                    severity=severity,
                 ),
-                severity=severity,
-            ),
-        ))
+            )
+        )
     return AnalyzerConfig(analysis=analysis, rules=tuple(rules))
 
 
@@ -200,9 +232,7 @@ def _read_bounded_file(path: Path, root: Path, label: str) -> str:
         if error.reason == "not_regular_file":
             raise ConfigError(f"{label} must be a regular file.") from error
         if error.reason == "too_large":
-            raise ConfigError(
-                f"{label} exceeds the 256 KiB safety limit."
-            ) from error
+            raise ConfigError(f"{label} exceeds the 256 KiB safety limit.") from error
         raise ConfigError(f"{label} could not be read safely.") from error
     except (FileNotFoundError, ValueError) as error:
         raise ConfigError(f"{label} could not be read safely.") from error
@@ -233,9 +263,7 @@ def _boolean(value, name: str, *, default: bool) -> bool:
 def _patterns(value, name: str) -> tuple[str, ...]:
     if value is None:
         return ()
-    if not isinstance(value, list) or not all(
-        isinstance(item, str) for item in value
-    ):
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
         raise ConfigError(f"{name} must be an array of strings.")
     if len(value) > MAX_PATTERNS:
         raise ConfigError(f"{name} contains too many patterns.")
@@ -290,7 +318,64 @@ def _translate_glob(pattern: str) -> str:
             output.append("[^/]*")
         elif character == "?":
             output.append("[^/]")
+        elif character == "[":
+            # Character class (round 2, C5): `[abc]`, `[a-z]`, `[!x]`/`[^x]`.
+            close = pattern.find("]", index + 2)
+            if close == -1:
+                output.append(re.escape(character))
+            else:
+                body = pattern[index + 1 : close]
+                negate = body[:1] in {"!", "^"}
+                if negate:
+                    body = body[1:]
+                output.append("[" + ("^" if negate else "") + _class_body(body) + "]")
+                index = close
         else:
             output.append(re.escape(character))
         index += 1
     return "".join(output)
+
+
+def _directory_names(value: object, label: str) -> tuple[str, ...]:
+    """Validate a list of bare directory names (no separators, no globs)."""
+    if value is None:
+        return ()
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ConfigError(f"{label} must be a list of directory names.")
+    for name in value:
+        if (
+            not name
+            or "/" in name
+            or "\\" in name
+            or name in {".", ".."}
+            or any(ch in name for ch in "*?[")
+        ):
+            raise ConfigError(f"{label} entries must be bare directory names; got {name!r}.")
+    return tuple(sorted(set(value)))
+
+
+def _class_body(body: str) -> str:
+    """Render a glob character-class body as a safe regex class body.
+
+    Ranges are kept only when well-formed (`a-z`); anything else — a
+    reversed range like `s-:`, a stray `-`, `\\`, `]`, `^` — is escaped so a
+    crafted `.gitignore` can never make `re.compile` raise (found by
+    tests/test_lexer_fuzz.py).
+    """
+    out = []
+    index = 0
+    while index < len(body):
+        char = body[index]
+        if (
+            index + 2 < len(body)
+            and body[index + 1] == "-"
+            and body[index] <= body[index + 2]
+            and body[index].isalnum()
+            and body[index + 2].isalnum()
+        ):
+            out.append(re.escape(body[index]) + "-" + re.escape(body[index + 2]))
+            index += 3
+            continue
+        out.append(re.escape(char))
+        index += 1
+    return "".join(out)

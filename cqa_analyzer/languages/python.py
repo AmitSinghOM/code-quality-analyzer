@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+from dataclasses import replace
 import base64
 import sys
 from collections.abc import Iterable, Mapping
@@ -22,7 +23,7 @@ from ..protocols import (
     SourceFile,
 )
 from ..python_rules import PythonRuleAnalyzer
-from ..python_suppressions import suppression_lines
+from ..python_suppressions import comment_lines, suppression_lines
 from ..registry import PluginRegistry
 from ..signals import FileSignals, extract_signals, pattern_is_present
 
@@ -60,8 +61,7 @@ class PythonLanguageAdapter:
     extensions = (".py",)
     cache_codec_version = PYTHON_CACHE_CODEC_VERSION
     cache_runtime_version = (
-        f"{sys.implementation.name}-{sys.version_info.major}."
-        f"{sys.version_info.minor}"
+        f"{sys.implementation.name}-{sys.version_info.major}." f"{sys.version_info.minor}"
     )
 
     def parse(self, source: SourceFile) -> ParsedFile:
@@ -111,8 +111,12 @@ class PythonLanguageAdapter:
         encoded_signals = _exact_mapping(
             data["signals"],
             {
-                "line_count", "code_text", "identifiers", "imports",
-                "parsed", "literals_stripped",
+                "line_count",
+                "code_text",
+                "identifiers",
+                "imports",
+                "parsed",
+                "literals_stripped",
             },
         )
         signals = FileSignals(
@@ -123,9 +127,7 @@ class PythonLanguageAdapter:
             imports=set(_string_list(encoded_signals["imports"])),
             tree=tree,
             parsed=_boolean(encoded_signals["parsed"]),
-            literals_stripped=_boolean(
-                encoded_signals["literals_stripped"]
-            ),
+            literals_stripped=_boolean(encoded_signals["literals_stripped"]),
         )
         if signals.line_count != line_count:
             raise ValueError("Cached Python line counts do not match")
@@ -154,11 +156,33 @@ class PythonRulePack:
             identity_path=parsed.source.identity_path,
         )
         suppressed = suppression_lines(parsed.source.content)
+        documented = comment_lines(parsed.source.content)
         return tuple(
-            finding
+            _downgrade_documented_swallow(finding, documented)
             for finding in findings
             if (finding.location.line, finding.rule_id) not in suppressed
         )
+
+
+def _downgrade_documented_swallow(finding: Finding, comment_line_numbers) -> Finding:
+    """A commented `except: pass` is documented intent — a note, not a warning.
+
+    Mirrors the regex languages' empty-catch behaviour (round 2, C1) so the
+    same idiom is graded the same way in every language.
+    """
+    if finding.rule_id != "PY-COR-003" or finding.location.end_line is None:
+        return finding
+    span = range(finding.location.line, finding.location.end_line + 1)
+    if not any(line in comment_line_numbers for line in span):
+        return finding
+    return replace(
+        finding,
+        severity="note",
+        message=(
+            "Exception handler swallows the failure with a comment documenting "
+            "the intent; confirm the swallow is deliberate."
+        ),
+    )
 
 
 class PythonArchitectureSignalProvider:
@@ -295,8 +319,7 @@ def _encode_ast_value(value: object) -> object:
             "kind": "ast",
             "type": type(value).__name__,
             "fields": {
-                field: _encode_ast_value(getattr(value, field, None))
-                for field in value._fields
+                field: _encode_ast_value(getattr(value, field, None)) for field in value._fields
             },
             "attributes": {
                 attribute: _encode_ast_value(getattr(value, attribute))
@@ -352,10 +375,7 @@ def _decode_ast_value(value: object, budget: _DecodeBudget) -> object:
         if not set(attributes) <= set(cls._attributes):
             raise ValueError("Cached Python AST has unknown attributes")
         budget.consume(node=True)
-        node = cls(**{
-            field: _decode_ast_value(fields[field], budget)
-            for field in cls._fields
-        })
+        node = cls(**{field: _decode_ast_value(fields[field], budget) for field in cls._fields})
         for name, item in attributes.items():
             setattr(node, name, _decode_ast_value(item, budget))
         return node

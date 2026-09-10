@@ -198,8 +198,8 @@ python3 -m pip install --upgrade cqa-analyzer
 python3 -m pip install --upgrade 'cqa-analyzer[deep]'   # with the optional extra
 
 # a specific version
-pipx install --force 'cqa-analyzer==2.38.1'
-python3 -m pip install 'cqa-analyzer==2.38.1'
+pipx install --force 'cqa-analyzer==2.39.0'
+python3 -m pip install 'cqa-analyzer==2.39.0'
 ```
 
 Check with `code-quality-analyzer --version`. If the number does not
@@ -321,11 +321,31 @@ source and rule policy:
 include = ["src/**/*.py", "cmd/**/*.go"]
 exclude = ["src/generated/**"]
 respect_gitignore = true
+# Scan directories the built-in skip list would prune (vendor, third_party,
+# external, Pods, .terraform, node_modules, build outputs, ...). Bare names only.
+keep_directories = ["external"]
 
 [rules."PY-COR-001"]
 enabled = true
 severity = "error"
 ```
+
+**Gating a pull request you do not trust.** The configuration above lives
+in the tree being scanned, so a PR could edit it to disable a rule. Pin
+the gate in the workflow instead:
+
+```bash
+# use a config file the PR cannot touch, or none at all
+code-quality-analyzer . --config ci/code-quality.toml --fail-on warning
+code-quality-analyzer . --no-project-config --fail-on warning
+# or keep the repo's file but fail (exit 6) if its fingerprint changes
+code-quality-analyzer . --expect-config-fingerprint <sha256> --fail-on warning
+```
+
+`scan_health` reports what discovery did not read: `pruned_directories`
+and `pruned_examples` (skip-list directories), `bytes_read`, and
+`truncated_reasons` (`file_limit`, `byte_budget` — a 512 MB total read
+budget protects against trees that would otherwise exhaust memory).
 
 Filters are project-relative, exclusion wins, and filtered files do not consume
 candidate or file-limit accounting. The root `.gitignore` is respected by

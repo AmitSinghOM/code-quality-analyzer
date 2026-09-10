@@ -87,3 +87,10 @@ regular contributor joins.
 - **Documented empty catches** (`catch (e) { /* best effort */ }`) are
   reported at `note` severity, not `warning`; `--fail-on warning` does
   not fail on them.
+- **Keyword-glued strings in TypeScript** (`return'x'`) are recognised for
+  the JS keyword set; an apostrophe glued to any other identifier is JSX
+  text. `x'y'` is not valid JS, so nothing is lost.
+- **CMake link lines that expand variables** make no drift claims for
+  that manifest chain; Gradle build scripts with unresolvable catalog
+  accessors likewise. Both are reported (`variable_bound_links`,
+  `unresolved_catalog_refs`) rather than guessed.

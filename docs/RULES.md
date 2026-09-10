@@ -73,7 +73,7 @@ Tuples are reported when they contain `Exception` or `BaseException`. Attribute-
 **Default severity:** Warning
 **Confidence:** High
 
-An exception handler whose only statement is `pass` or `...` discards the failure without recovery, propagation, or actionable context.
+An exception handler whose only statement is `pass` or `...` discards the failure without recovery, propagation, or actionable context. If the handler carries a comment (`except Exception:  # best effort`), the swallow is documented intent and is reported at **note** severity with a "documenting the intent" message — the same grading the regex-language empty-catch rules apply.
 
 ```python
 # Non-compliant
@@ -546,7 +546,10 @@ exactly `PY-DUP-001`'s semantics: the function's own name is excluded,
 the signature and body are compared structurally (comments ignored,
 identifiers and literals included), only significant functions
 participate (≥ 3 statements and ≥ 40 named nodes), and only top-level
-functions and methods are compared. Generated files are skipped
+functions and methods are compared. Go receivers are not part of the key, so two types whose methods have
+identical bodies are duplicates — correct for copy-paste, but small
+interface implementations (`String()`, `Error()`) across types can meet
+the significance floor; review such groups with that in mind. Generated files are skipped
 (`files_skipped_generated`): Go's official `// Code generated … DO NOT
 EDIT.` header, `*.pb.go`, `*_generated.go`, `zz_generated*`, `mock_*.go`,
 `*.g.cs`, `*.designer.cs`. Vendored trees (`vendor/`, `third_party/`,
@@ -566,7 +569,10 @@ Cyclomatic complexity per function against the shared limit of 10. Go
 follows gocyclo: `if`, `for`, non-default `case` (expression, type, and
 select cases), `&&`, `||`. C/C++ count `if`, `for`, range-`for`,
 `while`, `do`, non-default `case`, `?:`, `catch`, `&&`, `||`. Nested
-function literals contribute to their enclosing function. C code
+function literals and lambdas are **not** entered — the same scope as
+`PY-MAINT-001` and as cognitive complexity below (this deliberately
+differs from gocyclo, which folds closures into the enclosing
+function; cross-language parity wins). C code
 routinely exceeds 10 (hiredis averages 4.4 with 49 of 635 functions
 over; jq averages 6.0) — the limit is the same standard applied to
 every language, not a claim that the code is wrong.

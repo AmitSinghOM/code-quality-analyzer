@@ -235,8 +235,7 @@ def test_cmake_tokens_are_whole_words_and_comments_do_not_declare(project):
                 "target_link_libraries(demo PRIVATE ZLIB::ZLIB)\n"
             ),
             "main.c": (
-                "#include <zlib.h>\n#include <curl/curl.h>\n"
-                "#include <openssl/ssl.h>\nint x;\n"
+                "#include <zlib.h>\n#include <curl/curl.h>\n" "#include <openssl/ssl.h>\nint x;\n"
             ),
         }
     )
@@ -265,3 +264,20 @@ def test_c_only_project_earns_a_real_score_and_reports_language(project):
     assert payload["scan_health"]["languages"] == {"c_cpp": 1}
     assert "graph_traversal" in payload["dsa_patterns"]
     assert {"concurrency", "logging"} <= set(payload["design_patterns"])
+
+
+def test_variable_bound_link_lines_suppress_drift_claims(project):
+    # Round 2, C4: `target_link_libraries(x ${DEPS})` may bind anything.
+    root = project(
+        {
+            "CMakeLists.txt": (
+                "project(demo C)\nset(DEPS CURL::libcurl)\n"
+                "add_executable(demo main.c)\ntarget_link_libraries(demo PRIVATE ${DEPS})\n"
+            ),
+            "main.c": "#include <curl/curl.h>\nint x;\n",
+        }
+    )
+    _, payload = scan_json(root)
+    assert not [f for f in payload["findings"] if f["rule_id"] == "C-PKG-001"]
+    manifest = payload["project_analyses"]["c_cpp:package"]["result"]["manifests"][0]
+    assert manifest["variable_bound_links"] is True
