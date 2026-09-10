@@ -64,6 +64,21 @@ def test_adapter_extracts_bounded_identifiers():
     assert "const" not in identifiers
 
 
+def test_jsx_text_apostrophes_and_keyword_regex_after_space():
+    # Staff review B1/B3: `Don't` in JSX text opened a string and made the
+    # file non-authoritative; `b in /re/` saw the word `bin`, not `in`.
+    source = (
+        "<p>Don't have an account? It's here</p>\n"
+        "const ok = b in /dijkstra/;\n"
+        "const s = 'trie';\n"
+        "next();\n"
+    )
+    blanked, complete = _strip_ts_comments_and_strings(source)
+    assert complete
+    assert "dijkstra" not in blanked and "trie" not in blanked
+    assert "Don't" in blanked and "next" in blanked
+
+
 def test_jsx_closing_tags_and_arrow_regexes_are_lexed_correctly():
     # HUMM: `</p>` and `{children}</AppShell>` were read as regex starts,
     # making 31 TSX files non-authoritative. `=> /re/` must still work.
@@ -438,10 +453,10 @@ def test_ts_only_project_now_earns_a_real_score(project):
 
     assert result.exit_code == 0
     assert isinstance(payload["architecture_signal_score"], float)
-    assert payload["architecture_signal_scope"] == {
-        "languages": ["c_cpp", "csharp", "go", "java", "kotlin", "python", "typescript"],
-        "applicable": True,
-    }
+    scope = payload["architecture_signal_scope"]
+    assert scope["languages"] == ["c_cpp", "csharp", "go", "java", "kotlin", "python", "typescript"]
+    assert scope["applicable"] is True
+    assert isinstance(scope["by_language"], dict)
     assert [f["rule_id"] for f in payload["findings"]] == ["TS-COR-001"]
     assert "api_design" in payload["design_patterns"]
 

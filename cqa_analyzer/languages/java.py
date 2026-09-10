@@ -15,6 +15,7 @@ Known pilot bounds, accepted deliberately:
 from __future__ import annotations
 
 import re
+import tomllib
 from collections.abc import Iterable, Mapping
 
 from ..findings import Finding, Location
@@ -40,7 +41,7 @@ from ..protocols import (
 from ..registry import PluginRegistry
 from ..safe_io import SafeReadError, read_bounded_text
 from ..signals import FileSignals, pattern_is_present
-from ._shared import RegexRulePackBase, line_column
+from ._shared import RegexRulePackBase, empty_catch_finding
 
 JAVA_ADAPTER_VERSION = "1.0.0"
 JAVA_CACHE_CODEC_VERSION = "1.0.0"
@@ -52,9 +53,7 @@ _MANIFEST_FILENAMES = ("pom.xml", "build.gradle", "build.gradle.kts")
 
 _IMPORT = re.compile(r"(?m)^\s*import\s+(?:static\s+)?([A-Za-z_][\w.]*?)(?:\.\*)?\s*;")
 _PACKAGE = re.compile(r"(?m)^\s*package\s+([A-Za-z_][\w.]*)\s*;")
-_TYPE_DECLARATION = re.compile(
-    r"\b(?:class|interface|enum|record)\s+([A-Za-z_$][\w$]*)"
-)
+_TYPE_DECLARATION = re.compile(r"\b(?:class|interface|enum|record)\s+([A-Za-z_$][\w$]*)")
 _ANNOTATION = re.compile(r"@([A-Za-z_$][\w$]*)")
 _GENERIC_USE = re.compile(r"\b([A-Z][\w$]*)\s*<")
 _NEW_TARGET = re.compile(r"\bnew\s+([A-Za-z_$][\w$.]*)\s*[(<\[]")
@@ -62,24 +61,76 @@ _SELECTOR_CALL = re.compile(r"\b([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\s*\(")
 _BARE_CALL = re.compile(r"\b([A-Za-z_$][\w$]*)\s*\(")
 # ``Type name`` where a terminator follows: fields, locals, parameters.
 _VARIABLE_DECLARATION = re.compile(
-    r"\b[A-Za-z_$][\w$.]*(?:<[^<>;{}]*>)?(?:\[\])*\s+([a-z_$][\w$]*)\s*(?=[;=,)])"
+    # Possessive runs: `a.a.a.…` chains must not backtrack (test_lexer_fuzz).
+    r"\b[A-Za-z_$][\w$.]*+(?:<[^<>;{}]*+>)?(?:\[\])*+\s++([a-z_$][\w$]*+)\s*+(?=[;=,)])"
 )
 _EMPTY_CATCH = re.compile(r"\bcatch\s*\([^)]*\)\s*\{\s*\}")
 _GRADLE_DEPENDENCY = re.compile(
     r"""\b(?:implementation|api|compileOnly|runtimeOnly|testImplementation|"""
-    r"""testRuntimeOnly|annotationProcessor|compile|testCompile)\s*\(?\s*"""
+    r"""testRuntimeOnly|annotationProcessor|kapt|ksp|compile|testCompile)\s*\(?\s*"""
+    r"""(?:(?:enforced)?platform\s*\(\s*)?"""
     r"""['"]([A-Za-z0-9_.\-]+):([A-Za-z0-9_.\-]+)(?::[^'"]*)?['"]"""
 )
-_KEYWORDS = frozenset({
-    "abstract", "assert", "boolean", "break", "byte", "case", "catch",
-    "char", "class", "const", "continue", "default", "do", "double", "else",
-    "enum", "extends", "final", "finally", "float", "for", "goto", "if",
-    "implements", "import", "instanceof", "int", "interface", "long",
-    "native", "new", "package", "private", "protected", "public", "record",
-    "return", "short", "static", "strictfp", "super", "switch",
-    "synchronized", "this", "throw", "throws", "transient", "try", "var",
-    "void", "volatile", "while", "yield", "true", "false", "null",
-})
+_KEYWORDS = frozenset(
+    {
+        "abstract",
+        "assert",
+        "boolean",
+        "break",
+        "byte",
+        "case",
+        "catch",
+        "char",
+        "class",
+        "const",
+        "continue",
+        "default",
+        "do",
+        "double",
+        "else",
+        "enum",
+        "extends",
+        "final",
+        "finally",
+        "float",
+        "for",
+        "goto",
+        "if",
+        "implements",
+        "import",
+        "instanceof",
+        "int",
+        "interface",
+        "long",
+        "native",
+        "new",
+        "package",
+        "private",
+        "protected",
+        "public",
+        "record",
+        "return",
+        "short",
+        "static",
+        "strictfp",
+        "super",
+        "switch",
+        "synchronized",
+        "this",
+        "throw",
+        "throws",
+        "transient",
+        "try",
+        "var",
+        "void",
+        "volatile",
+        "while",
+        "yield",
+        "true",
+        "false",
+        "null",
+    }
+)
 
 # Import-prefix -> (groupId prefix, artifactId prefix) for libraries that
 # are almost always declared directly. Deliberately excludes libraries
@@ -92,7 +143,8 @@ _DIRECT_LIBRARIES = {
     "org.apache.commons.lang3": ("org.apache.commons", "commons-lang3"),
     "org.apache.commons.io": ("commons-io", "commons-io"),
     "org.apache.commons.collections4": (
-        "org.apache.commons", "commons-collections4",
+        "org.apache.commons",
+        "commons-collections4",
     ),
     "lombok": ("org.projectlombok", "lombok"),
     "okhttp3": ("com.squareup.okhttp3", "okhttp"),
@@ -219,7 +271,10 @@ def _java_imports(metadata_text: str) -> tuple[str, ...]:
 def _java_identifiers(code_text: str) -> tuple[str, ...]:
     names: set[str] = set()
     for pattern in (
-        _TYPE_DECLARATION, _ANNOTATION, _GENERIC_USE, _BARE_CALL,
+        _TYPE_DECLARATION,
+        _ANNOTATION,
+        _GENERIC_USE,
+        _BARE_CALL,
         _VARIABLE_DECLARATION,
     ):
         for match in pattern.finditer(code_text):
@@ -280,9 +335,7 @@ class JavaLanguageAdapter:
     cache_runtime_version = "portable"
 
     def parse(self, source: SourceFile) -> ParsedFile:
-        code_text, lexical_complete = _strip_java_comments_and_strings(
-            source.content
-        )
+        code_text, lexical_complete = _strip_java_comments_and_strings(source.content)
         metadata_text, metadata_complete = _strip_java_comments_and_strings(
             source.content,
             blank_strings=False,
@@ -353,24 +406,7 @@ class JavaEmptyCatchRule:
         if not isinstance(parsed.facts, JavaFacts):
             return
         for match in _EMPTY_CATCH.finditer(parsed.facts.code_text):
-            line, column = line_column(parsed.facts.code_text, match.start())
-            yield Finding(
-                rule_id=self.rule_id,
-                category="correctness",
-                severity="warning",
-                confidence="high",
-                message="An empty catch block silently discards the failure.",
-                location=Location(
-                    path=parsed.source.display_path,
-                    line=line,
-                    column=column,
-                    identity_path=parsed.source.identity_path,
-                ),
-                remediation=(
-                    "Handle the failure, log actionable context, or rethrow "
-                    "the exception."
-                ),
-            )
+            yield empty_catch_finding(self.rule_id, parsed, match, rethrow_word="exception")
 
 
 class JavaRulePack(RegexRulePackBase):
@@ -443,8 +479,7 @@ class JavaPackageProvider:
             _MANIFEST_FILENAMES,
         )
         manifests = {
-            directory: _load_java_manifest(project.root, directory)
-            for directory in manifest_dirs
+            directory: _load_java_manifest(project.root, directory) for directory in manifest_dirs
         }
         findings: list[Finding] = []
         errors = 0
@@ -457,17 +492,17 @@ class JavaPackageProvider:
                     info["filename"],
                     project.redact_paths,
                 )
-                findings.append(Finding(
-                    rule_id=self.invalid_rule_id,
-                    category="package-health",
-                    severity="error",
-                    confidence="high",
-                    message=f"{identity} cannot be read as a valid build manifest.",
-                    location=Location(report_path, 1, 1, identity_path=identity),
-                    remediation=(
-                        "Correct the manifest syntax and run analysis again."
-                    ),
-                ))
+                findings.append(
+                    Finding(
+                        rule_id=self.invalid_rule_id,
+                        category="package-health",
+                        severity="error",
+                        confidence="high",
+                        message=f"{identity} cannot be read as a valid build manifest.",
+                        location=Location(report_path, 1, 1, identity_path=identity),
+                        remediation=("Correct the manifest syntax and run analysis again."),
+                    )
+                )
 
         undeclared = _undeclared_by_manifest(project.parsed_files, manifests)
         for directory in sorted(undeclared):
@@ -478,28 +513,31 @@ class JavaPackageProvider:
                 project.redact_paths,
             )
             for prefix, coordinates, example in undeclared[directory]:
-                findings.append(Finding(
-                    rule_id=self.drift_rule_id,
-                    category="package-health",
-                    severity="warning",
-                    confidence="medium",
-                    message=(
-                        f"Package '{prefix}' is imported (for example in "
-                        f"{example}) but no dependency matching "
-                        f"'{coordinates}' is declared in {identity}."
-                    ),
-                    location=Location(report_path, 1, 1, identity_path=identity),
-                    remediation=(
-                        "Declare the dependency in the build manifest or "
-                        "remove the import."
-                    ),
-                ))
+                findings.append(
+                    Finding(
+                        rule_id=self.drift_rule_id,
+                        category="package-health",
+                        severity="warning",
+                        confidence="medium",
+                        message=(
+                            f"Package '{prefix}' is imported (for example in "
+                            f"{example}) but no dependency matching "
+                            f"'{coordinates}' is declared in {identity}."
+                        ),
+                        location=Location(report_path, 1, 1, identity_path=identity),
+                        remediation=(
+                            "Declare the dependency in the build manifest or " "remove the import."
+                        ),
+                    )
+                )
 
         payload = {
             "manifests": [
                 {
                     "path": manifest_report_path(
-                        directory, manifests[directory]["filename"], False,
+                        directory,
+                        manifests[directory]["filename"],
+                        False,
                     )[1],
                     "kind": manifests[directory]["kind"],
                     "artifact": manifests[directory]["artifact"],
@@ -511,6 +549,9 @@ class JavaPackageProvider:
                     "undeclared_imports": [
                         prefix for prefix, _, _ in undeclared.get(directory, [])
                     ],
+                    "unresolved_catalog_refs": manifests[directory].get(
+                        "unresolved_catalog_refs", 0
+                    ),
                 }
                 for directory in manifest_dirs
             ],
@@ -569,10 +610,93 @@ def _load_java_manifest(root, directory: str) -> dict:
     else:
         info["kind"] = "gradle"
         info["declared"] = {
-            (match.group(1), match.group(2))
-            for match in _GRADLE_DEPENDENCY.finditer(text)
+            (match.group(1), match.group(2)) for match in _GRADLE_DEPENDENCY.finditer(text)
         }
+        # Version catalogs: `implementation(libs.guava)` declares whatever
+        # gradle/libs.versions.toml maps `guava` to. Unresolvable accessors
+        # make the manifest unfit for drift claims (fail closed).
+        catalogs = _load_version_catalogs(root, directory)
+        unresolved = 0
+        for match in _GRADLE_CATALOG_REF.finditer(text):
+            catalog, alias = match.group(1), match.group(2)
+            coordinates = catalogs.get(catalog, {}).get(_catalog_key(alias))
+            if coordinates is None:
+                unresolved += 1
+            else:
+                info["declared"].update(coordinates)
+        info["unresolved_catalog_refs"] = unresolved
+
     return info
+
+
+_GRADLE_CATALOG_REF = re.compile(
+    r"\b(?:implementation|api|compileOnly|runtimeOnly|testImplementation|"
+    r"testRuntimeOnly|annotationProcessor|kapt|ksp|compile|testCompile)\s*\(?\s*"
+    r"(?:(?:enforced)?platform\s*\(\s*)?"
+    r"([a-z][\w]*)\.((?:bundles\.)?[A-Za-z][\w]*(?:\.[A-Za-z][\w]*)*)\b"
+)
+_CATALOG_GLOB = "*.versions.toml"
+
+
+def _catalog_key(alias: str) -> str:
+    """Normalize a type-safe accessor to the TOML alias form (`a.b.c` == `a-b-c`)."""
+    return alias.replace(".", "-").replace("_", "-").lower()
+
+
+def _load_version_catalogs(root, directory: str) -> dict[str, dict[str, set[tuple[str, str]]]]:
+    """Return {catalog_name: {alias: {(group, artifact), ...}}} visible from ``directory``.
+
+    Catalogs live in ``gradle/`` next to the settings file; walk from the
+    module directory up to the scan root and take the nearest.
+    """
+    parts = directory.split("/") if directory else []
+    for depth in range(len(parts), -1, -1):
+        gradle_dir = root / "/".join(parts[:depth]) / "gradle"
+        if not gradle_dir.is_dir():
+            continue
+        catalogs: dict[str, dict[str, set[tuple[str, str]]]] = {}
+        for path in sorted(gradle_dir.glob(_CATALOG_GLOB)):
+            name = path.name[: -len(".versions.toml")]
+            catalogs[name] = _parse_version_catalog(root, path)
+        if catalogs:
+            return catalogs
+    return {}
+
+
+def _parse_version_catalog(root, path) -> dict[str, set[tuple[str, str]]]:
+    try:
+        text = read_bounded_text(path, max_bytes=MAX_MANIFEST_BYTES, root=root)
+        data = tomllib.loads(text)
+    except (SafeReadError, tomllib.TOMLDecodeError, UnicodeDecodeError):
+        return {}
+    libraries: dict[str, set[tuple[str, str]]] = {}
+    for alias, spec in (data.get("libraries") or {}).items():
+        coordinates = _catalog_coordinates(spec)
+        if coordinates is not None:
+            libraries[_catalog_key(alias)] = {coordinates}
+    for alias, members in (data.get("bundles") or {}).items():
+        if isinstance(members, list):
+            resolved = set()
+            for member in members:
+                resolved.update(libraries.get(_catalog_key(str(member)), set()))
+            if resolved:
+                libraries[_catalog_key(f"bundles-{alias}")] = resolved
+    return libraries
+
+
+def _catalog_coordinates(spec: object) -> tuple[str, str] | None:
+    if isinstance(spec, str):
+        parts = spec.split(":")
+        return (parts[0], parts[1]) if len(parts) >= 2 and parts[0] and parts[1] else None
+    if isinstance(spec, dict):
+        module = spec.get("module")
+        if isinstance(module, str) and module.count(":") >= 1:
+            group, artifact = module.split(":")[:2]
+            return (group, artifact) if group and artifact else None
+        group, name = spec.get("group"), spec.get("name")
+        if isinstance(group, str) and isinstance(name, str) and group and name:
+            return (group, name)
+    return None
 
 
 def _declared_provides(
@@ -602,6 +726,10 @@ def _undeclared_by_manifest(
         chain = manifest_chain(directory, manifest_dirs)
         if any(manifests[entry]["invalid"] for entry in chain):
             continue
+        # A build script whose catalog accessors could not be resolved may
+        # declare anything; make no drift claim against it.
+        if any(manifests[entry].get("unresolved_catalog_refs") for entry in chain):
+            continue
         declared: set[tuple[str, str]] = set()
         for entry in chain:
             declared.update(manifests[entry]["declared"])
@@ -616,8 +744,7 @@ def _undeclared_by_manifest(
                     break
     return {
         directory: sorted(
-            (prefix, coordinates, example)
-            for prefix, (coordinates, example) in entries.items()
+            (prefix, coordinates, example) for prefix, (coordinates, example) in entries.items()
         )
         for directory, entries in first_seen.items()
     }

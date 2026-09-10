@@ -133,7 +133,13 @@ def main() -> int:
             marks = ["x" if pattern in r["dsa"] + r["design"] else "" for r in subset]
             print(f"| {pattern} | " + " | ".join(marks) + " |")
         print()
-    json.dump(rows, open(workdir.parent / "cqa-corpus-latest.json", "w"), indent=2)
+    # Machine-readable copy next to the Markdown, inside the repository
+    # (never a predictable path in the shared temp dir — staff review A3).
+    output = Path(__file__).resolve().parent.parent / "docs" / "calibration-latest.json"
+    with output.open("w", encoding="utf-8") as handle:
+        json.dump(rows, handle, indent=2)
+        handle.write("\n")
+    print(f"rows written to {output}", file=sys.stderr)
     return 0
 
 

@@ -45,7 +45,7 @@ from ..protocols import (
 )
 from ..registry import PluginRegistry
 from ..safe_io import SafeReadError, read_bounded_text
-from ._shared import RegexRulePackBase, line_column, signal_observations
+from ._shared import RegexRulePackBase, empty_catch_finding, signal_observations
 
 C_ADAPTER_VERSION = "1.0.0"
 C_CACHE_CODEC_VERSION = "1.0.0"
@@ -60,15 +60,21 @@ _TYPE_DECLARATION = re.compile(
     r"\b(?:class|struct|union|enum(?:\s+class|\s+struct)?|namespace|concept)\s+"
     r"(?:\[\[[^\]]*\]\]\s*)?([A-Za-z_]\w*)"
 )
-_TYPEDEF = re.compile(r"\btypedef\b(?:[^;{]|\{[^{}]*\})*?\b([A-Za-z_]\w*)\s*;")
-_USING = re.compile(r"\busing\s+(?:namespace\s+)?([A-Za-z_][\w:]*)")
-_QUALIFIED_CALL = re.compile(r"\b((?:[A-Za-z_]\w*::)+[A-Za-z_]\w*)\s*(?:<[^<>()]*>)?\s*\(")
-_QUALIFIED_TYPE = re.compile(r"\b((?:[A-Za-z_]\w*::)+[A-Za-z_]\w*)\b")
-_MEMBER_CALL = re.compile(r"(?:\.|->)\s*([A-Za-z_]\w*)\s*(?:<[^<>()]*>)?\s*\(")
-_BARE_CALL = re.compile(r"\b([A-Za-z_]\w*)\s*(?:<[^<>()]*>)?\s*\(")
-_TEMPLATE_USE = re.compile(r"\b([A-Za-z_]\w*)\s*<")
+# Possessive quantifiers (Python 3.11+) make every identifier regex
+# linear: once a `\w` run or a `::` chain is consumed it is never given
+# back, so `a::a::a::…` and `b<b<b<…` cannot trigger quadratic
+# backtracking (found by tests/test_lexer_fuzz.py — 42 s on 200 KB).
+_TYPEDEF = re.compile(r"\btypedef\b(?:[^;{]|\{[^{}]*+\})*?\b([A-Za-z_]\w*+)\s*+;")
+_USING = re.compile(r"\busing\s++(?:namespace\s++)?([A-Za-z_][\w:]*+)")
+_QUALIFIED_CALL = re.compile(
+    r"\b((?:[A-Za-z_]\w*+::)++[A-Za-z_]\w*+)\s*+(?:<[^<>()]*+>)?\s*+\("
+)
+_QUALIFIED_TYPE = re.compile(r"\b((?:[A-Za-z_]\w*+::)++[A-Za-z_]\w*+)\b")
+_MEMBER_CALL = re.compile(r"(?:\.|->)\s*+([A-Za-z_]\w*+)\s*+(?:<[^<>()]*+>)?\s*+\(")
+_BARE_CALL = re.compile(r"\b([A-Za-z_]\w*+)\s*+(?:<[^<>()]*+>)?\s*+\(")
+_TEMPLATE_USE = re.compile(r"\b([A-Za-z_]\w*+)\s*+<")
 _DECLARED_NAME = re.compile(
-    r"(?m)\b(?:[A-Za-z_]\w*(?:::\w+)*(?:<[^<>;]*>)?[\s*&]+)([a-z_]\w*)\s*(?:[=;\[({,)]|$)"
+    r"(?m)\b(?:[A-Za-z_]\w*+(?:::\w++)*+(?:<[^<>;]*+>)?[\s*&]++)([a-z_]\w*+)\s*+(?:[=;\[({,)]|$)"
 )
 _EMPTY_CATCH = re.compile(r"\bcatch\s*\([^)]*\)\s*\{\s*\}")
 _STRING_PREFIX = re.compile(r"(?:u8|u|U|L)?R?$")
@@ -190,6 +196,27 @@ _KEYWORDS = frozenset(
 _HEX = frozenset("0123456789abcdefABCDEF")
 
 
+def _is_digit_separator(source: str, index: int) -> bool:
+    """True when the ``'`` at ``index`` sits inside a numeric literal.
+
+    Walk back over hex digits and separators to the token start; it must
+    begin with a decimal digit (`1'000`, `0xFF'FF`). `case'a'` and `u8'a'`
+    start with a letter and are char literals.
+    """
+    following = source[index + 1] if index + 1 < len(source) else ""
+    if following not in _HEX:
+        return False
+    start = index
+    while start > 0 and (source[start - 1] in _HEX or source[start - 1] in "'xX"):
+        start -= 1
+    token = source[start:index]
+    return (
+        bool(token)
+        and token[0].isdigit()
+        and (start == 0 or not (source[start - 1].isalnum() or source[start - 1] == "_"))
+    )
+
+
 def _strip_c_comments_and_strings(
     source: str,
     *,
@@ -268,9 +295,8 @@ def _strip_c_comments_and_strings(
                 index += 1
                 continue
             if current == "'":
-                previous = source[index - 1] if index else ""
-                if previous in _HEX and following in _HEX:
-                    index += 1  # C++14 digit separator: 1'000'000
+                if _is_digit_separator(source, index):
+                    index += 1  # C++14 digit separator: 1'000'000, 0xFF'FF
                     continue
                 blank_string_char(index)
                 state = "char"
@@ -514,23 +540,7 @@ class CEmptyCatchRule:
         if not isinstance(parsed.facts, CFacts):
             return
         for match in _EMPTY_CATCH.finditer(parsed.facts.code_text):
-            line, column = line_column(parsed.facts.code_text, match.start())
-            yield Finding(
-                rule_id=self.rule_id,
-                category="correctness",
-                severity="warning",
-                confidence="high",
-                message="An empty catch block silently discards the failure.",
-                location=Location(
-                    path=parsed.source.display_path,
-                    line=line,
-                    column=column,
-                    identity_path=parsed.source.identity_path,
-                ),
-                remediation=(
-                    "Handle the failure, log actionable context, or rethrow " "the exception."
-                ),
-            )
+            yield empty_catch_finding(self.rule_id, parsed, match, rethrow_word="exception")
 
 
 class CRulePack(RegexRulePackBase):
@@ -579,8 +589,8 @@ _DIRECT_LIBRARIES: dict[str, tuple[str, ...]] = {
     "catch2/": ("catch2",),
     "fmt/": ("fmt",),
     "spdlog/": ("spdlog",),
-    "nlohmann/json": ("nlohmann_json", "nlohmann", "json"),
-    "openssl/": ("openssl", "crypto", "ssl"),
+    "nlohmann/json": ("nlohmann_json", "nlohmann"),
+    "openssl/": ("openssl", "libcrypto", "libssl", "crypto", "ssl"),
     "curl/curl.h": ("curl",),
     "sqlite3.h": ("sqlite3", "sqlite"),
     "grpcpp/": ("grpc", "grpc++"),
@@ -595,9 +605,9 @@ _DIRECT_LIBRARIES: dict[str, tuple[str, ...]] = {
     "librdkafka/": ("rdkafka", "librdkafka"),
     "opentelemetry/": ("opentelemetry",),
     "prometheus/": ("prometheus", "prometheus-cpp"),
-    "uv.h": ("libuv", "uv"),
-    "event2/": ("libevent", "event"),
-    "zlib.h": ("zlib", "z"),
+    "uv.h": ("libuv", "uv_a", "uv"),
+    "event2/": ("libevent", "event_core", "event"),
+    "zlib.h": ("zlib", "ZLIB::ZLIB", "libz"),
 }
 
 
@@ -683,7 +693,7 @@ _CMAKE_FIND_PACKAGE = re.compile(r"(?im)^\s*find_package\s*\(\s*([A-Za-z_][\w.+-
 
 
 def _load_cmake_manifest(root: Path, directory: str) -> dict:
-    info = {"project": None, "find_packages": set(), "text": "", "unreadable": False}
+    info = {"project": None, "find_packages": set(), "tokens": frozenset(), "unreadable": False}
     try:
         text = read_bounded_text(
             root / directory / "CMakeLists.txt",
@@ -696,8 +706,30 @@ def _load_cmake_manifest(root: Path, directory: str) -> dict:
     project = _CMAKE_PROJECT.search(text)
     info["project"] = project.group(1) if project else None
     info["find_packages"] = {m.group(1) for m in _CMAKE_FIND_PACKAGE.finditer(text)}
-    info["text"] = text.lower()
+    info["tokens"] = _cmake_tokens(text)
     return info
+
+
+# Whole-word CMake tokens (identifiers, `Pkg::Target`, quoted names), lower-
+# cased and at least 3 characters: `z` inside any word must not "declare"
+# zlib, and a URL in a comment must not declare curl (staff review C2).
+_CMAKE_WORD = re.compile(r"[A-Za-z_][\w+.-]*(?:::[A-Za-z_][\w+.-]*)*")
+_CMAKE_COMMENT = re.compile(r"#[^\n]*")
+
+
+def _cmake_token(token: str) -> str:
+    return token.lower()
+
+
+def _cmake_tokens(text: str) -> frozenset[str]:
+    words = set()
+    for match in _CMAKE_WORD.finditer(_CMAKE_COMMENT.sub("", text)):
+        word = match.group(0).lower()
+        if len(word) >= 3:
+            words.add(word)
+            if "::" in word:
+                words.update(part for part in word.split("::") if len(part) >= 3)
+    return frozenset(words)
 
 
 def _undeclared_headers(
@@ -716,11 +748,13 @@ def _undeclared_headers(
         chain = manifest_chain(directory, manifest_dirs)
         if any(manifests[entry]["unreadable"] for entry in chain):
             continue
-        declared_text = "\n".join(manifests[entry]["text"] for entry in chain)
+        declared_tokens = set()
+        for entry in chain:
+            declared_tokens.update(manifests[entry]["tokens"])
         for include in parsed.facts.includes:
             for header, tokens in _DIRECT_LIBRARIES.items():
                 if include == header or include.startswith(header):
-                    if not any(token.lower() in declared_text for token in tokens):
+                    if not any(_cmake_token(token) in declared_tokens for token in tokens):
                         first_seen.setdefault(directory, {}).setdefault(
                             header,
                             ("/".join(tokens), parsed.source.display_path),

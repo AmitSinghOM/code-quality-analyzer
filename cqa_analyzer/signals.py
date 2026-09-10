@@ -16,7 +16,9 @@ used heaps.
 from __future__ import annotations
 
 import ast
+import functools
 import io
+import re
 import tokenize
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -25,9 +27,24 @@ from collections.abc import Iterable, Sequence
 # Token types whose text must not be searched. FSTRING_MIDDLE only exists on
 # Python 3.12+, where f-strings are tokenized into parts.
 _LITERAL_TOKENS = {tokenize.STRING, tokenize.COMMENT}
-_FSTRING_MIDDLE = getattr(tokenize, 'FSTRING_MIDDLE', None)
+_FSTRING_MIDDLE = getattr(tokenize, "FSTRING_MIDDLE", None)
 if _FSTRING_MIDDLE is not None:  # pragma: no branch
     _LITERAL_TOKENS.add(_FSTRING_MIDDLE)
+
+
+@functools.lru_cache(maxsize=4096)
+def _text_pattern(fragment: str) -> re.Pattern[str]:
+    """Case-insensitive text anchor that respects word boundaries at its ends.
+
+    ``"lo, hi"`` must not match ``hello, hi`` and ``">> 1"`` must not match
+    ``>> 10``; a boundary is required wherever the fragment itself starts or
+    ends with a word character (staff review C10). Punctuation-edged
+    fragments such as ``"]struct{}{"`` are unchanged.
+    """
+    lowered = fragment.lower()
+    prefix = r"(?<!\w)" if lowered[:1].isalnum() or lowered[:1] == "_" else ""
+    suffix = r"(?![\w])" if lowered[-1:].isalnum() or lowered[-1:] == "_" else ""
+    return re.compile(prefix + re.escape(lowered) + suffix)
 
 
 @dataclass
@@ -51,7 +68,7 @@ class FileSignals:
         return any(frag in ident for ident in self.identifiers)
 
     def has_text(self, fragment: str) -> bool:
-        return fragment.lower() in self.code_text
+        return _text_pattern(fragment).search(self.code_text) is not None
 
     def has_import(self, fragment: str) -> bool:
         frag = fragment.lower()
@@ -129,7 +146,7 @@ def _blank_region(
         lo = start_col if row == start_row else 0
         hi = end_col if row == end_row else len(line)
         for col in range(lo, min(hi, len(line))):
-            line[col] = ' '
+            line[col] = " "
 
 
 class _SymbolCollector(ast.NodeVisitor):
@@ -174,11 +191,11 @@ class _SymbolCollector(ast.NodeVisitor):
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
             self.imports.add(alias.name.lower())
-            self._add(alias.asname or alias.name.split('.')[0])
+            self._add(alias.asname or alias.name.split(".")[0])
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        module = (node.module or '').lower()
+        module = (node.module or "").lower()
         if module:
             self.imports.add(module)
         for alias in node.names:
@@ -192,7 +209,7 @@ class _SymbolCollector(ast.NodeVisitor):
 # Pattern normalization
 # --------------------------------------------------------------------------
 
-_SIGNAL_KEYS = ('identifiers', 'identifier_contains', 'text', 'imports')
+_SIGNAL_KEYS = ("identifiers", "identifier_contains", "text", "imports")
 
 
 def normalize_pattern(definition: dict) -> dict:
@@ -205,15 +222,15 @@ def normalize_pattern(definition: dict) -> dict:
     """
     normalized = {key: list(definition.get(key, ())) for key in _SIGNAL_KEYS}
 
-    for keyword in definition.get('keywords', ()):
+    for keyword in definition.get("keywords", ()):
         if keyword.isidentifier():
-            normalized['identifiers'].append(keyword)
+            normalized["identifiers"].append(keyword)
         else:
-            normalized['text'].append(keyword)
+            normalized["text"].append(keyword)
 
-    normalized['weight'] = float(definition.get('weight', 1.0))
-    normalized['description'] = definition.get('description', '')
-    normalized['min_signals'] = max(1, int(definition.get('min_signals', 1)))
+    normalized["weight"] = float(definition.get("weight", 1.0))
+    normalized["description"] = definition.get("description", "")
+    normalized["min_signals"] = max(1, int(definition.get("min_signals", 1)))
     return normalized
 
 
@@ -227,16 +244,16 @@ def match_pattern(signals: FileSignals, definition: dict) -> list[str]:
     spec = normalize_pattern(definition)
     matched: list[str] = []
 
-    for name in spec['identifiers']:
+    for name in spec["identifiers"]:
         if signals.has_identifier(name):
             matched.append(f"name:{name}")
-    for fragment in spec['identifier_contains']:
+    for fragment in spec["identifier_contains"]:
         if signals.identifier_contains(fragment):
             matched.append(f"name~{fragment}")
-    for fragment in spec['text']:
+    for fragment in spec["text"]:
         if signals.has_text(fragment):
             matched.append(f"code:{fragment}")
-    for module in spec['imports']:
+    for module in spec["imports"]:
         if signals.has_import(module):
             matched.append(f"import:{module}")
 
@@ -246,7 +263,7 @@ def match_pattern(signals: FileSignals, definition: dict) -> list[str]:
 def pattern_is_present(signals: FileSignals, definition: dict) -> tuple[bool, Sequence[str]]:
     """Convenience wrapper around :func:`match_pattern`."""
     matched = match_pattern(signals, definition)
-    threshold = max(1, int(definition.get('min_signals', 1)))
+    threshold = max(1, int(definition.get("min_signals", 1)))
     return len(matched) >= threshold, matched
 
 

@@ -71,6 +71,21 @@ def test_lexer_handles_raw_strings_digit_separators_and_continued_comments():
     assert len(blanked.splitlines()) == len(source.splitlines())
 
 
+def test_digit_separators_versus_char_literals():
+    # Staff review B4/B5: `case'a'` and `u8'a'` were read as digit
+    # separators because `e`/`8` and `a` are hex digits.
+    source = (
+        "switch (c) {\ncase'a': x = 1; break;\n}\n"
+        "char8_t c = u8'a'; const char* s = \"trie\";\n"
+        "auto big = 1'000'000 + 0xFF'FFu;\n"
+        "run();\n"
+    )
+    blanked, complete = _strip_c_comments_and_strings(source)
+    assert complete
+    assert "trie" not in blanked and "run" in blanked and "break" in blanked
+    assert "1'000'000 + 0xFF'FFu" in blanked
+
+
 def test_metadata_pass_keeps_directives_and_strings():
     source = '#include <vector>\nconst char* s = "x";\n'
     kept, complete = _strip_c_comments_and_strings(
@@ -206,6 +221,31 @@ def test_cmake_drift_is_conservative(project):
     assert manifest["kind"] == "cmake" and manifest["project"] == "demo"
     assert manifest["find_packages"] == ["fmt"]
     assert manifest["undeclared_headers"] == ["boost/", "spdlog/"]
+
+
+def test_cmake_tokens_are_whole_words_and_comments_do_not_declare(project):
+    # Staff review C2: `"z" in text` made zlib undetectable; a URL in a
+    # comment "declared" curl.
+    root = project(
+        {
+            "CMakeLists.txt": (
+                "project(demo C)\n"
+                "# see https://curl.se for curl docs\n"
+                "add_executable(demo main.c)\n"
+                "target_link_libraries(demo PRIVATE ZLIB::ZLIB)\n"
+            ),
+            "main.c": (
+                "#include <zlib.h>\n#include <curl/curl.h>\n"
+                "#include <openssl/ssl.h>\nint x;\n"
+            ),
+        }
+    )
+    _, payload = scan_json(root)
+    drift = sorted(
+        f["message"].split("'")[1] for f in payload["findings"] if f["rule_id"] == "C-PKG-001"
+    )
+    # zlib declared via imported target; curl only in a comment; openssl absent.
+    assert drift == ["curl/curl.h", "openssl/"]
 
 
 def test_c_only_project_earns_a_real_score_and_reports_language(project):

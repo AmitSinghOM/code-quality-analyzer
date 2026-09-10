@@ -325,8 +325,11 @@ The rule requires the corresponding standard-library import, ignores comments an
 **Confidence:** High
 
 A `catch` block whose body is empty after comment blanking discards the
-failure without recovery or context. A catch containing only a comment is
-still reported: the comment does not handle the error.
+failure without recovery or context. A catch whose braces contain only a
+comment is reported at **note** severity with a "documented" message: the
+author declared the swallow intentional, which is reviewable but not a
+defect (the ErrorProne/SonarQube convention). This applies identically to
+`JAVA-COR-001`, `KT-COR-001`, `CS-COR-001`, and `C-COR-001`.
 
 ### Non-compliant
 
@@ -405,6 +408,15 @@ this curated set: Java imports name packages while manifests name
 artifacts, and Maven/Gradle make transitively provided classes
 importable, so libraries commonly supplied by starters (Jackson, SLF4J,
 Hibernate) are never flagged.
+
+Gradle declarations are recognised in three forms: string coordinates
+(`implementation("g:a:v")`), platform BOMs (`implementation(platform("g:a:v"))`),
+and **version-catalog accessors** (`implementation(libs.guava.core)`),
+which are resolved through the nearest `gradle/*.versions.toml`
+(`[libraries]` and `[bundles]`, with `libs.a.b` normalised to alias `a-b`).
+A build script that references a catalog alias the analyzer cannot
+resolve makes no drift claims at all (`unresolved_catalog_refs` in the
+report), because such a script may declare anything.
 
 ## JAVA-PKG-002: Invalid build manifest
 
@@ -514,7 +526,10 @@ protobuf, Abseil, ZeroMQ, yaml-cpp, RapidJSON, libpqxx, hiredis,
 librdkafka, OpenTelemetry, prometheus-cpp, libuv, libevent, zlib) is
 included, but none of that library's CMake tokens (`find_package` name,
 imported target, pkg-config module, or `FetchContent` name) appears
-anywhere in the governing `CMakeLists.txt` chain. Medium confidence
+anywhere in the governing `CMakeLists.txt` chain — matched as whole
+tokens of at least three characters with comments removed, so `z` inside
+another word never "declares" zlib and a URL in a comment never declares
+curl. Medium confidence
 because CMake is Turing-complete and dependencies can arrive through
 toolchain files, `include()`d modules, or header-only adapters shipped
 for downstream builds (hiredis's `adapters/libuv.h` is a known example).
@@ -531,7 +546,11 @@ exactly `PY-DUP-001`'s semantics: the function's own name is excluded,
 the signature and body are compared structurally (comments ignored,
 identifiers and literals included), only significant functions
 participate (≥ 3 statements and ≥ 40 named nodes), and only top-level
-functions and methods are compared. Functions whose subtree contains a
+functions and methods are compared. Generated files are skipped
+(`files_skipped_generated`): Go's official `// Code generated … DO NOT
+EDIT.` header, `*.pb.go`, `*_generated.go`, `zz_generated*`, `mock_*.go`,
+`*.g.cs`, `*.designer.cs`. Vendored trees (`vendor/`, `third_party/`,
+`external/`) are excluded from discovery entirely. Functions whose subtree contains a
 parse error are excluded and counted in
 `functions_excluded_for_parse_errors`, because a partially recovered
 tree could fabricate a match. Without `pip install 'cqa-analyzer[deep]'`

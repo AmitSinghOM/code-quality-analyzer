@@ -49,7 +49,7 @@ from ..protocols import (
 from ..registry import PluginRegistry
 from ..safe_io import SafeReadError, read_bounded_text
 from ..signals import FileSignals, pattern_is_present
-from ._shared import RegexRulePackBase, line_column
+from ._shared import RegexRulePackBase, empty_catch_finding
 
 CSHARP_ADAPTER_VERSION = "1.0.0"
 CSHARP_CACHE_CODEC_VERSION = "1.0.0"
@@ -73,7 +73,8 @@ _SELECTOR_CALL = re.compile(r"\b([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s*\(")
 _BARE_CALL = re.compile(r"\b([A-Za-z_]\w*)\s*\(")
 # ``Type name`` where a terminator follows: fields, locals, parameters.
 _VARIABLE_DECLARATION = re.compile(
-    r"\b[A-Za-z_][\w.]*(?:<[^<>;{}]*>)?(?:\[\])*\??\s+([a-z_@]\w*)\s*(?=[;=,)])"
+    # Possessive runs: `a.a.a.…` chains must not backtrack (test_lexer_fuzz).
+    r"\b[A-Za-z_][\w.]*+(?:<[^<>;{}]*+>)?(?:\[\])*+\??\s++([a-z_@]\w*+)\s*+(?=[;=,)])"
 )
 _EMPTY_CATCH = re.compile(
     r"\bcatch\b(?:\s*\([^)]*\))?(?:\s*when\s*\([^)]*\))?\s*\{\s*\}"
@@ -399,24 +400,7 @@ class CSharpEmptyCatchRule:
         if not isinstance(parsed.facts, CSharpFacts):
             return
         for match in _EMPTY_CATCH.finditer(parsed.facts.code_text):
-            line, column = line_column(parsed.facts.code_text, match.start())
-            yield Finding(
-                rule_id=self.rule_id,
-                category="correctness",
-                severity="warning",
-                confidence="high",
-                message="An empty catch block silently discards the failure.",
-                location=Location(
-                    path=parsed.source.display_path,
-                    line=line,
-                    column=column,
-                    identity_path=parsed.source.identity_path,
-                ),
-                remediation=(
-                    "Handle the failure, log actionable context, or rethrow "
-                    "the exception."
-                ),
-            )
+            yield empty_catch_finding(self.rule_id, parsed, match, rethrow_word="exception")
 
 
 class CSharpRulePack(RegexRulePackBase):

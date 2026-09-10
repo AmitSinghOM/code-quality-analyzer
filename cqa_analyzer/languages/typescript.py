@@ -35,7 +35,7 @@ from ..registry import PluginRegistry
 from ..safe_io import SafeReadError, read_bounded_text
 from ..signals import FileSignals, pattern_is_present
 from ..ts_patterns import TS_DESIGN_PATTERNS, TS_DSA_PATTERNS
-from ._shared import RegexRulePackBase, line_column
+from ._shared import RegexRulePackBase, empty_catch_finding
 
 TS_ADAPTER_VERSION = "1.0.0"
 TS_CACHE_CODEC_VERSION = "1.0.0"
@@ -151,6 +151,7 @@ def _strip_ts_comments_and_strings(
     complete = True
     last_sig = ""  # last significant (non-space) code character
     prev_sig = ""  # the significant character before last_sig
+    word_closed = False  # whitespace seen since last_word ended
     last_word = ""  # identifier/keyword token ending at last_sig
     # One entry per open template interpolation: the entry is the current
     # unmatched `{` depth inside that interpolation. Non-empty means we are
@@ -187,6 +188,14 @@ def _strip_ts_comments_and_strings(
                 # No closing `/` on this line: not a regex after all
                 # (JSX `</p>`, a stray operator). Treat as ordinary code.
             if current in {'"', "'"}:
+                # An apostrophe glued to an identifier character cannot open a
+                # string in JS/TS (`x'a'` is invalid); it is JSX text
+                # (`<p>Don't have an account?</p>`). Leave it as code.
+                glued = index and (source[index - 1].isalnum() or source[index - 1] == "_")
+                if current == "'" and glued:
+                    prev_sig, last_sig, last_word = last_sig, current, ""
+                    index += 1
+                    continue
                 quote = current
                 blank(index)
                 state = "string"
@@ -197,7 +206,15 @@ def _strip_ts_comments_and_strings(
                 state = "template"
                 index += 1
                 continue
-            if not current.isspace():
+            if current.isspace():
+                # A keyword ends at whitespace: `b in /re/` must see `in`,
+                # not `bin`.
+                if last_word:
+                    word_closed = True
+            else:
+                if word_closed:
+                    last_word = ""
+                    word_closed = False
                 prev_sig, last_sig = last_sig, current
                 last_word = last_word + current if (current.isalnum() or current in "_$") else ""
             if interpolations:
@@ -406,29 +423,7 @@ class TsEmptyCatchRule:
         if not isinstance(parsed.facts, TsFacts):
             return
         for match in _EMPTY_CATCH.finditer(parsed.facts.code_text):
-            line, column = line_column(
-                parsed.facts.code_text,
-                match.start(),
-            )
-            yield Finding(
-                rule_id=self.rule_id,
-                category="correctness",
-                severity="warning",
-                confidence="high",
-                message=(
-                    "An empty catch block silently discards the failure."
-                ),
-                location=Location(
-                    path=parsed.source.display_path,
-                    line=line,
-                    column=column,
-                    identity_path=parsed.source.identity_path,
-                ),
-                remediation=(
-                    "Handle the failure, log actionable context, or "
-                    "rethrow the error."
-                ),
-            )
+            yield empty_catch_finding(self.rule_id, parsed, match, rethrow_word="error")
 
 
 class TypeScriptRulePack(RegexRulePackBase):
