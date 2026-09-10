@@ -38,7 +38,7 @@ def test_version_flag_reports_analyzer_version():
     result = run(["--version"])
 
     assert result.exit_code == EXIT_OK
-    assert result.output.strip() == ("code-quality-analyzer, version 2.39.0")
+    assert result.output.strip() == ("code-quality-analyzer, version 2.40.0")
 
 
 def test_json_output_is_valid_and_includes_health(project):
@@ -49,7 +49,7 @@ def test_json_output_is_valid_and_includes_health(project):
 
     assert result.exit_code == EXIT_OK
     assert payload["schema_version"] == "1.12.0"
-    assert payload["analyzer_version"] == "2.39.0"
+    assert payload["analyzer_version"] == "2.40.0"
     assert payload["ruleset_version"] == "2.21.0"
     assert payload["scoring_policy_version"] == "2.0.0"
     assert len(payload["configuration_fingerprint"]) == 64
@@ -166,6 +166,50 @@ def test_redact_paths_keeps_absolute_paths_out_of_json(project):
     assert str(root) not in result.output
     assert payload["project"] == root.name
     assert payload["scan_health"]["skipped_examples"]["too_large"] == ["too_large.py"]
+
+
+def test_unparsed_files_are_named_in_json_and_verbose_text(project):
+    root = project(
+        {
+            "ok.py": "x = 1\n",
+            "pkg/broken.py": "def f(:\n    pass\n",
+        }
+    )
+
+    result = run([str(root), "-f", "json"])
+    payload = json.loads(result.output)
+    assert payload["scan_health"]["unparsed_files"] == 1
+    assert payload["scan_health"]["unparsed_examples"] == ["pkg/broken.py"]
+    assert "parse_failures" in payload["analysis_health"]["reasons"]
+
+    text = run([str(root), "--verbose"])
+    assert "1 file(s) could not be parsed" in text.output
+    assert "- pkg/broken.py" in text.output
+    assert "... and" not in text.output  # no overflow line when all are named
+    assert str(root) not in text.output
+
+
+def test_unparsed_examples_overflow_line_points_at_json(project):
+    from cqa_analyzer.scanner import UNPARSED_EXAMPLE_LIMIT
+
+    files = {f"bad_{i}.py": "def f(:\n" for i in range(UNPARSED_EXAMPLE_LIMIT + 2)}
+    root = project(files)
+
+    text = run([str(root), "--verbose"])
+    assert f"{UNPARSED_EXAMPLE_LIMIT + 2} file(s) could not be parsed" in text.output
+    assert "... and 2 more" in text.output
+
+
+def test_anonymized_report_tokenizes_unparsed_examples(project):
+    root = project({"pkg/broken.py": "def f(:\n", "ok.py": "x = 1\n"})
+
+    result = run([str(root), "-f", "json", "--anonymize"])
+    payload = json.loads(result.output)
+
+    examples = payload["scan_health"]["unparsed_examples"]
+    assert len(examples) == 1
+    assert examples[0].startswith("file-")
+    assert "broken" not in result.output
 
 
 def test_complexity_flag_adds_a_section(project):

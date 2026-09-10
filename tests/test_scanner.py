@@ -164,6 +164,52 @@ def test_syntax_error_file_is_counted_as_unparsed(project):
     assert design == {}
 
 
+def test_unparsed_files_are_named_in_scan_health(project):
+    # A "parse_failures" verdict is only actionable if the report says which
+    # files failed (found dogfooding on a 391-file tree with one bad file).
+    root = project(
+        {
+            "ok.py": "x = 1\n",
+            "pkg/broken.py": "def f(:\n    pass\n",
+        }
+    )
+
+    scanner = CodeScanner(root)
+    scanner.scan()
+    health = scanner.scan_health()
+
+    assert health["unparsed_files"] == 1
+    assert health["unparsed_examples"] == ["pkg/broken.py"]
+    assert str(root) not in repr(health)
+
+
+def test_unparsed_examples_are_bounded_but_count_is_exact(project):
+    from cqa_analyzer.scanner import UNPARSED_EXAMPLE_LIMIT
+
+    files = {f"bad_{i:02d}.py": "def f(:\n" for i in range(UNPARSED_EXAMPLE_LIMIT + 3)}
+    root = project(files)
+
+    scanner = CodeScanner(root)
+    scanner.scan()
+    health = scanner.scan_health()
+
+    assert health["unparsed_files"] == UNPARSED_EXAMPLE_LIMIT + 3
+    assert len(health["unparsed_examples"]) == UNPARSED_EXAMPLE_LIMIT
+    # Deterministic: discovery order is sorted, so the first N are named.
+    assert health["unparsed_examples"] == [
+        f"bad_{i:02d}.py" for i in range(UNPARSED_EXAMPLE_LIMIT)
+    ]
+
+
+def test_unparsed_examples_honour_redact_paths(project):
+    root = project({"pkg/broken.py": "def f(:\n"})
+
+    scanner = CodeScanner(root, redact_paths=True)
+    scanner.scan()
+
+    assert scanner.scan_health()["unparsed_examples"] == ["broken.py"]
+
+
 def test_scanner_is_deterministic(project):
     files = {
         "b.py": "import heapq\nheapq.heapify([])\n",
