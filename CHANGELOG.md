@@ -4,6 +4,71 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 2.37.0 - 2026-09-10
+
+Staff-level review release: every finding from the 2.36.0 review
+(security, per-language lexer correctness, rule logic, scoring, CI) is
+addressed here. No weight or curve changed; scoring policy stays 2.0.0.
+
+### Fixed — lexers (each was making files silently non-authoritative)
+
+- **TypeScript/TSX**: JSX text containing an apostrophe (`<p>Don't have
+  an account?</p>`) opened a string and marked the file incomplete —
+  the highest-impact bug in the review, affecting most React apps with
+  English copy. An apostrophe glued to an identifier character is now
+  code. Keyword-preceded regex literals after whitespace (`b in /re/`)
+  are recognised (`last_word` no longer concatenates across spaces).
+- **C/C++**: `case'a':` and C++17 `u8'a'` were read as C++14 digit
+  separators because `e`/`8` and `a` are hex digits; a separator must
+  now belong to a token that starts with a decimal digit.
+- **ReDoS (found by the new fuzz suite)**: identifier extraction took
+  42 s on 200 KB of adversarial C, and 4–5 s on a 45 KB dotted chain in
+  Java and C#. All affected regexes use possessive quantifiers (Python
+  3.11+); worst case is now 0.08 s / 0.3 s.
+
+### Fixed — rules and manifests
+
+- **Gradle version catalogs** (`implementation(libs.guava)`) and
+  `platform()`/`enforcedPlatform()` BOMs now declare dependencies for
+  `JAVA-PKG-001`/`KT-PKG-001`; catalogs are resolved from
+  `gradle/*.versions.toml` (libraries and bundles). Unresolvable
+  accessors suppress drift claims for that chain (`unresolved_catalog_refs`).
+- **`C-PKG-001`** matched CMake tokens as substrings of the whole file:
+  `"z"` made zlib undetectable, and a URL in a comment "declared" curl.
+  Tokens are now whole words of ≥ 3 characters with comments removed.
+- **Documented empty catches** (`catch (e) { /* best effort */ }`) are
+  reported at `note` severity across all five regex languages, via one
+  shared `empty_catch_finding` helper.
+- Go `hash_map` dropped the generic `lookup`/`index` identifiers; text
+  anchors respect word boundaries at their edges (`"lo, hi"` no longer
+  matches `hello, hi`; `">> 1"` no longer matches `>> 10`).
+
+### Fixed — `[deep]` extra
+
+- A grammar/runtime **ABI mismatch** in `tree_sitter.Language()` crashed
+  the scan; it now degrades to `available: false` with the reason.
+- Generated Go/C# files (`// Code generated … DO NOT EDIT.`, `*.pb.go`,
+  `*_generated.go`, `*.g.cs`, …) are skipped and counted; function names
+  behind pointer/parenthesized declarators resolve; structure keys are
+  SHA-256 digests instead of serialized bodies; each file is parsed once
+  and shared by the duplication and complexity providers.
+
+### Added
+
+- `tests/test_lexer_fuzz.py`: seeded adversarial soup for all six lexers
+  (length/newline preservation, blank-only-to-space, termination) plus
+  linearity checks for identifier extraction.
+- `architecture_signal_scope.by_language` (schema 1.12.0): per-language
+  file counts and pattern lists for polyglot repositories; score unchanged.
+- Discovery skips `vendor/`, `third_party/`, `external/`, `Pods/`,
+  `.terraform/`, Bazel output directories, and CMake build directories.
+- `docs/MAINTENANCE.md`: style-gate decision and documented analysis bounds.
+
+### CI
+
+- `deep-test` step runs with `pipefail`; pip is pinned like every other
+  tool. README states what the PyPI attestation does and does not cover.
+
 ## 2.36.0 - 2026-09-10
 
 ### Added

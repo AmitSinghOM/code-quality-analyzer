@@ -78,8 +78,13 @@ def test_adapter_extracts_package_imports_and_identifiers():
     }
     identifiers = set(parsed.facts.identifiers)
     assert {
-        "OrderService", "RestController", "PriorityQueue",
-        "Collections", "sort", "Collections.sort", "run",
+        "OrderService",
+        "RestController",
+        "PriorityQueue",
+        "Collections",
+        "sort",
+        "Collections.sort",
+        "run",
     } <= identifiers
     assert "class" not in identifiers
     assert "new" not in identifiers
@@ -103,9 +108,7 @@ def test_comments_strings_chars_and_text_blocks_are_blanked():
 
 
 def test_empty_catch_is_reported_and_handled_catch_is_not():
-    bad = parse_java(
-        "class A {\n  void f() {\n    try { g(); } catch (Exception e) {}\n  }\n}\n"
-    )
+    bad = parse_java("class A {\n  void f() {\n    try { g(); } catch (Exception e) {}\n  }\n}\n")
     good = parse_java(
         "class A {\n  void f() {\n    try { g(); } catch (Exception e) { log(e); }\n  }\n}\n"
     )
@@ -135,9 +138,7 @@ def test_spring_and_collections_fire_signals():
 
 
 def test_literal_mentions_are_not_evidence_and_generic_needs_corroboration():
-    parsed = parse_java(
-        'class C { String s = "dijkstra trie"; Set<String> visited; }\n'
-    )
+    parsed = parse_java('class C { String s = "dijkstra trie"; Set<String> visited; }\n')
     dsa = signal_ids(parsed, "architecture.dsa")
     assert "dijkstra" not in dsa
     assert "trie" not in dsa
@@ -147,28 +148,30 @@ def test_literal_mentions_are_not_evidence_and_generic_needs_corroboration():
 def test_cache_codec_round_trips_facts():
     adapter = JavaLanguageAdapter()
     source_file = SourceFile(
-        path=Path("A.java"), display_path="A.java", identity_path="A.java",
+        path=Path("A.java"),
+        display_path="A.java",
+        identity_path="A.java",
         content="package p;\nimport java.util.List;\nclass A { void f() { g(); } }\n",
     )
     parsed = adapter.parse(source_file)
-    restored = adapter.deserialize_parsed(
-        source_file, adapter.serialize_parsed(parsed)
-    )
+    restored = adapter.deserialize_parsed(source_file, adapter.serialize_parsed(parsed))
     assert restored.facts == parsed.facts
     assert restored.complete == parsed.complete
 
 
 def test_pom_dependencies_and_conservative_drift(project):
-    root = project({
-        "pom.xml": _POM,
-        "src/main/java/com/example/A.java": (
-            "package com.example;\n"
-            "import com.google.common.collect.Lists;\n"
-            "import com.google.gson.Gson;\n"
-            "import com.fasterxml.jackson.databind.ObjectMapper;\n"
-            "class A {}\n"
-        ),
-    })
+    root = project(
+        {
+            "pom.xml": _POM,
+            "src/main/java/com/example/A.java": (
+                "package com.example;\n"
+                "import com.google.common.collect.Lists;\n"
+                "import com.google.gson.Gson;\n"
+                "import com.fasterxml.jackson.databind.ObjectMapper;\n"
+                "class A {}\n"
+            ),
+        }
+    )
     result, payload = scan_json(root)
     assert result.exit_code == 0
     drift = [f for f in payload["findings"] if f["rule_id"] == "JAVA-PKG-001"]
@@ -184,15 +187,17 @@ def test_pom_dependencies_and_conservative_drift(project):
 
 
 def test_gradle_manifest_is_parsed(project):
-    root = project({
-        "build.gradle.kts": (
-            'dependencies {\n'
-            '    implementation("com.google.code.gson:gson:2.11.0")\n'
-            '    testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")\n'
-            '}\n'
-        ),
-        "src/A.java": "import com.google.gson.Gson;\nclass A {}\n",
-    })
+    root = project(
+        {
+            "build.gradle.kts": (
+                "dependencies {\n"
+                '    implementation("com.google.code.gson:gson:2.11.0")\n'
+                '    testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")\n'
+                "}\n"
+            ),
+            "src/A.java": "import com.google.gson.Gson;\nclass A {}\n",
+        }
+    )
     _, payload = scan_json(root)
     assert not [f for f in payload["findings"] if f["rule_id"] == "JAVA-PKG-001"]
     manifest = payload["project_analyses"]["java:package"]["result"]["manifests"][0]
@@ -200,18 +205,75 @@ def test_gradle_manifest_is_parsed(project):
     assert "com.google.code.gson:gson" in manifest["declared_dependencies"]
 
 
+def test_gradle_version_catalog_and_platform_bom_declare_dependencies(project):
+    # Staff review C1: `implementation(libs.gson)` declared nothing, so
+    # every catalog-using project drifted on every curated library.
+    root = project(
+        {
+            "gradle/libs.versions.toml": (
+                '[versions]\ngson = "2.11.0"\n\n[libraries]\n'
+                'gson = { module = "com.google.code.gson:gson", version.ref = "gson" }\n'
+                'guava-core = { group = "com.google.guava", name = "guava", '
+                'version = "33.0.0-jre" }\n'
+                'jackson = "com.fasterxml.jackson.core:jackson-databind:2.17.0"\n\n'
+                '[bundles]\njson = ["gson", "jackson"]\n'
+            ),
+            "build.gradle.kts": (
+                "dependencies {\n"
+                "    implementation(libs.gson)\n"
+                "    implementation(libs.guava.core)\n"
+                "    testImplementation(libs.bundles.json)\n"
+                "    implementation(platform("
+                '"org.springframework.boot:spring-boot-dependencies:3.3.0"))\n'
+                "}\n"
+            ),
+            "src/A.java": (
+                "import com.google.gson.Gson;\nimport com.google.common.collect.Lists;\n"
+                "import com.fasterxml.jackson.databind.ObjectMapper;\nclass A {}\n"
+            ),
+        }
+    )
+    _, payload = scan_json(root)
+    assert not [f for f in payload["findings"] if f["rule_id"] == "JAVA-PKG-001"]
+    manifest = payload["project_analyses"]["java:package"]["result"]["manifests"][0]
+    declared = manifest["declared_dependencies"]
+    assert {
+        "com.google.code.gson:gson",
+        "com.google.guava:guava",
+        "com.fasterxml.jackson.core:jackson-databind",
+        "org.springframework.boot:spring-boot-dependencies",
+    } <= set(declared)
+    assert manifest["unresolved_catalog_refs"] == 0
+
+
+def test_gradle_unresolvable_catalog_accessor_suppresses_drift_claims(project):
+    root = project(
+        {
+            "build.gradle.kts": "dependencies {\n    implementation(libs.mystery)\n}\n",
+            "src/A.java": "import com.google.gson.Gson;\nclass A {}\n",
+        }
+    )
+    _, payload = scan_json(root)
+    # No catalog file: we cannot know what libs.mystery is, so no claim.
+    assert not [f for f in payload["findings"] if f["rule_id"] == "JAVA-PKG-001"]
+    manifest = payload["project_analyses"]["java:package"]["result"]["manifests"][0]
+    assert manifest["unresolved_catalog_refs"] == 1
+
+
 def test_nested_module_uses_nearest_manifest_and_parent_chain(project):
-    root = project({
-        "pom.xml": _POM.replace("guava", "guava"),
-        "svc/pom.xml": _POM.replace(
-            "<groupId>com.google.guava</groupId>\n      <artifactId>guava</artifactId>",
-            "<groupId>com.google.code.gson</groupId>\n      <artifactId>gson</artifactId>",
-        ),
-        "svc/src/A.java": (
-            "import com.google.common.collect.Lists;\n"
-            "import com.google.gson.Gson;\nclass A {}\n"
-        ),
-    })
+    root = project(
+        {
+            "pom.xml": _POM.replace("guava", "guava"),
+            "svc/pom.xml": _POM.replace(
+                "<groupId>com.google.guava</groupId>\n      <artifactId>guava</artifactId>",
+                "<groupId>com.google.code.gson</groupId>\n      <artifactId>gson</artifactId>",
+            ),
+            "svc/src/A.java": (
+                "import com.google.common.collect.Lists;\n"
+                "import com.google.gson.Gson;\nclass A {}\n"
+            ),
+        }
+    )
     _, payload = scan_json(root)
     # guava comes from the parent pom, gson from the module pom: no drift.
     assert not [f for f in payload["findings"] if f["rule_id"] == "JAVA-PKG-001"]
@@ -220,22 +282,26 @@ def test_nested_module_uses_nearest_manifest_and_parent_chain(project):
 def test_starter_provided_test_libraries_are_never_flagged(project):
     # AssertJ and Mockito arrive via spring-boot-starter-test; a missing
     # direct declaration is normal and must not be reported.
-    root = project({
-        "pom.xml": _POM,
-        "src/test/java/T.java": (
-            "import org.assertj.core.api.Assertions;\n"
-            "import org.mockito.Mockito;\nclass T {}\n"
-        ),
-    })
+    root = project(
+        {
+            "pom.xml": _POM,
+            "src/test/java/T.java": (
+                "import org.assertj.core.api.Assertions;\n"
+                "import org.mockito.Mockito;\nclass T {}\n"
+            ),
+        }
+    )
     _, payload = scan_json(root)
     assert not [f for f in payload["findings"] if f["rule_id"] == "JAVA-PKG-001"]
 
 
 def test_pom_with_doctype_is_rejected_fail_closed(project):
-    root = project({
-        "pom.xml": '<!DOCTYPE x [<!ENTITY e SYSTEM "file:///etc/passwd">]><project/>',
-        "A.java": "import com.google.gson.Gson;\nclass A {}\n",
-    })
+    root = project(
+        {
+            "pom.xml": '<!DOCTYPE x [<!ENTITY e SYSTEM "file:///etc/passwd">]><project/>',
+            "A.java": "import com.google.gson.Gson;\nclass A {}\n",
+        }
+    )
     _, payload = scan_json(root)
     rules = [f["rule_id"] for f in payload["findings"] if f["rule_id"].startswith("JAVA-PKG")]
     assert rules == ["JAVA-PKG-002"]
@@ -243,13 +309,15 @@ def test_pom_with_doctype_is_rejected_fail_closed(project):
 
 
 def test_java_only_project_earns_a_real_score(project):
-    root = project({
-        "A.java": (
-            "import java.util.PriorityQueue;\n"
-            "import org.slf4j.Logger;\n"
-            "class A { PriorityQueue<Integer> pq = new PriorityQueue<>(); Logger logger; }\n"
-        ),
-    })
+    root = project(
+        {
+            "A.java": (
+                "import java.util.PriorityQueue;\n"
+                "import org.slf4j.Logger;\n"
+                "class A { PriorityQueue<Integer> pq = new PriorityQueue<>(); Logger logger; }\n"
+            ),
+        }
+    )
     result, payload = scan_json(root)
     assert result.exit_code == 0
     assert isinstance(payload["architecture_signal_score"], float)

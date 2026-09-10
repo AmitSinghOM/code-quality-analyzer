@@ -74,6 +74,7 @@ class CodeScanner:
         self.dsa_evidence: dict[str, list[PatternHit]] = {}
         self.design_evidence: dict[str, list[PatternHit]] = {}
         self.signal_observations: list[SignalObservation] = []
+        self.signals_by_language: dict[str, dict] = {}
         self.findings: list[Finding] = []
         self.parsed_files: dict[str, dict[str, ParsedFile]] = {}
         self.project_results: dict[tuple[str, str], ProviderResult] = {}
@@ -217,6 +218,12 @@ class CodeScanner:
         ):
             for observation in provider.evaluate(parsed):
                 self.signal_observations.append(observation)
+                per_language = self.signals_by_language.setdefault(
+                    adapter.language_id, {"dsa": set(), "design": set(), "files": 0}
+                )
+                per_language[
+                    "dsa" if observation.category == "architecture.dsa" else "design"
+                ].add(observation.signal_id)
                 target = {
                     "architecture.dsa": (
                         self.dsa_found,
@@ -287,7 +294,22 @@ class CodeScanner:
         applicable = any(
             self.parsed_files.get(language) for language in languages
         )
-        return {"languages": languages, "applicable": applicable}
+        # Per-language breakdown (staff review D2): a polyglot repository is
+        # scored on the union of its signals; this shows which language
+        # contributed what, without changing the score.
+        by_language = {
+            language: {
+                "files": len(self.parsed_files.get(language, {})),
+                "dsa_patterns": sorted(found["dsa"]),
+                "design_patterns": sorted(found["design"]),
+            }
+            for language, found in sorted(self.signals_by_language.items())
+        }
+        return {
+            "languages": languages,
+            "applicable": applicable,
+            "by_language": by_language,
+        }
 
     def analysis_authority(self) -> dict:
         """Return deterministic qualification for the analysis result."""

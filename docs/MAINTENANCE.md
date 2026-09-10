@@ -59,3 +59,31 @@ advisory that forced each floor.
   scanning correctly; the README's honest-contract sections remain
   accurate; nothing phones home to fail. Pattern staleness degrades
   recall gradually, never correctness.
+
+## Style gate decision
+
+`ruff check` (lint, including import order and bugbear rules) is a CI
+gate. `ruff format --check` is deliberately **not**: the codebase
+predates the formatter and about 60 files carry hand-wrapped
+regex/pattern tables that the formatter would explode into one entry per
+line, hurting the readability those tables exist for. New files and
+substantially rewritten files are formatted; existing files are not
+reformatted wholesale to keep `git blame` useful. Revisit if a second
+regular contributor joins.
+
+## Known analysis bounds (documented, not defects)
+
+- **TypeScript regex after `)`**: `if (ok) /re/.test(s)` is read as
+  division; the regex body leaks into identifiers. The prev-token
+  heuristic cannot distinguish this from `(a) / b` without a parser.
+- **Go cyclomatic complexity** counts nested `func` literals into their
+  enclosing function, as gocyclo does; a Go file that is one large
+  `main()` with closures scores worse than the equivalent Java.
+- **Size gate is language-blind**: the maturity component saturates at
+  2,000 lines for every language, although C++ and Java are roughly
+  twice as verbose per concept as Python. Calibration rounds 1–2 (all
+  projects far above saturation) did not observe bias; a round on
+  500–3,000-line projects would test it.
+- **Documented empty catches** (`catch (e) { /* best effort */ }`) are
+  reported at `note` severity, not `warning`; `--fail-on warning` does
+  not fail on them.

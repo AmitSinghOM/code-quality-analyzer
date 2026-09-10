@@ -27,6 +27,7 @@ Design constraints:
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import importlib.metadata
 import re
@@ -165,16 +166,48 @@ def deep_available(*grammars: str) -> bool:
     )
 
 
+class DeepEngineError(RuntimeError):
+    """The deep engine is installed but cannot load (ABI mismatch, broken wheel)."""
+
+
 @lru_cache(maxsize=4)
 def _parser(module_name: str):
-    from tree_sitter import Language, Parser
+    """Build a parser; a grammar/runtime ABI mismatch is reported, not raised.
 
-    module = importlib.import_module(module_name)
-    return Parser(Language(module.language()))
+    ``Language()`` raises ``ValueError`` when the grammar's ABI is outside
+    the runtime's accepted range — a real possibility with independent
+    version ranges. That must degrade to ``available: false``, never crash
+    the scan.
+    """
+    try:
+        from tree_sitter import Language, Parser
+
+        module = importlib.import_module(module_name)
+        return Parser(Language(module.language()))
+    except Exception as error:  # noqa: BLE001 - any load failure is "unavailable"
+        raise DeepEngineError(f"{module_name}: {type(error).__name__}: {error}") from error
 
 
 def _parse(spec: GrammarSpec, source: str):
     return _parser(spec.module).parse(source.encode("utf-8"))
+
+
+# One parse per file per scan, shared by the duplication and complexity
+# providers. The scanner hands both providers the same parsed_files mapping
+# object for a run, so its identity scopes the cache; a new run (or another
+# language) replaces it, bounding memory to one language's trees.
+_TREE_CACHE: dict = {"owner": None, "owner_ref": None, "trees": {}}
+
+
+def _tree_for(parsed: ParsedFile, language_id: str, owner: object):
+    if _TREE_CACHE["owner_ref"] is not owner:
+        _TREE_CACHE.update(owner=id(owner), owner_ref=owner, trees={})
+    entry = _TREE_CACHE["trees"].get(parsed.source.identity_path)
+    if entry is None or entry[0] is not parsed:
+        spec = _spec_for(parsed, language_id)
+        entry = (parsed, spec, _parse(spec, parsed.source.content))
+        _TREE_CACHE["trees"][parsed.source.identity_path] = entry
+    return entry[1], entry[2]
 
 
 def _walk(node) -> Iterable:
@@ -193,23 +226,62 @@ def _text(node) -> str:
     return node.text.decode("utf-8", errors="replace") if node.text else ""
 
 
+_DECLARATOR_WRAPPERS = frozenset(
+    {
+        "function_declarator",
+        "pointer_declarator",
+        "parenthesized_declarator",
+        "reference_declarator",
+        "array_declarator",
+        "attributed_declarator",
+    }
+)
+
+
 def _function_name(node, spec: GrammarSpec) -> str:
     named = node.child_by_field_name("name")
     if named is not None:
         return _text(named)
+    # C/C++: descend the declarator chain to the innermost name, through
+    # pointer/parenthesized wrappers (`int (*f(void))(int)`).
     declarator = node.child_by_field_name("declarator")
-    # C/C++: descend the declarator chain to the innermost function name.
-    while declarator is not None:
+    seen = 0
+    while declarator is not None and seen < 32:
+        seen += 1
         if declarator.type in spec.name_types:
             return _text(declarator)
         inner = declarator.child_by_field_name("declarator")
         if inner is None:
-            for child in declarator.children:
-                if child.type in spec.name_types:
-                    return _text(child)
-            break
+            inner = next(
+                (
+                    c
+                    for c in declarator.children
+                    if c.type in _DECLARATOR_WRAPPERS or c.type in spec.name_types
+                ),
+                None,
+            )
         declarator = inner
     return "<anonymous>"
+
+
+# Go's official generated-code marker plus the filename conventions that
+# carry it in practice. Generated code is excluded from deep metrics: it
+# is not maintained by hand, and identical generated methods on different
+# types are not "duplicates" anyone can fix.
+_GENERATED_HEADER = re.compile(r"^// Code generated .* DO NOT EDIT\.$", re.MULTILINE)
+_GENERATED_NAMES = re.compile(
+    r"(?:\.pb(?:\.gw)?\.go|_generated\.go|\.gen\.go|^zz_generated.*\.go|^mock_.*\.go|"
+    r"_mock\.go|_string\.go|_easyjson\.go|_ffjson\.go|\.g\.cs|\.designer\.cs)$",
+    re.IGNORECASE,
+)
+
+
+def _is_generated(parsed: ParsedFile) -> bool:
+    name = parsed.source.path.name
+    if _GENERATED_NAMES.search(name):
+        return True
+    head = parsed.source.content[:2048]
+    return bool(_GENERATED_HEADER.search(head))
 
 
 def _structure(node, spec: GrammarSpec, skip=None) -> Iterable[str]:
@@ -240,7 +312,9 @@ def _structure_key(function, spec: GrammarSpec, body) -> str:
             )
     parts.append("\x00")
     parts.extend(_structure(body, spec))
-    return "\x1f".join(parts)
+    # Digest, not the serialized body: keys for a large codebase otherwise
+    # hold several times the source size in memory (staff review C6).
+    return hashlib.sha256("\x1f".join(parts).encode("utf-8", "surrogatepass")).hexdigest()
 
 
 def _statement_count(body) -> int:
@@ -314,13 +388,31 @@ class _DeepProviderBase:
 
     def _trees(self, project: ProjectContext):
         parse_errors = 0
+        skipped_generated = 0
         for identity_path, parsed in sorted(project.parsed_files.items()):
-            spec = _spec_for(parsed, self.language_id)
-            tree = _parse(spec, parsed.source.content)
+            if _is_generated(parsed):
+                skipped_generated += 1
+                continue
+            spec, tree = _tree_for(parsed, self.language_id, project.parsed_files)
             errored = tree.root_node.has_error
             parse_errors += int(errored)
             yield identity_path, parsed, spec, tree, errored
         self._parse_errors = parse_errors
+        self._skipped_generated = skipped_generated
+
+    def _engine_failed(self, error: DeepEngineError) -> ProviderResult:
+        result = _unavailable(self.language_id)
+        result.payload["reason"] = str(error)
+        result.health["reason"] = "engine_load_failed"
+        return result
+
+    def analyze(self, project: ProjectContext) -> ProviderResult:
+        if not deep_available(*_grammars_for(self.language_id)):
+            return _unavailable(self.language_id)
+        try:
+            return self._analyze(project)
+        except DeepEngineError as error:
+            return self._engine_failed(error)
 
     def _engine(self) -> dict:
         versions = availability()
@@ -337,10 +429,9 @@ class DeepDuplicationProvider(_DeepProviderBase):
         self.rule_id = rule_id
         self.provider_id = f"{language_id}-deep-duplication"
         self._parse_errors = 0
+        self._skipped_generated = 0
 
-    def analyze(self, project: ProjectContext) -> ProviderResult:
-        if not deep_available(*_grammars_for(self.language_id)):
-            return _unavailable(self.language_id)
+    def _analyze(self, project: ProjectContext) -> ProviderResult:
         analyzer = PythonDuplicationAnalyzer(rule_id=self.rule_id)
         excluded_functions = 0
         for identity_path, parsed, spec, tree, _errored in self._trees(project):
@@ -379,6 +470,7 @@ class DeepDuplicationProvider(_DeepProviderBase):
                 "available": True,
                 "engine": self._engine(),
                 "files_with_parse_errors": self._parse_errors,
+                "files_skipped_generated": self._skipped_generated,
                 "functions_excluded_for_parse_errors": excluded_functions,
             }
         )
@@ -387,6 +479,7 @@ class DeepDuplicationProvider(_DeepProviderBase):
             {
                 "available": True,
                 "files_with_parse_errors": self._parse_errors,
+                "files_skipped_generated": self._skipped_generated,
                 "functions_excluded_for_parse_errors": excluded_functions,
             }
         )
@@ -403,10 +496,9 @@ class DeepComplexityProvider(_DeepProviderBase):
         self.rule_id = rule_id
         self.provider_id = f"{language_id}-deep-complexity"
         self._parse_errors = 0
+        self._skipped_generated = 0
 
-    def analyze(self, project: ProjectContext) -> ProviderResult:
-        if not deep_available(*_grammars_for(self.language_id)):
-            return _unavailable(self.language_id)
+    def _analyze(self, project: ProjectContext) -> ProviderResult:
         findings: list[Finding] = []
         complex_functions: list[dict] = []
         functions = 0
@@ -469,12 +561,14 @@ class DeepComplexityProvider(_DeepProviderBase):
             "functions": complex_functions[:MAX_REPORTED_COMPLEX_FUNCTIONS],
             "functions_truncated": len(complex_functions) > MAX_REPORTED_COMPLEX_FUNCTIONS,
             "files_with_parse_errors": self._parse_errors,
+            "files_skipped_generated": self._skipped_generated,
         }
         health = {
             "complete": True,
             "errors": 0,
             "available": True,
             "files_with_parse_errors": self._parse_errors,
+            "files_skipped_generated": self._skipped_generated,
         }
         return ProviderResult(payload=payload, health=health, findings=tuple(findings))
 

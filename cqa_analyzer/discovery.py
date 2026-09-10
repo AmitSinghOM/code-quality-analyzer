@@ -31,6 +31,12 @@ SKIP_DIRS = frozenset({
     '.next', '.nuxt', '.turbo', '.svelte-kit', 'out', 'coverage',
     'bower_components', '.yarn', '.pnpm-store',
     'target', 'obj', '.gradle', '.mvn', 'TestResults',
+    # Vendored third-party code is not the project's own quality signal
+    # (staff review C4): Go `vendor/`, C/C++ `third_party/`, CocoaPods,
+    # Terraform providers, Bazel output symlinks.
+    'vendor', 'third_party', 'thirdparty', 'external', 'Pods', '.terraform',
+    'bazel-bin', 'bazel-out', 'bazel-testlogs', '.kotlin', 'cmake-build-debug',
+    'cmake-build-release',
 })
 
 # 2 MB. Anything bigger is generated, vendored, or a data blob.

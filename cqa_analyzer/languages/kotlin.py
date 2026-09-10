@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Mapping
 
-from ..findings import Finding, Location
+from ..findings import Finding
 from ..kotlin_patterns import KOTLIN_DESIGN_PATTERNS, KOTLIN_DSA_PATTERNS
 from ..protocols import (
     DEFAULT_CAPABILITY_VERSION,
@@ -23,7 +23,7 @@ from ..protocols import (
     SourceFile,
 )
 from ..registry import PluginRegistry
-from ._shared import RegexRulePackBase, line_column, signal_observations
+from ._shared import RegexRulePackBase, empty_catch_finding, signal_observations
 from .java import JavaFacts, JavaPackageProvider
 
 KOTLIN_ADAPTER_VERSION = "1.0.0"
@@ -376,24 +376,7 @@ class KotlinEmptyCatchRule:
         if not isinstance(parsed.facts, KotlinFacts):
             return
         for match in _EMPTY_CATCH.finditer(parsed.facts.code_text):
-            line, column = line_column(parsed.facts.code_text, match.start())
-            yield Finding(
-                rule_id=self.rule_id,
-                category="correctness",
-                severity="warning",
-                confidence="high",
-                message="An empty catch block silently discards the failure.",
-                location=Location(
-                    path=parsed.source.display_path,
-                    line=line,
-                    column=column,
-                    identity_path=parsed.source.identity_path,
-                ),
-                remediation=(
-                    "Handle the failure, log actionable context, or rethrow "
-                    "the exception."
-                ),
-            )
+            yield empty_catch_finding(self.rule_id, parsed, match, rethrow_word="exception")
 
 
 class KotlinRulePack(RegexRulePackBase):

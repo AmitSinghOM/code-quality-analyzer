@@ -31,7 +31,7 @@ GO_DSA_PATTERNS = {
         # Go maps are a builtin type, not an identifier; anchor on the
         # literal shapes that imply key-based lookup structures.
         "text": ["make(map[", "map[string]", "map[int]", "map[int64]", "map[uint64]"],
-        "identifiers": ["sync.map", "syncmap", "hashmap", "lookup", "index"],
+        "identifiers": ["sync.map", "syncmap", "hashmap"],
         "min_signals": 1,
         "description": "Hash-based data structures for O(1) lookups",
     },

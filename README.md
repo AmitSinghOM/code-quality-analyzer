@@ -218,7 +218,13 @@ automatically.
 Releases are published through PyPI Trusted Publishing with digital
 attestations, so every artifact is provably built from this
 repository's tagged source by CI — no maintainer-held upload token
-exists.
+exists. That attestation covers the pure-Python `cqa-analyzer` wheel and
+sdist only. The optional `[deep]` extra installs third-party compiled
+wheels (`tree-sitter`, `tree-sitter-go`, `tree-sitter-c`,
+`tree-sitter-cpp`) that this project does not build or attest; CI pins
+their version ranges and exercises them on the floor and ceiling Python
+versions, but you are trusting their maintainers' release process, as
+with any native dependency. The default install has no such dependency.
 
 To work on the analyzer itself, install from a source checkout:
 
@@ -414,7 +420,7 @@ No source candidates exit with code 2. If candidates exist but none can be
 successfully parsed, analysis exits with code 3 even without `--strict`.
 Partial non-strict analysis may exit successfully for inspection, but it is
 always marked non-authoritative. See the versioned schema in
-[`docs/report-schema-1.11.0.json`](docs/report-schema-1.11.0.json) and the decision
+[`docs/report-schema-1.12.0.json`](docs/report-schema-1.12.0.json) and the decision
 record in
 [`docs/adr/001-analysis-authority-and-score-migration.md`](docs/adr/001-analysis-authority-and-score-migration.md).
 
