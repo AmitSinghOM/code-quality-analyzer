@@ -270,3 +270,49 @@ per-idiom omissions of the kind above, found one project at a time.
 | testing | x | x |  | x | x | x | x |
 | tree_structures |  |  | x |  |  |  | x |
 
+
+## 2.37.0 confirmation run
+
+Re-ran all 21 corpus projects after the staff-review release. Twenty
+were on the same commit as the recorded run (redis-py had moved; its
+score did not). Four scores changed, every one attributable to a 2.37.0
+precision fix and verified against the source:
+
+| domain | language | repo | sha | score | #dsa | #design |
+|---|---|---|---|---|---|---|
+| cli-tool | c_cpp | jqlang/jq | same | 4.6→4.4 | 5→4 | 2 |
+| cli-tool | csharp | dotnet-outdated/dotnet-outdated | same | 5.1 | 2 | 9 |
+| cli-tool | go | junegunn/fzf | same | 5.8 | 5 | 7 |
+| cli-tool | java | jbangdev/jbang | same | 6.3 | 4 | 11 |
+| cli-tool | kotlin | JakeWharton/diffuse | same | 4.8 | 5 | 4 |
+| cli-tool | python | httpie/cli | same | 6.1→6.0 | 7 | 6 |
+| cli-tool | typescript | google/zx | same | 5.0 | 4 | 5 |
+| redis-client | c_cpp | redis/hiredis | same | 4.1→3.3 | 1→0 | 6 |
+| redis-client | csharp | StackExchange/StackExchange.Redis | same | 8.0 | 7 | 18 |
+| redis-client | go | redis/go-redis | same | 8.8 | 11 | 20 |
+| redis-client | java | redis/jedis | same | 8.5 | 9 | 18 |
+| redis-client | kotlin | crackthecodeabhi/kreds | same | 3.8 | 0 | 9 |
+| redis-client | python | redis/redis-py | 5b3c871→7087d65 | 8.7 | 9 | 19 |
+| redis-client | typescript | redis/ioredis | same | 6.5→6.6 | 4 | 12 |
+| web-framework | c_cpp | drogonframework/drogon | same | 7.9 | 6 | 18 |
+| web-framework | csharp | FastEndpoints/FastEndpoints | same | 8.0 | 5 | 22 |
+| web-framework | go | gin-gonic/gin | same | 5.6 | 2 | 11 |
+| web-framework | java | javalin/javalin | same | 7.1 | 4 | 17 |
+| web-framework | kotlin | ktorio/ktor | same | 7.9 | 7 | 17 |
+| web-framework | python | fastapi/fastapi | same | 7.6 | 5 | 15 |
+| web-framework | typescript | nestjs/nest | same | 7.7 | 6→5 | 17→18 |
+
+- **hiredis 4.1 → 3.3**: its only DSA hit, `bit_manipulation`, came from
+  `"1 <<"` substring-matching `r1 << shl` and `x1 << 32` — variables
+  that end in `1`. Word-bounded anchors (C10) removed a false positive;
+  3.3 is the honest score for a thin C protocol client.
+- **jq 4.6 → 4.4**: `binary_search` came from `">> 1"` matching `>> 16`.
+  Same fix, same direction.
+- **httpie 6.1 → 6.0**: identical pattern set; one anchor matched in
+  fewer files (breadth factor), again from word boundaries.
+- **ioredis 6.5 → 6.6, nest ±0**: `testing` now fires on Node's built-in
+  `node:test` runner (round 2 fix); nest also lost a weak DSA match.
+
+Nothing moved in a direction that was not a precision or recall fix, and
+all 21 remain authoritative. Machine-readable rows:
+`docs/calibration-latest.json` (written by the corpus script).
