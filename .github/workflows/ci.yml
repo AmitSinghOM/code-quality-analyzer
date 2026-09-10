@@ -68,6 +68,42 @@ jobs:
       - name: Test
         run: pytest
 
+  deep-test:
+    # The optional [deep] extra (tree-sitter for Go and C/C++) on the floor
+    # and ceiling interpreters. The default `test` job proves the pure-Python
+    # install still works and that tests/test_deep.py skips cleanly without it.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.14']
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install with deep extra
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,deep]"
+
+      - name: Deep tests must run, not skip
+        run: |
+          pytest tests/test_deep.py -rs | tee deep.log
+          if grep -q SKIPPED deep.log; then
+            echo "deep tests skipped although the extra is installed" >&2
+            exit 1
+          fi
+
+      - name: Full suite with extra installed
+        run: pytest
+
   platform-test:
     runs-on: ${{ matrix.os }}
     strategy:

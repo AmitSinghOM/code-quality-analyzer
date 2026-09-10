@@ -1,5 +1,6 @@
 """Built-in plugin assembly."""
 
+from .deep import register_deep_plugins
 from .languages import (
     register_c_plugins,
     register_csharp_plugins,
@@ -22,4 +23,5 @@ def create_default_registry() -> PluginRegistry:
     registry = register_kotlin_plugins(registry)
     registry = register_csharp_plugins(registry)
     registry = register_c_plugins(registry)
+    registry = register_deep_plugins(registry)
     return register_standard_reporters(registry)

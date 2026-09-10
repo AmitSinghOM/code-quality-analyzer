@@ -39,6 +39,15 @@ CORPUS = [
     ("kotlin", "web-framework", "ktorio/ktor", "ktor-server"),
     ("csharp", "web-framework", "FastEndpoints/FastEndpoints", ""),
     ("c_cpp", "web-framework", "drogonframework/drogon", ""),
+    # Round 2: command-line tools — small, single-purpose, DSA-light by
+    # nature; the domain most likely to expose anchor-depth differences.
+    ("python", "cli-tool", "httpie/cli", ""),
+    ("go", "cli-tool", "junegunn/fzf", ""),
+    ("typescript", "cli-tool", "google/zx", ""),
+    ("java", "cli-tool", "jbangdev/jbang", ""),
+    ("kotlin", "cli-tool", "JakeWharton/diffuse", ""),
+    ("csharp", "cli-tool", "dotnet-outdated/dotnet-outdated", ""),
+    ("c_cpp", "cli-tool", "jqlang/jq", ""),
 ]
 
 
@@ -56,12 +65,13 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--keep", action="store_true", help="keep clones")
     parser.add_argument("--only", default=None, help="restrict to one language")
+    parser.add_argument("--domain", default=None, help="restrict to one domain")
     args = parser.parse_args()
     workdir = Path(tempfile.mkdtemp(prefix="cqa-corpus-"))
     rows = []
     try:
         for language, domain, slug, subdir in CORPUS:
-            if args.only and language != args.only:
+            if (args.only and language != args.only) or (args.domain and domain != args.domain):
                 continue
             target = workdir / slug.replace("/", "__")
             clone = subprocess.run(

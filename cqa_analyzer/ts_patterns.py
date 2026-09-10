@@ -256,8 +256,10 @@ TS_DESIGN_PATTERNS = {
         "imports": [
             "vitest", "@testing-library", "@playwright/test",
             "cypress", "jest", "mocha", "chai",
+            # Node's built-in runner (google/zx, many CLIs).
+            "node:test", "node:assert", "bun:test", "uvu", "ava", "tap",
         ],
-        "identifiers": ["describe", "expect"],
+        "identifiers": ["describe", "expect", "test", "assert"],
         "min_signals": 2,
         "description": "Testing discipline",
     },

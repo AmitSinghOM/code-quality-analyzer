@@ -133,7 +133,22 @@ matter, and mixing them up is the most common first-run mistake:
 `code-quality-analyzer` on PyPI is an unrelated project — installing it
 will not give you this tool.
 
-**Requirements:** Python 3.11 or newer (`python3 --version`).
+**Requirements:** Python 3.11 or newer (`python3 --version`). The default
+install is pure Python with no native dependencies.
+
+### Optional: `[deep]` — duplication and complexity for Go and C/C++
+
+```bash
+pipx install 'cqa-analyzer[deep]'      # or: pip install 'cqa-analyzer[deep]'
+```
+
+Adds tree-sitter and the Go, C, and C++ grammars (compiled wheels, no
+network, no toolchain execution) and unlocks `GO-DUP-001`, `C-DUP-001`
+(cross-file duplicate functions) and `GO-MAINT-001`, `C-MAINT-001`
+(cyclomatic complexity over 10) — the same metrics, thresholds, and
+reporting Python already has. Without the extra, the report says so
+(`"available": false` with the install hint) instead of inventing a
+number. See [`docs/RULES.md`](docs/RULES.md).
 
 ### Recommended: pipx (isolated, always on PATH)
 

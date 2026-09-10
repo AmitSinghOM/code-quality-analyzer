@@ -519,3 +519,35 @@ because CMake is Turing-complete and dependencies can arrive through
 toolchain files, `include()`d modules, or header-only adapters shipped
 for downstream builds (hiredis's `adapters/libuv.h` is a known example).
 Files with no enclosing `CMakeLists.txt` produce no finding.
+
+## GO-DUP-001 / C-DUP-001: Duplicate function implementation (requires `[deep]`)
+
+**Category:** Duplication
+**Default severity:** Warning
+**Confidence:** High
+
+Cross-file structural duplicates for Go and C/C++ via tree-sitter, with
+exactly `PY-DUP-001`'s semantics: the function's own name is excluded,
+the signature and body are compared structurally (comments ignored,
+identifiers and literals included), only significant functions
+participate (≥ 3 statements and ≥ 40 named nodes), and only top-level
+functions and methods are compared. Functions whose subtree contains a
+parse error are excluded and counted in
+`functions_excluded_for_parse_errors`, because a partially recovered
+tree could fabricate a match. Without `pip install 'cqa-analyzer[deep]'`
+the provider reports `available: false` and emits nothing.
+
+## GO-MAINT-001 / C-MAINT-001: High cyclomatic complexity (requires `[deep]`)
+
+**Category:** Maintainability
+**Default severity:** Warning
+**Confidence:** High
+
+Cyclomatic complexity per function against the shared limit of 10. Go
+follows gocyclo: `if`, `for`, non-default `case` (expression, type, and
+select cases), `&&`, `||`. C/C++ count `if`, `for`, range-`for`,
+`while`, `do`, non-default `case`, `?:`, `catch`, `&&`, `||`. Nested
+function literals contribute to their enclosing function. C code
+routinely exceeds 10 (hiredis averages 4.4 with 49 of 635 functions
+over; jq averages 6.0) — the limit is the same standard applied to
+every language, not a claim that the code is wrong.

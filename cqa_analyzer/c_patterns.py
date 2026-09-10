@@ -15,14 +15,32 @@ from .production_patterns import PRODUCTION_DSA_PATTERNS, production_design_patt
 
 C_DSA_PATTERNS = {
     "hash_map": {
-        "imports": ["unordered_map"],
+        "imports": ["unordered_map", "uthash.h", "khash.h", "search.h"],
         "identifiers": [
             "unordered_map",
             "hash_map",
             "hashmap",
             "hashtable",
+            "hash_table",
+            "hashtbl",
             "absl::flat_hash_map",
             "flat_hash_map",
+            "hsearch",
+            "hcreate",
+            "kh_get",
+            "kh_put",
+        ],
+        # Hand-rolled C hash tables carry a prefix (jq: jvp_object_find_bucket).
+        "identifier_contains": [
+            "find_bucket",
+            "hash_bucket",
+            "hash_lookup",
+            "hash_insert",
+            "hash_find",
+            "hash_add",
+            "hash_del",
+            "hashtable",
+            "hash_table",
         ],
         "min_signals": 1,
         "description": "Hash-based data structures for O(1) lookups",

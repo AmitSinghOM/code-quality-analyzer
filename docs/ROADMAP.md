@@ -86,22 +86,39 @@ band consistent with its Python-equivalent architecture breadth, with
 `-v` evidence reviewable for every fired pattern; no pattern fires on
 comment or string content.
 
-## 3. Go rule and duplication depth (decision-gated)
+## 3. Go rule and duplication depth (✅ decided: optional `[deep]` extra, 2.36.0)
 
 `GO-DUP-001` structural duplication and measured-complexity rules need a
-real Go parse tree; honest structural comparison is not achievable with
-regex facts. The decision point is the parser dependency:
+real parse tree; honest structural comparison is not achievable with
+regex facts. **Decision: Option A as an opt-in extra.** The default
+install stays pure Python (`click`, `rich`); `pip install
+'cqa-analyzer[deep]'` adds tree-sitter and the Go, C, and C++ grammars
+(compiled abi3 wheels for every supported interpreter, no network, no
+toolchain execution) and unlocks:
 
-- **Option A — tree-sitter-go:** local wheels, no network, no Go
-  toolchain execution; adds a compiled dependency and a grammar-version
-  cache identity. Compatible with the privacy contract; weighs against
-  the currently tiny dependency footprint (`click`, `rich`).
-- **Option B — stay bounded:** grow only regex-provable rules (more
-  discarded-error call sites, blanked-source patterns) and accept that
-  duplication/complexity remain Python-only.
+- `GO-DUP-001` / `C-DUP-001` — cross-file duplicate functions, using the
+  same significance thresholds, outermost-only rule, grouping, and
+  reporting as `PY-DUP-001`, so a duplicate means the same thing in
+  every language.
+- `GO-MAINT-001` / `C-MAINT-001` — cyclomatic complexity per function
+  (gocyclo's rule for Go; `if/for/while/do/case/?:/catch/&&/||` for C
+  and C++) against the shared limit of 10.
 
-No commitment until Option A's dependency weight is evaluated; item 2
-does not depend on this.
+Without the extra the providers still run and report `available:
+false` with the install hint; they never affect `authoritative` and
+never invent a metric. tree-sitter's error recovery is surfaced
+honestly: functions whose subtree contains a parse error are excluded
+from duplication (a partial tree can fabricate a match) and counted in
+`functions_excluded_for_parse_errors`; complexity still runs on them.
+`.h` files use the C grammar unless the blanked text shows C++ syntax —
+calibration on hiredis found the C++ grammar failing 111 of 127
+functions in a macro-heavy C header that the C grammar parsed with 11
+localized SIMD-intrinsic errors.
+
+Calibrated on gin (1,323 functions, 15 over limit, two duplicate groups
+that are byte-identical benchmark bodies), hiredis, and jq. Cognitive
+complexity (`PY-MAINT-002`) is not mirrored yet. Python itself does
+not use tree-sitter; its `ast` remains the source of truth.
 
 ## 4. TypeScript/JavaScript pilot (✅ entry shipped in 2.29.0)
 
@@ -156,10 +173,14 @@ lower bound. All fixed; 14/14 corpus projects are authoritative. Within
 each domain, comparably sized projects now score within ~1 point across
 languages; the remaining spread tracks project scope.
 
-Still open: anchor *depth* differs (Python 527 anchor strings, Go 331)
-without demonstrated bias — a second corpus domain would settle it; a
-shared UI-component pattern ID remains unrepresentable. Any weight or
-curve change is a `scoring_policy_version` bump with a migration note.
+Round 2 (2.36.0) added a DSA-light domain — the most used CLI tool in
+each language — to test anchor *depth* directly. Verdict: depth does
+not order the languages (Python, with the most anchors, sits mid-pack;
+size and scope do), so no systematic bias; two per-idiom gaps were
+closed (hand-rolled C hash tables, Node's built-in test runner). Still
+open: a shared UI-component pattern ID remains unrepresentable. Any
+weight or curve change is a `scoring_policy_version` bump with a
+migration note.
 
 ## 6. Java and C#/.NET pilots (✅ entries shipped in 2.31.0)
 

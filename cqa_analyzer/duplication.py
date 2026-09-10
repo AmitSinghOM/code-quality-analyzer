@@ -78,16 +78,29 @@ def _body_node_count(body: list[ast.stmt]) -> int:
 
 
 class PythonDuplicationAnalyzer:
-    """Detect structurally identical significant functions across files."""
+    """Detect structurally identical significant functions across files.
 
-    def __init__(self) -> None:
+    The grouping, nesting, and reporting logic is language-neutral: any
+    provider can feed ``add_occurrence`` with a structural key and an
+    :class:`_Occurrence`. Only ``add_file`` is Python-specific.
+    """
+
+    def __init__(self, rule_id: str = RULE_ID) -> None:
+        self.rule_id = rule_id
         self._groups: dict[str, list[_Occurrence]] = {}
         self._suppressions: dict[str, frozenset[tuple[int, str]]] = {}
         # Occurrences reference AST nodes by id(); pinning every added tree
         # guarantees no node is garbage-collected (and its id reused by a
         # different node) between add_file() and analyze().
-        self._pinned_trees: list[ast.AST] = []
+        self._pinned_trees: list[object] = []
         self.functions_analyzed = 0
+
+    def add_occurrence(self, key: str, occurrence: _Occurrence, tree: object = None) -> None:
+        """Register one significant function under its structural key."""
+        if tree is not None:
+            self._pinned_trees.append(tree)
+        self.functions_analyzed += 1
+        self._groups.setdefault(key, []).append(occurrence)
 
     def add_file(
         self,
@@ -105,7 +118,6 @@ class PythonDuplicationAnalyzer:
                 continue
             if _body_node_count(body) < MIN_BODY_NODES:
                 continue
-            self.functions_analyzed += 1
             occurrence = _Occurrence(
                 identity_path=identity_path,
                 display_path=display_path,
@@ -121,10 +133,7 @@ class PythonDuplicationAnalyzer:
                 node_id=id(node),
                 ancestor_ids=tuple(id(ancestor) for ancestor in ancestors),
             )
-            self._groups.setdefault(
-                _structure_key(node, body),
-                [],
-            ).append(occurrence)
+            self.add_occurrence(_structure_key(node, body), occurrence)
 
     def analyze(self) -> tuple[dict, tuple[Finding, ...]]:
         """Return the aggregate payload and deterministic findings."""
@@ -150,7 +159,7 @@ class PythonDuplicationAnalyzer:
                     occurrence.identity_path,
                     frozenset(),
                 )
-                if (occurrence.line, RULE_ID) in suppressed:
+                if (occurrence.line, self.rule_id) in suppressed:
                     continue
                 findings.append(self._finding(occurrence, other, len(occurrences)))
         payload = {
@@ -196,8 +205,8 @@ class PythonDuplicationAnalyzer:
         groups.sort(key=lambda group: group[0].sort_key)
         return groups
 
-    @staticmethod
     def _finding(
+        self,
         occurrence: _Occurrence,
         other: _Occurrence,
         group_size: int,
@@ -205,7 +214,7 @@ class PythonDuplicationAnalyzer:
         copies = group_size - 1
         plural = "s" if copies != 1 else ""
         return Finding(
-            rule_id=RULE_ID,
+            rule_id=self.rule_id,
             category="duplication",
             severity="warning",
             confidence="high",
