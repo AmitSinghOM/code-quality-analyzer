@@ -198,8 +198,8 @@ python3 -m pip install --upgrade cqa-analyzer
 python3 -m pip install --upgrade 'cqa-analyzer[deep]'   # with the optional extra
 
 # a specific version
-pipx install --force 'cqa-analyzer==2.39.0'
-python3 -m pip install 'cqa-analyzer==2.39.0'
+pipx install --force 'cqa-analyzer==2.40.0'
+python3 -m pip install 'cqa-analyzer==2.40.0'
 ```
 
 Check with `code-quality-analyzer --version`. If the number does not
@@ -345,7 +345,12 @@ code-quality-analyzer . --expect-config-fingerprint <sha256> --fail-on warning
 `scan_health` reports what discovery did not read: `pruned_directories`
 and `pruned_examples` (skip-list directories), `bytes_read`, and
 `truncated_reasons` (`file_limit`, `byte_budget` — a 512 MB total read
-budget protects against trees that would otherwise exhaust memory).
+budget protects against trees that would otherwise exhaust memory). It also
+reports what was read but could not be parsed: `unparsed_files` (exact
+count) and `unparsed_examples` (up to five project-relative paths, redacted
+or tokenized like every other path in the report). `-v` prints the same
+paths under the parse-failure warning so a `parse_failures` verdict is
+actionable.
 
 Filters are project-relative, exclusion wins, and filtered files do not consume
 candidate or file-limit accounting. The root `.gitignore` is respected by

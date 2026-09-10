@@ -4,6 +4,31 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 2.40.0 - 2026-09-10
+
+Actionability release, found by dogfooding on a 391-file Python service
+where one file failed to parse: the report said `parse_failures` but never
+said *which* file. No rule, weight or curve changed; scoring policy stays
+2.0.0, ruleset 2.21.0, report schema 1.12.0 (`scan_health` is an open
+object, so the new field is additive).
+
+### Added
+
+- `scan_health.unparsed_examples`: up to five project-relative paths of files
+  that were read but could not be parsed (`unparsed_files` remains the exact
+  count). Paths honour `--redact-paths` and are tokenized under
+  `--anonymize`, exactly like `skipped_examples`.
+- `-v` lists the same paths under the "could not be parsed" warning and adds
+  an "... and N more (see unparsed_files in the JSON report)" line when the
+  bound is hit.
+
+### Tests
+
+- Scanner: examples are named, bounded (`UNPARSED_EXAMPLE_LIMIT`),
+  deterministic, and redaction-aware. CLI: JSON and verbose text name the
+  file, the overflow line appears only when needed, and the anonymized
+  report never leaks the file name.
+
 ## 2.39.0 - 2026-09-10
 
 Second staff-review release. Every finding from the round-2 review of

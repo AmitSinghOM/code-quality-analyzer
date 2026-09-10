@@ -58,6 +58,9 @@ class ReportAnonymizer:
             reason: [self.file(path) for path in paths]
             for reason, paths in examples.items()
         }
+        payload["unparsed_examples"] = [
+            self.file(path) for path in payload.get("unparsed_examples", [])
+        ]
         return payload
 
     def package(self, package) -> dict:

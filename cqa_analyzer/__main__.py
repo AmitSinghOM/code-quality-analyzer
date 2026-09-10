@@ -944,6 +944,15 @@ def _print_scan_health(scan_health, scanner):
             "could not be parsed; no semantic signals were used for "
             "those files"
         )
+        examples = scan_health.get("unparsed_examples", [])
+        for path in examples:
+            console.print(f"    - {_safe(path)}")
+        remaining = scanner.unparsed_files - len(examples)
+        if remaining > 0:
+            console.print(
+                f"    ... and {remaining} more (see unparsed_files in "
+                "the JSON report)"
+            )
     if scan_health["truncated"]:
         console.print(
             "[yellow]![/yellow] File limit reached — results cover "

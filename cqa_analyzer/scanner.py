@@ -27,6 +27,10 @@ from .protocols import (
 )
 from .registry import PluginRegistry
 
+# How many unparseable files are named in scan health / verbose output.
+# Bounded so a corrupt tree cannot bloat the report; the count is exact.
+UNPARSED_EXAMPLE_LIMIT = 5
+
 
 @dataclass
 class PatternHit:
@@ -64,6 +68,7 @@ class CodeScanner:
         self.files_successfully_analyzed = 0
         self.total_lines = 0
         self.unparsed_files = 0
+        self.unparsed_examples: list[str] = []
         self.discovery = DiscoveryReport(
             root=self.project_path,
             redact_paths=redact_paths,
@@ -208,6 +213,11 @@ class CodeScanner:
         )
         if not parsed.complete:
             self.unparsed_files += 1
+            # Name the files so the operator can act on the non-authoritative
+            # verdict (bounded like skipped_examples; report_path already
+            # honours --redact-paths).
+            if len(self.unparsed_examples) < UNPARSED_EXAMPLE_LIMIT:
+                self.unparsed_examples.append(report_path)
             return
 
         self.files_successfully_analyzed += 1
@@ -276,6 +286,7 @@ class CodeScanner:
             self.files_successfully_analyzed
         )
         health["unparsed_files"] = self.unparsed_files
+        health["unparsed_examples"] = list(self.unparsed_examples)
         health["languages"] = dict(sorted(self.language_counts.items()))
         health["package_analysis"] = self.package_health
         health["project_analysis"] = {
