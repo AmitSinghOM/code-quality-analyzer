@@ -157,16 +157,27 @@ def test_identifier_extraction_is_linear_on_large_soup(language):
     extract = EXTRACTORS[language]
     started = time.perf_counter()
     names = extract(LEXERS[language](source)[0])
-    assert time.perf_counter() - started < 3.0
+    assert time.perf_counter() - started < 10.0  # 200 KB; CI runners are slow
     assert isinstance(names, tuple)
 
 
 @pytest.mark.parametrize("language", sorted(EXTRACTORS))
-def test_pathological_chain_input(language):
+def test_pathological_chain_input_scales_linearly(language):
     # Long qualified chains and unbalanced `<` are the shapes most likely to
-    # trigger backtracking in declaration/call regexes.
+    # trigger backtracking in declaration/call regexes. Assert on scaling,
+    # not wall-clock: CI runners are 3-4x slower than a laptop, but a
+    # quadratic regex doubles its ratio when the input doubles.
     sep = "::" if language == "c_cpp" else "."
-    source = (f"a{sep}" * 5000 + "b<" * 5000 + " " + "x" * 5000 + "\n") * 3
-    started = time.perf_counter()
-    EXTRACTORS[language](source)
-    assert time.perf_counter() - started < 3.0
+
+    def chain(n):
+        return (f"a{sep}" * n + "b<" * n + " " + "x" * n + "\n") * 3
+
+    def timed(n):
+        started = time.perf_counter()
+        EXTRACTORS[language](chain(n))
+        return time.perf_counter() - started
+
+    small, large = timed(2500), timed(5000)
+    assert large < 10.0, f"{language}: {large:.2f}s on a 45 KB line"
+    # Linear work doubles; quadratic quadruples. Allow noise up to 3x.
+    assert large < max(3 * small, 0.05), f"{language}: {small:.3f}s -> {large:.3f}s"

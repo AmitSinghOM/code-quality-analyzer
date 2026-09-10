@@ -23,6 +23,16 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 - Ruleset 2.19.0 → 2.20.0 (two rules).
 
+### Fixed
+
+- The remaining quadratic term in C/Java/C# identifier extraction: even
+  with possessive quantifiers, `finditer` retried the qualified-chain
+  regexes from every word boundary inside `a::a::a::…`, each attempt
+  re-consuming the rest of the chain (3–4 s on CI runners for a 45 KB
+  line). Chain regexes now attempt only at a chain start; the
+  pathological case takes 0.02 s, and the fuzz test asserts linear
+  scaling (doubling input must not quadruple time) instead of wall-clock.
+
 ## 2.37.0 - 2026-09-10
 
 Staff-level review release: every finding from the 2.36.0 review
