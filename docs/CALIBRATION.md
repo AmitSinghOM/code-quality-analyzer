@@ -1,6 +1,6 @@
 # Cross-language scoring fairness calibration
 
-**Status:** roadmap item 5, calibration round 1 (2.35.0). Re-run with
+**Status:** roadmap item 5 — round 1 (2.35.0, Redis clients + web frameworks), round 2 (2.36.0, CLI tools). Re-run with
 `.venv/bin/python scripts/calibration_corpus.py` (development tool: it
 clones public repositories; the analyzer itself never touches the
 network).
@@ -96,12 +96,13 @@ on a lower bound.
 Scores moved by at most +0.4 (javalin 6.7 → 7.1, gin 5.2 → 5.6) and no
 project moved down.
 
-## What this round does not settle
+## What round 1 did not settle
 
 - **Per-language anchor density** is now equal in *reach* (56/56) but
   not in *depth*: Python has 527 anchor strings, Go 331. The corpus
   does not show that producing systematic bias, but a second corpus
-  domain (a CLI tool, or an ORM) would strengthen the claim.
+  domain (a CLI tool, or an ORM) would strengthen the claim. → *Settled
+  by round 2 below: no systematic bias.*
 - **Mixed-language projects** are scored on the union of signals, which
   is correct for "what does this system use" but means a polyglot repo
   is compared against single-language curves. No change proposed.
@@ -110,7 +111,81 @@ project moved down.
 - A shared UI-component pattern ID (roadmap 5) is still
   unrepresentable and deferred.
 
-## Pattern matrices
+
+## Round 2 (2.36.0): command-line tools — does anchor depth bias the score?
+
+Round 1 left one claim unsettled: anchor *depth* differs (Python 527
+anchor strings, Go 331 before round 1) and a DSA-light domain would be
+where that shows. Round 2 adds the most widely used CLI tool in each
+language:
+
+| language | domain | repo @ sha | files | lines | score | dsa | design | #dsa | #design | auth |
+|---|---|---|---|---|---|---|---|---|---|---|
+| c_cpp | cli-tool | jqlang/jq @ 9d241e2 | 79 | 48022 | 4.6 | 6.38 | 3.55 | 5 | 2 | yes |
+| csharp | cli-tool | dotnet-outdated/dotnet-outdated @ f65c04b | 72 | 7765 | 5.1 | 4.16 | 6.18 | 2 | 9 | yes |
+| go | cli-tool | junegunn/fzf @ 63e82a9 | 89 | 33348 | 5.8 | 6.24 | 5.82 | 5 | 7 | yes |
+| java | cli-tool | jbangdev/jbang @ ea1c3dd | 322 | 48008 | 6.3 | 5.56 | 7.05 | 4 | 11 | yes |
+| kotlin | cli-tool | JakeWharton/diffuse @ e710e90 | 75 | 5109 | 4.8 | 5.89 | 4.27 | 5 | 4 | yes |
+| python | cli-tool | httpie/cli @ 5b604c3 | 133 | 19002 | 6.1 | 7.67 | 5.05 | 7 | 6 | yes |
+| typescript | cli-tool | google/zx @ 65fc542 | 73 | 9884 | 5.0 | 5.75 | 4.77 | 4 | 5 | yes |
+
+### Reading the table
+
+- **Depth does not order the languages.** Python has the most anchors
+  and sits mid-pack (6.1); Java leads (6.3) because jbang is 4x the
+  size of the others; the 72–89-file group spans 4.6–5.8 in an order
+  (Go, C#, TS, Kotlin, C) unrelated to anchor counts. The DSA column is
+  the one most sensitive to vocabulary and it is flat: 4–7 patterns for
+  every language.
+- **Design spread is scope.** dotnet-outdated (9 design patterns) is a
+  DI-container-driven .NET tool; jq (2) is a C interpreter with no
+  logging framework, DI, or test harness in C — its tests are shell
+  scripts, which is correctly not evidence.
+
+### Defects found and fixed in this round
+
+| language | defect | example | fix |
+|---|---|---|---|
+| C | `hash_map` never fired for C: anchors were C++ STL names, but C projects hand-roll hash tables | jq `jvp_object_find_bucket`, `buckets` | `identifier_contains` for `find_bucket`, `hash_bucket`, `hash_lookup`, …; `uthash.h`/`khash.h`/`search.h` includes |
+| TypeScript | `testing` listed only third-party runners | zx tests with `node:test` + `node:assert` | Node/Bun built-in runners, `ava`, `uvu`, `tap`; `test`/`assert` identifiers (still corroboration-gated) |
+
+jq 4.4 → 4.6, zx 4.7 → 5.0; nothing else moved. Verdict for roadmap 5:
+**anchor depth is not producing systematic bias**; remaining gaps are
+per-idiom omissions of the kind above, found one project at a time.
+
+### cli-tool: pattern matrix
+| pattern | python | go | typescript | java | kotlin | csharp | c_cpp |
+|---|---|---|---|---|---|---|---|
+| adapter_pattern | x |  |  | x |  |  |  |
+| authentication |  | x |  |  |  |  |  |
+| backtracking |  |  |  |  |  |  | x |
+| binary_search |  |  |  |  |  |  | x |
+| bit_manipulation | x | x |  |  | x |  | x |
+| builder_pattern | x | x |  | x | x | x |  |
+| caching |  | x |  | x |  |  |  |
+| concurrency |  | x | x | x |  | x | x |
+| config_management |  |  | x | x |  |  |  |
+| decorator_pattern | x |  |  |  |  |  |  |
+| dependency_injection |  |  |  |  |  | x |  |
+| dynamic_programming | x |  | x |  |  |  |  |
+| error_handling | x | x | x | x | x | x | x |
+| factory_pattern |  |  |  | x | x | x |  |
+| hash_map | x | x | x | x | x | x | x |
+| logging |  |  |  | x |  | x |  |
+| lru_cache_manual | x |  |  | x |  |  |  |
+| observability |  |  |  |  |  | x |  |
+| prefix_sum |  | x |  |  |  |  |  |
+| queue_stack |  |  |  |  | x |  |  |
+| rate_limiting | x |  |  |  |  |  |  |
+| resilience |  |  | x |  |  |  |  |
+| set_operations | x | x | x | x | x |  |  |
+| singleton_pattern |  | x |  | x |  | x |  |
+| sorting | x | x | x | x | x | x | x |
+| strategy_pattern |  |  |  | x |  |  |  |
+| testing | x | x | x | x | x | x |  |
+| two_pointers | x |  |  |  |  |  |  |
+
+## Round 1 pattern matrices
 
 ### redis-client: pattern matrix
 | pattern | python | go | typescript | java | kotlin | csharp | c_cpp |

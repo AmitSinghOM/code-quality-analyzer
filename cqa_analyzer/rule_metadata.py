@@ -223,6 +223,29 @@ _RULES = (
         language="go",
     ),
     _rule(
+        "GO-DUP-001",
+        "duplicate-function-implementation",
+        "Duplicate function implementation",
+        "A significant function body is structurally identical to another "
+        "function in the project. Requires the optional [deep] extra.",
+        "duplication",
+        "warning",
+        "Extract the shared implementation into one function and call it "
+        "from each location.",
+        language="go",
+    ),
+    _rule(
+        "GO-MAINT-001",
+        "high-cyclomatic-complexity",
+        "High cyclomatic complexity",
+        "A function exceeds the supported cyclomatic complexity limit. "
+        "Requires the optional [deep] extra.",
+        "maintainability",
+        "warning",
+        "Extract independent decisions into focused helper functions.",
+        language="go",
+    ),
+    _rule(
         "JAVA-COR-001",
         "empty-catch-block",
         "Empty catch block",
@@ -294,6 +317,29 @@ _RULES = (
         "correctness",
         "warning",
         "Handle the failure, log actionable context, or rethrow the exception.",
+        language="c_cpp",
+    ),
+    _rule(
+        "C-DUP-001",
+        "duplicate-function-implementation",
+        "Duplicate function implementation",
+        "A significant function body is structurally identical to another "
+        "function in the project. Requires the optional [deep] extra.",
+        "duplication",
+        "warning",
+        "Extract the shared implementation into one function and call it "
+        "from each location.",
+        language="c_cpp",
+    ),
+    _rule(
+        "C-MAINT-001",
+        "high-cyclomatic-complexity",
+        "High cyclomatic complexity",
+        "A function exceeds the supported cyclomatic complexity limit. "
+        "Requires the optional [deep] extra.",
+        "maintainability",
+        "warning",
+        "Extract independent decisions into focused helper functions.",
         language="c_cpp",
     ),
     _rule(

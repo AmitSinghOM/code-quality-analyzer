@@ -36,6 +36,16 @@ Issues = "https://github.com/AmitSinghOM/code-quality-analyzer/issues"
 Repository = "https://github.com/AmitSinghOM/code-quality-analyzer"
 
 [project.optional-dependencies]
+# Optional tree-sitter depth for Go and C/C++ (duplication + cyclomatic
+# complexity). The default install stays pure Python; these are compiled
+# wheels (abi3) for every supported interpreter. Ranges track the grammar
+# ABI the tree-sitter runtime accepts.
+deep = [
+    "tree-sitter>=0.25,<0.27",
+    "tree-sitter-go>=0.23,<0.26",
+    "tree-sitter-c>=0.23,<0.25",
+    "tree-sitter-cpp>=0.23,<0.24",
+]
 dev = [
     "build==1.6.0",
     # pytest <9.0.3 carries PYSEC-2026-1845; keep this at or above the fix.

@@ -4,6 +4,34 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 2.36.0 - 2026-09-10
+
+### Added
+
+- **Optional `[deep]` extra** (`pip install 'cqa-analyzer[deep]'`):
+  tree-sitter depth for Go and C/C++, resolving roadmap item 3. Adds
+  `GO-DUP-001`/`C-DUP-001` (cross-file duplicate functions with exactly
+  `PY-DUP-001`'s thresholds, nesting rule, grouping, and reporting —
+  the duplication analyzer is now language-neutral) and
+  `GO-MAINT-001`/`C-MAINT-001` (cyclomatic complexity over the shared
+  limit of 10; gocyclo's rule for Go). The default install stays pure
+  Python; without the extra the providers report `available: false`
+  with the install hint and never affect `authoritative`. Functions
+  containing parse errors are excluded from duplication and counted
+  (`functions_excluded_for_parse_errors`); `.h` files use the C grammar
+  unless the blanked text shows C++ syntax. CI gains a `deep-test` job
+  on Python 3.11 and 3.14 that fails if the deep tests skip.
+- Calibration round 2 (`docs/CALIBRATION.md`): the most used CLI tool
+  in each of the seven languages. Anchor depth does not order the
+  languages; roadmap 5's depth question is settled.
+
+### Fixed
+
+- C `hash_map` never fired for C code (anchors were C++ STL names);
+  hand-rolled hash tables (`find_bucket`, `hash_lookup`, uthash/khash)
+  now count. TypeScript `testing` recognises Node's built-in
+  `node:test`/`node:assert` runner, Bun, ava, uvu, and tap.
+
 ## 2.35.0 - 2026-09-10
 
 ### Added
