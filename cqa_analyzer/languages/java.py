@@ -672,7 +672,7 @@ def _parse_version_catalog(root, path) -> dict[str, set[tuple[str, str]]]:
     except (SafeReadError, tomllib.TOMLDecodeError, UnicodeDecodeError):
         return {}
     libraries: dict[str, set[tuple[str, str]]] = {}
-    for alias, spec in (data.get("libraries") or {}).items():
+    for alias, spec in _flatten_aliases(data.get("libraries") or {}):
         coordinates = _catalog_coordinates(spec)
         if coordinates is not None:
             libraries[_catalog_key(alias)] = {coordinates}
@@ -684,6 +684,26 @@ def _parse_version_catalog(root, path) -> dict[str, set[tuple[str, str]]]:
             if resolved:
                 libraries[_catalog_key(f"bundles-{alias}")] = resolved
     return libraries
+
+
+def _flatten_aliases(table: object, prefix: str = "") -> list[tuple[str, object]]:
+    """Yield (alias, spec) pairs, flattening TOML dotted keys.
+
+    `[libraries] groovy.core = { module = "..." }` parses as a nested table
+    `{"groovy": {"core": {...}}}`; Gradle treats it as alias `groovy-core`
+    (round 2, C3). A table that itself looks like a spec (has `module`,
+    `group`, or `name`) is a leaf.
+    """
+    if not isinstance(table, dict):
+        return []
+    pairs: list[tuple[str, object]] = []
+    for key, value in table.items():
+        alias = f"{prefix}-{key}" if prefix else str(key)
+        if isinstance(value, dict) and not ({"module", "group", "name"} & set(value)):
+            pairs.extend(_flatten_aliases(value, alias))
+        else:
+            pairs.append((alias, value))
+    return pairs
 
 
 def _catalog_coordinates(spec: object) -> tuple[str, str] | None:

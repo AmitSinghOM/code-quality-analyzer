@@ -45,6 +45,11 @@ DEFAULT_MAX_FILE_SIZE = 2 * 1024 * 1024
 # Refuse to walk unbounded trees.
 DEFAULT_MAX_FILES = 20_000
 
+# Total bytes read across a scan. 20,000 files x 2 MB would be 40 GB held in
+# memory as facts; a hostile tree must not be able to OOM the scanner
+# (staff review round 2, A3). Reported as truncation, never silently.
+DEFAULT_MAX_TOTAL_BYTES = 512 * 1024 * 1024
+
 
 @dataclass
 class DiscoveryReport:
@@ -57,6 +62,20 @@ class DiscoveryReport:
     skipped: dict[str, int] = field(default_factory=dict)
     skipped_examples: dict[str, list[str]] = field(default_factory=dict)
     truncated: bool = False
+    truncated_reasons: list[str] = field(default_factory=list)
+    bytes_read: int = 0
+    pruned_directories: int = 0
+    pruned_examples: list[str] = field(default_factory=list)
+
+    def prune(self, name: str) -> None:
+        self.pruned_directories += 1
+        if len(self.pruned_examples) < 5 and name not in self.pruned_examples:
+            self.pruned_examples.append(name)
+
+    def truncate(self, reason: str) -> None:
+        self.truncated = True
+        if reason not in self.truncated_reasons:
+            self.truncated_reasons.append(reason)
 
     def skip(self, reason: str, path: Path) -> None:
         self.skipped[reason] = self.skipped.get(reason, 0) + 1
@@ -81,6 +100,10 @@ class DiscoveryReport:
             "skipped_by_reason": dict(sorted(self.skipped.items())),
             "skipped_examples": self.skipped_examples,
             "truncated": self.truncated,
+            "truncated_reasons": list(self.truncated_reasons),
+            "bytes_read": self.bytes_read,
+            "pruned_directories": self.pruned_directories,
+            "pruned_examples": list(self.pruned_examples),
         }
 
 
@@ -91,6 +114,7 @@ def iter_source_files(
     max_files: int = DEFAULT_MAX_FILES,
     report: DiscoveryReport | None = None,
     analysis: AnalysisConfig | None = None,
+    max_total_bytes: int = DEFAULT_MAX_TOTAL_BYTES,
 ) -> Iterator[tuple[Path, str]]:
     """Yield safe UTF-8 source files matching registered extensions."""
     root = Path(root).resolve()
@@ -115,6 +139,11 @@ def iter_source_files(
         text = read_source(path, root, max_file_size, report)
         if text is None:
             continue
+        encoded = len(text.encode("utf-8", "surrogatepass"))
+        if report.bytes_read + encoded > max_total_bytes:
+            report.truncate("byte_budget")
+            return
+        report.bytes_read += encoded
         report.files_found += 1
         yield path, text
 
@@ -145,9 +174,16 @@ def _candidate_paths(
     analysis: AnalysisConfig,
 ) -> Iterator[Path]:
     seen = 0
+    skip = SKIP_DIRS - set(analysis.keep_directories)
     # followlinks=False: symlinked directories are not descended into.
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
-        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
+        kept = []
+        for name in sorted(dirnames):
+            if name in skip:
+                report.prune(name)
+            else:
+                kept.append(name)
+        dirnames[:] = kept
         for name in sorted(filenames):
             if not name.lower().endswith(extensions):
                 continue
@@ -156,7 +192,7 @@ def _candidate_paths(
             if not path_is_selected(relative_path, analysis):
                 continue
             if seen >= max_files:
-                report.truncated = True
+                report.truncate("file_limit")
                 return
             seen += 1
             report.source_candidates += 1

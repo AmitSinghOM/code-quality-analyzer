@@ -221,18 +221,30 @@ def _parse(spec: GrammarSpec, source: str):
 # providers. The scanner hands both providers the same parsed_files mapping
 # object for a run, so its identity scopes the cache; a new run (or another
 # language) replaces it, bounding memory to one language's trees.
-_TREE_CACHE: dict = {"owner": None, "owner_ref": None, "trees": {}}
+# Bounded (staff review round 2, A4): above this many files the second
+# provider re-parses instead of holding every tree of the language at once.
+# Lifetime is one scan: the scanner calls clear_tree_cache() after its
+# project providers run, so a finished scan never pins its parsed files.
+# (Plain dicts are not weak-referenceable, so identity + explicit clear.)
+TREE_CACHE_MAX_FILES = 2_000
+_TREE_CACHE: dict = {"owner_id": None, "trees": {}}
 
 
 def _tree_for(parsed: ParsedFile, language_id: str, owner: object):
-    if _TREE_CACHE["owner_ref"] is not owner:
-        _TREE_CACHE.update(owner=id(owner), owner_ref=owner, trees={})
+    if _TREE_CACHE["owner_id"] != id(owner):
+        _TREE_CACHE.update(owner_id=id(owner), trees={})
     entry = _TREE_CACHE["trees"].get(parsed.source.identity_path)
     if entry is None or entry[0] is not parsed:
         spec = _spec_for(parsed, language_id)
         entry = (parsed, spec, _parse(spec, parsed.source.content))
-        _TREE_CACHE["trees"][parsed.source.identity_path] = entry
+        if len(owner) <= TREE_CACHE_MAX_FILES:
+            _TREE_CACHE["trees"][parsed.source.identity_path] = entry
     return entry[1], entry[2]
+
+
+def clear_tree_cache() -> None:
+    """Drop cached trees; the scanner calls this once its providers finish."""
+    _TREE_CACHE.update(owner_id=None, trees={})
 
 
 def _walk(node) -> Iterable:
@@ -402,8 +414,20 @@ def _cognitive(body, spec: GrammarSpec) -> int:
 
 
 def _cyclomatic(body, spec: GrammarSpec) -> int:
+    """Cyclomatic complexity with Python's counting scope.
+
+    Nested function literals and lambdas are *not* entered — the same
+    scope as ``PY-MAINT-001`` and as ``_cognitive`` below. (gocyclo folds
+    closures into the enclosing function; parity across languages matters
+    more here than parity with one Go tool.)
+    """
     complexity = 1
-    for node in _walk(body):
+    stack = [body]
+    while stack:
+        node = stack.pop()
+        if node.type in spec.nested_function_types:
+            continue
+        stack.extend(reversed(node.children))
         if node.type in spec.decision_types:
             if (
                 node.type == "case_statement"

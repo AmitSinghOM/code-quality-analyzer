@@ -4,6 +4,66 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 2.39.0 - 2026-09-10
+
+Second staff-review release. Every finding from the round-2 review of
+2.38.1 is addressed. No weight or curve changed; scoring policy stays
+2.0.0.
+
+### Security
+
+- **CI gates can be pinned outside the tree being gated.** New
+  `--config PATH` (use this file, ignore the repository's own
+  `.code-quality.toml`), `--no-project-config` (defaults only), and
+  `--expect-config-fingerprint SHA256` (exit **6** before analysis if the
+  effective configuration differs). Previously a pull request could
+  disable a rule or exclude a path and pass `--fail-on`.
+- **Text reporter no longer crashes on markup in paths or names.** A file
+  named `arr[/i].py` raised Rich's `MarkupError`; source-derived text is
+  now escaped and C0 control characters stripped.
+- **Total read budget** (512 MB, `truncated_reasons: ["byte_budget"]`)
+  bounds memory against trees that would otherwise OOM the scanner.
+- **`[deep]` tree cache is bounded** (2,000 files; larger languages
+  re-parse) and cleared by the scanner when its providers finish.
+- **gitignore character-class fuzzing** found that a body like `[s-:]`
+  made `re.compile` raise; class bodies are now rendered safely.
+
+### Fixed — regressions from 2.37.0
+
+- TypeScript: `return'x'`, `case'a':`, `typeof'a'` (keyword-glued
+  strings, common in minified code) are strings again; the JSX-apostrophe
+  rule applies only to non-keyword identifiers.
+- `[deep]` cyclomatic complexity no longer enters nested function
+  literals or lambdas — the same scope as `PY-MAINT-001` and as cognitive
+  complexity. (Deliberate deviation from gocyclo; parity wins.)
+- `architecture_signal_scope.by_language` lists every scanned language,
+  including ones with files but no signals.
+- Skip-list pruning is accounted for (`pruned_directories`,
+  `pruned_examples`), and `[analysis] keep_directories` opts first-party
+  `external/`-style directories back in.
+
+### Fixed — language logic
+
+- Python: a commented `except: pass` is a documented swallow and reports
+  `PY-COR-003` at `note`, matching the other five languages.
+- Gradle: version-catalog aliases written as TOML dotted keys
+  (`groovy.core = …`) flatten to `groovy-core`.
+- CMake: `target_link_libraries(x ${VAR})` marks the manifest chain as
+  unknowable (`variable_bound_links`) and suppresses `C-PKG-001`.
+- gitignore: `[abc]`, `[a-z]`, `[!x]` character classes match like git.
+
+### Added
+
+- Release gate: the newest dated CHANGELOG heading must equal
+  `__version__`.
+- Fuzzing of the manifest parsers (Gradle regexes, catalog flattening,
+  CMake tokenizer, glob translator).
+
+### Changed
+
+- Ruleset 2.20.0 → 2.21.0 (severity semantics of `PY-COR-003`; scope of
+  `GO-MAINT-001`/`C-MAINT-001`).
+
 ## 2.38.1 - 2026-09-10
 
 ### Fixed

@@ -96,6 +96,10 @@ class CodeScanner:
         ):
             self._scan_file(path, content)
         self._run_default_project_providers()
+        # Deep providers share parse trees for the duration of this scan only.
+        from .deep import clear_tree_cache
+
+        clear_tree_cache()
         return self.dsa_found, self.design_found
 
     def _project_context(self, language_id: str) -> ProjectContext:
@@ -297,14 +301,14 @@ class CodeScanner:
         # Per-language breakdown (staff review D2): a polyglot repository is
         # scored on the union of its signals; this shows which language
         # contributed what, without changing the score.
-        by_language = {
-            language: {
+        by_language = {}
+        for language in sorted(set(self.parsed_files) | set(self.signals_by_language)):
+            found = self.signals_by_language.get(language, {"dsa": set(), "design": set()})
+            by_language[language] = {
                 "files": len(self.parsed_files.get(language, {})),
                 "dsa_patterns": sorted(found["dsa"]),
                 "design_patterns": sorted(found["design"]),
             }
-            for language, found in sorted(self.signals_by_language.items())
-        }
         return {
             "languages": languages,
             "applicable": applicable,

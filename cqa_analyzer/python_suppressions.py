@@ -33,3 +33,19 @@ def suppression_lines(source: str) -> frozenset[tuple[int, str]]:
     except (IndentationError, tokenize.TokenError):
         return frozenset()
     return frozenset(suppressions)
+
+
+def comment_lines(source: str) -> frozenset[int]:
+    """Return every line number that carries a comment token.
+
+    Used to recognise documented intent (``except Exception: pass  # best
+    effort``) the same way the regex-language empty-catch rules do.
+    """
+    lines = set()
+    try:
+        for token in tokenize.generate_tokens(io.StringIO(source).readline):
+            if token.type == tokenize.COMMENT:
+                lines.add(token.start[0])
+    except (tokenize.TokenError, SyntaxError):
+        return frozenset(lines)
+    return frozenset(lines)

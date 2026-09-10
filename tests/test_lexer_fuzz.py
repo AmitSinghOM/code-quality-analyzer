@@ -17,6 +17,7 @@ must, for every input:
 from __future__ import annotations
 
 import random
+import re
 import time
 
 import pytest
@@ -181,3 +182,87 @@ def test_pathological_chain_input_scales_linearly(language):
     assert large < 10.0, f"{language}: {large:.2f}s on a 45 KB line"
     # Linear work doubles; quadratic quadruples. Allow noise up to 3x.
     assert large < max(3 * small, 0.05), f"{language}: {small:.3f}s -> {large:.3f}s"
+
+
+# --- Manifest parsers (round 2, D2): attacker-controlled in a fork PR. -------
+
+from cqa_analyzer.config import _glob_matches, _translate_glob  # noqa: E402
+from cqa_analyzer.languages.c_family import _cmake_tokens  # noqa: E402
+from cqa_analyzer.languages.java import (  # noqa: E402
+    _GRADLE_CATALOG_REF,
+    _GRADLE_DEPENDENCY,
+    _catalog_coordinates,
+    _flatten_aliases,
+)
+
+MANIFEST_TOKENS = [
+    "implementation",
+    "(",
+    ")",
+    '"',
+    "'",
+    ":",
+    ".",
+    "-",
+    "libs",
+    "platform",
+    "\n",
+    " ",
+    "a",
+    "b",
+    "1",
+    "$",
+    "{",
+    "}",
+    "target_link_libraries",
+    "find_package",
+    "#",
+    "::",
+    "[",
+    "]",
+    "!",
+    "*",
+    "?",
+    "/",
+    "\\",
+    "**",
+    "module",
+    "group",
+    "name",
+    "=",
+    ",",
+]
+
+
+def manifest_soup(seed: int, size: int) -> str:
+    rng = random.Random(seed)  # noqa: S311 - deterministic test corpus
+    parts, length = [], 0
+    while length < size:
+        token = rng.choice(MANIFEST_TOKENS)
+        parts.append(token)
+        length += len(token)
+    return "".join(parts)
+
+
+@pytest.mark.parametrize("seed", range(8))
+def test_manifest_regexes_and_glob_translator_terminate_on_soup(seed):
+    text = manifest_soup(seed, 50_000)
+    started = time.perf_counter()
+    list(_GRADLE_DEPENDENCY.finditer(text))
+    list(_GRADLE_CATALOG_REF.finditer(text))
+    _cmake_tokens(text)
+    for line in text.splitlines()[:200]:
+        pattern = line.strip()
+        if pattern:
+            re.compile(_translate_glob(pattern))  # must be a valid regex
+            _glob_matches(pattern, "some/path/file.py")
+    assert time.perf_counter() - started < 5.0
+
+
+def test_catalog_flattening_and_coordinates_never_raise():
+    weird = {"a": {"b": {"c": {"module": "g:a"}}}, "d": "x", "e": 5, "f": [1], "g": {"name": "n"}}
+    pairs = dict(_flatten_aliases(weird))
+    assert pairs["a-b-c"] == {"module": "g:a"}
+    assert pairs["g"] == {"name": "n"}  # incomplete spec is a leaf, resolves to None
+    for spec in (None, 5, [], {}, "", ":", "g:", ":a", {"module": ":"}, {"group": "g"}):
+        assert _catalog_coordinates(spec) is None or isinstance(_catalog_coordinates(spec), tuple)

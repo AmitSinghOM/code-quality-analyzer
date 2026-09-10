@@ -678,6 +678,7 @@ class CCMakePackageProvider:
                     "project": manifests[directory]["project"],
                     "unreadable": manifests[directory]["unreadable"],
                     "find_packages": sorted(manifests[directory]["find_packages"]),
+                    "variable_bound_links": manifests[directory]["variable_bound_links"],
                     "undeclared_headers": [
                         header for header, _, _ in undeclared.get(directory, [])
                     ],
@@ -699,7 +700,13 @@ _CMAKE_FIND_PACKAGE = re.compile(r"(?im)^\s*find_package\s*\(\s*([A-Za-z_][\w.+-
 
 
 def _load_cmake_manifest(root: Path, directory: str) -> dict:
-    info = {"project": None, "find_packages": set(), "tokens": frozenset(), "unreadable": False}
+    info = {
+        "project": None,
+        "find_packages": set(),
+        "tokens": frozenset(),
+        "unreadable": False,
+        "variable_bound_links": False,
+    }
     try:
         text = read_bounded_text(
             root / directory / "CMakeLists.txt",
@@ -713,7 +720,15 @@ def _load_cmake_manifest(root: Path, directory: str) -> dict:
     info["project"] = project.group(1) if project else None
     info["find_packages"] = {m.group(1) for m in _CMAKE_FIND_PACKAGE.finditer(text)}
     info["tokens"] = _cmake_tokens(text)
+    # `target_link_libraries(x ${DEPS})` may bind anything (round 2, C4): a
+    # manifest whose link lines expand variables makes no drift claims.
+    info["variable_bound_links"] = bool(_CMAKE_VARIABLE_LINK.search(_CMAKE_COMMENT.sub("", text)))
     return info
+
+
+_CMAKE_VARIABLE_LINK = re.compile(
+    r"target_link_libraries\s*\([^)]*\$\{[^)]*\)", re.IGNORECASE | re.DOTALL
+)
 
 
 # Whole-word CMake tokens (identifiers, `Pkg::Target`, quoted names), lower-
@@ -753,6 +768,8 @@ def _undeclared_headers(
             continue
         chain = manifest_chain(directory, manifest_dirs)
         if any(manifests[entry]["unreadable"] for entry in chain):
+            continue
+        if any(manifests[entry].get("variable_bound_links") for entry in chain):
             continue
         declared_tokens = set()
         for entry in chain:

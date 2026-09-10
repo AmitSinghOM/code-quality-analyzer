@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
 import click
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
@@ -36,12 +38,26 @@ from .scanner import CodeScanner
 
 console = Console()
 
+_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def _safe(value: object) -> str:
+    """Render source-derived text (paths, names, messages) inertly.
+
+    Rich treats ``[...]`` as markup and raises on a mismatched closing tag,
+    so a file named ``arr[/i].py`` used to crash the text reporter; C0
+    control characters could garble the terminal. Both are attacker-
+    controllable in a fork PR (staff review round 2, A2/D3).
+    """
+    return escape(_CONTROL_CHARS.sub("", str(value)))
+
 EXIT_OK = 0
 EXIT_BELOW_THRESHOLD = 1
 EXIT_NOTHING_ANALYZED = 2
 EXIT_COVERAGE_GAP = 3
 EXIT_FINDINGS = 4
 EXIT_SCORE_NOT_APPLICABLE = 5
+EXIT_CONFIG_MISMATCH = 6
 
 
 @click.command()
@@ -162,6 +178,30 @@ EXIT_SCORE_NOT_APPLICABLE = 5
     is_flag=True,
     help="Exit non-zero if any requested analysis is incomplete",
 )
+@click.option(
+    "--config",
+    "config_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help=(
+        "Use this configuration file and ignore the project's own "
+        ".code-quality.toml (pin the gate outside the tree being gated)"
+    ),
+)
+@click.option(
+    "--no-project-config",
+    is_flag=True,
+    help="Ignore the project's .code-quality.toml and run with defaults",
+)
+@click.option(
+    "--expect-config-fingerprint",
+    default=None,
+    metavar="SHA256",
+    help=(
+        "Exit with code 6 unless the effective configuration fingerprint "
+        "equals this value (detects a PR that edits the gate's configuration)"
+    ),
+)
 def main(
     project_path: str,
     verbose: bool,
@@ -180,10 +220,15 @@ def main(
     new_findings_only: bool,
     changed_lines_manifest: Path | None,
     strict: bool,
+    config_path: Path | None,
+    no_project_config: bool,
+    expect_config_fingerprint: str | None,
 ):
     """Analyze a project without sending source outside the machine."""
     if new_findings_only and baseline_path is None:
         raise click.UsageError("--new-findings-only requires --baseline")
+    if config_path is not None and no_project_config:
+        raise click.UsageError("--config and --no-project-config are mutually exclusive")
 
     try:
         with enforce_offline(offline):
@@ -205,6 +250,9 @@ def main(
                 new_findings_only=new_findings_only,
                 changed_lines_manifest=changed_lines_manifest,
                 strict=strict,
+                config_path=config_path,
+                no_project_config=no_project_config,
+                expect_config_fingerprint=expect_config_fingerprint,
             )
     except OfflineViolationError as error:
         raise click.ClickException(str(error)) from error
@@ -231,12 +279,32 @@ def _run_analysis(
     new_findings_only: bool,
     changed_lines_manifest: Path | None,
     strict: bool,
+    config_path: Path | None = None,
+    no_project_config: bool = False,
+    expect_config_fingerprint: str | None = None,
 ) -> int:
     root = Path(project_path).resolve()
     try:
-        configuration = load_config(root)
+        configuration = load_config(
+            root,
+            config_path=config_path,
+            use_project_config=not no_project_config,
+        )
     except ConfigError as error:
         raise click.ClickException(str(error)) from error
+    if (
+        expect_config_fingerprint is not None
+        and configuration.fingerprint != expect_config_fingerprint.strip().lower()
+    ):
+        # The gate's configuration is not what the workflow pinned. Say so
+        # before analysing anything, with a code no other outcome uses.
+        console.print(
+            "[bold red]Configuration fingerprint mismatch:[/bold red] expected "
+            f"{escape(expect_config_fingerprint)}, effective "
+            f"{configuration.fingerprint}. The project's .code-quality.toml "
+            "differs from the one this gate was pinned to."
+        )
+        return EXIT_CONFIG_MISMATCH
 
     changed_line_selection = None
     if changed_lines_manifest is not None:
@@ -731,7 +799,7 @@ def _emit_text(
     offline,
     redact_paths,
 ):
-    console.print(f"\n[bold blue]Analyzing:[/bold blue] {project_label}\n")
+    console.print(f"\n[bold blue]Analyzing:[/bold blue] {_safe(project_label)}\n")
     privacy = _privacy_payload(
         anonymizer,
         offline,
@@ -868,7 +936,7 @@ def _print_scan_health(scan_health, scanner):
         )
         console.print(
             f"[yellow]![/yellow] {scan_health['total_skipped']} "
-            f"file(s) skipped ({reasons})"
+            f"file(s) skipped ({_safe(reasons)})"
         )
     if scanner.unparsed_files:
         console.print(
@@ -917,8 +985,8 @@ def _print_package_intelligence(package):
             return
         console.print(Panel(
             "[bold]Project metadata declared:[/bold] "
-            f"{package['project_name_declared']}\n"
-            f"[bold]Layout:[/bold] {package['layout']}\n"
+            f"{_safe(package['project_name_declared'])}\n"
+            f"[bold]Layout:[/bold] {_safe(package['layout'])}\n"
             f"[bold]Modules:[/bold] {package['module_count']}\n"
             f"[bold]Declared dependencies:[/bold] "
             f"{package['dependency_count']}\n"
@@ -935,8 +1003,8 @@ def _print_package_intelligence(package):
     name = package.project_name or "not declared"
     source_roots = ", ".join(package.source_roots) or "none"
     console.print(Panel(
-        f"[bold]Project:[/bold] {name}\n"
-        f"[bold]Layout:[/bold] {package.layout} ({source_roots})\n"
+        f"[bold]Project:[/bold] {_safe(name)}\n"
+        f"[bold]Layout:[/bold] {_safe(package.layout)} ({_safe(source_roots)})\n"
         f"[bold]Modules:[/bold] {len(package.modules)}\n"
         f"[bold]Declared dependencies:[/bold] "
         f"{len(package.dependencies)}\n"
@@ -964,8 +1032,8 @@ def _print_findings(findings):
             row = (
                 finding["rule_id"],
                 finding["severity"],
-                f"{location['path']}:{location['line']}:{location['column']}",
-                finding["message"],
+                f"{_safe(location['path'])}:{location['line']}:{location['column']}",
+                _safe(finding["message"]),
                 finding["remediation"],
             )
         else:
@@ -973,8 +1041,8 @@ def _print_findings(findings):
             row = (
                 finding.rule_id,
                 finding.severity,
-                f"{location.path}:{location.line}:{location.column}",
-                finding.message,
+                f"{_safe(location.path)}:{location.line}:{location.column}",
+                _safe(finding.message),
                 finding.remediation,
             )
         table.add_row(*row)
@@ -1014,7 +1082,7 @@ def _print_pattern_table(
         if verbose:
             for hit in evidence.get(pattern, [])[:3]:
                 if anonymizer is None:
-                    detail = f"{hit.file} ({', '.join(hit.signals[:4])})"
+                    detail = _safe(f"{hit.file} ({', '.join(hit.signals[:4])})")
                 else:
                     detail = (
                         f"{anonymizer.file(hit.file)} "
@@ -1076,8 +1144,8 @@ def _print_complexity(complexity_data, verbose):
 
     for function in complexity_data.get("high_complexity_functions", [])[:10]:
         table.add_row(
-            function["name"],
-            function["file"],
+            _safe(function["name"]),
+            _safe(function["file"]),
             str(function["line"]),
             function["time"],
             function["space"],

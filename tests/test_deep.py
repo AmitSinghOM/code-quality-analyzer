@@ -131,9 +131,9 @@ def test_cognitive_complexity_mirrors_python_rules(project):
     result = payload["project_analyses"]["go:complexity"]["result"]
     assert result["functions_analyzed"] == 1
     assert result["average_cognitive"] == 11.0  # 1 + 2 + 1 + 3 + 4
-    # gocyclo counts the closure into its enclosing function:
-    # 1 + for + if + 3×&& + if + else-if + closure if = 9.
-    assert result["average_cyclomatic"] == 9.0
+    # Same scope as PY-MAINT-001: the closure's `if` is NOT counted.
+    # 1 + for + if + 3×&& + if + else-if = 8.
+    assert result["average_cyclomatic"] == 8.0
     assert not [f for f in payload["findings"] if f["rule_id"] == "GO-MAINT-002"]
 
     deep_nest = (
@@ -242,7 +242,7 @@ def test_engine_load_failure_degrades_to_unavailable(project, monkeypatch):
         raise deep.DeepEngineError("tree_sitter_go: ValueError: Incompatible Language version 15")
 
     monkeypatch.setattr(deep, "_parser", broken)
-    deep._TREE_CACHE.update(owner=None, owner_ref=None, trees={})
+    deep.clear_tree_cache()
     root = project({"go.mod": "module x\n", "a.go": "package x\nfunc F() int { return 1 }\n"})
     payload = scan_json(root)
     dup = payload["project_analyses"]["go:duplication"]
@@ -276,7 +276,7 @@ def test_generated_go_is_skipped_and_trees_are_parsed_once(project, monkeypatch)
         return real_parse(spec, source)
 
     monkeypatch.setattr(deep, "_parse", counting)
-    deep._TREE_CACHE.update(owner=None, owner_ref=None, trees={})
+    deep.clear_tree_cache()
     payload = scan_json(root)
     dup = payload["project_analyses"]["go:duplication"]["result"]
     assert dup["files_skipped_generated"] == 1
@@ -303,3 +303,35 @@ def test_deep_and_python_thresholds_are_shared():
 
     assert (MIN_BODY_STATEMENTS, MIN_BODY_NODES, CYCLOMATIC_COMPLEXITY_LIMIT) == (3, 40, 10)
     assert deep.availability()["tree-sitter"]
+
+
+@needs_deep
+def test_tree_cache_is_bounded_and_does_not_pin_finished_scans(project, monkeypatch):
+    # Round 2, A4.
+    import gc
+
+    root = project(
+        {
+            "go.mod": "module x\n",
+            "a.go": "package x\nfunc A() int { return 1 }\n",
+            "b.go": "package x\nfunc B() int { return 2 }\n",
+        }
+    )
+    parses = []
+    real_parse = deep._parse
+    monkeypatch.setattr(
+        deep, "_parse", lambda spec, src: (parses.append(1), real_parse(spec, src))[1]
+    )
+
+    monkeypatch.setattr(deep, "TREE_CACHE_MAX_FILES", 1)
+    scan_json(root)
+    # Two files > limit of 1: nothing cached, each provider parsed both files.
+    assert len(parses) == 4
+
+    parses.clear()
+    monkeypatch.setattr(deep, "TREE_CACHE_MAX_FILES", 2_000)
+    scan_json(root)
+    assert len(parses) == 2  # shared between duplication and complexity
+    # The scanner clears the cache when its providers finish: nothing pinned.
+    assert deep._TREE_CACHE["trees"] == {} and deep._TREE_CACHE["owner_id"] is None
+    gc.collect()

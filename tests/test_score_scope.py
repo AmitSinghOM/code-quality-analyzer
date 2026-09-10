@@ -54,7 +54,11 @@ def test_scope_is_not_applicable_without_signal_providers(project):
     scanner.scan()
     scope = scanner.architecture_signal_scope()
 
-    assert scope == {"languages": [], "applicable": False, "by_language": {}}
+    assert scope == {
+        "languages": [],
+        "applicable": False,
+        "by_language": {"go": {"files": 1, "dsa_patterns": [], "design_patterns": []}},
+    }
 
 
 def test_fail_under_on_not_applicable_score_exits_distinctly(project):
@@ -123,11 +127,14 @@ def test_by_language_breakdown_shows_each_languages_contribution(project):
                 "import express from 'express';\nconst app = express();\n"
                 "app.get('/x', () => 1);\n"
             ),
+            "tool/main.go": "package main\n\nfunc main() {}\n",
         }
     )
     payload = json.loads(run([str(root), "-f", "json"]).output)
     by_language = payload["architecture_signal_scope"]["by_language"]
-    assert set(by_language) == {"python", "typescript"}
+    assert set(by_language) == {"python", "typescript", "go"}
+    # Round 2, B3: a language with files but no signals is still listed.
+    assert by_language["go"] == {"files": 1, "dsa_patterns": [], "design_patterns": []}
     assert by_language["python"]["files"] == 1
     assert "hash_map" in by_language["python"]["dsa_patterns"]
     assert "api_design" in by_language["typescript"]["design_patterns"]
