@@ -4,6 +4,18 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 2.38.1 - 2026-09-10
+
+### Fixed
+
+- README **Upgrade** section: the pinned-version example had gone stale
+  one release after it was written. `docs/RELEASING.md` step 2 now names
+  the bump, and `tests/test_release_metadata.py` fails when any README
+  `cqa-analyzer==X.Y.Z` pin differs from `__version__` (lines marked
+  "last release", such as the final Python 3.10 pin, are exempt).
+
+No analyzer, rule, or scoring change.
+
 ## 2.38.0 - 2026-09-10
 
 ### Added
