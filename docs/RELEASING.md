@@ -42,7 +42,10 @@ Run every step from the package root with a clean working tree.
 
 2. **Versions.** Confirm `cqa_analyzer/__init__.py` (`__version__`,
    `RULESET_VERSION`) and the `CHANGELOG.md` entry agree, and that the
-   changelog entry is dated.
+   changelog entry is dated. Update the pinned-version example in the
+   README's **Upgrade** section (`cqa-analyzer==X.Y.Z`) to the new
+   version — `tests/test_release_metadata.py` fails if it is stale, so
+   the gate in step 1 catches a forgotten bump.
 
 3. **Merge to main and publish a GitHub release** whose tag is
    `vX.Y.Z` matching `__version__`. Publishing the release triggers

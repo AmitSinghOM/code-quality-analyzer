@@ -42,3 +42,22 @@ def test_public_package_metadata_is_complete():
     )
     assert "Programming Language :: Python :: 3.11" in metadata["classifiers"]
     assert "Programming Language :: Python :: 3.10" not in metadata["classifiers"]
+
+
+def test_readme_upgrade_example_pins_the_current_version():
+    """The README's `cqa-analyzer==X.Y.Z` example must not go stale.
+
+    docs/RELEASING.md step 2 updates it; this makes forgetting a red build
+    rather than a stale instruction users copy-paste.
+    """
+    import re
+
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    pinned = set()
+    for line in readme.splitlines():
+        if "last release" in line:
+            continue  # deliberately historical, e.g. the final Python 3.10 release
+        pinned.update(re.findall(r"cqa-analyzer==(\d+\.\d+\.\d+)", line))
+    assert pinned == {cqa_analyzer.__version__}, (
+        f"README pins {sorted(pinned)}; __version__ is {cqa_analyzer.__version__}"
+    )
