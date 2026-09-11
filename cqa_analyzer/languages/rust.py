@@ -1,4 +1,4 @@
-"""Rust pilot (experimental, registered only with the ``[deep]`` extra).
+"""Rust language support (first-class since 2.43.0).
 
 Bounded, no-toolchain discipline like the other pilots: comments (nested
 block comments included), strings (``"…"``, ``r#"…"#``, ``b"…"``) and char
@@ -11,13 +11,17 @@ Rules:
 * ``RS-COR-001`` — ``.unwrap()`` density outside test code (the Rust
   analogue of the Kotlin/TypeScript non-null rules; ``.expect("why")`` is
   documented intent and is not counted).
+* ``RS-COR-002`` — SQL assembled with ``format!``/``write!`` or ``+``.
+* ``RS-COR-003`` — ``thread::sleep``, ``std::fs``, ``block_on`` inside an
+  ``async fn`` (closures excluded: ``spawn_blocking(|| …)`` is the fix).
+* ``RS-COR-004`` — crate-wide ``#![allow(dead_code | unused | warnings)]``
+  without a ``reason`` (Stack Overflow's 4th most-voted Rust question).
 * ``RS-PKG-001`` — a crate used via ``use``/``extern crate`` that no
   governing ``Cargo.toml`` declares; ``RS-PKG-002`` — unreadable manifest.
 
 Duplication and complexity (``RS-DUP-001``, ``RS-MAINT-001/002``) come from
-the tree-sitter deep providers, which is why the whole pilot is gated on
-``tree-sitter-rust``: a Rust project scored without them would be capped
-below the other languages.
+the tree-sitter deep providers and self-report ``available: false`` without
+the ``[deep]`` extra, exactly as Go and C/C++ do.
 """
 
 from __future__ import annotations
@@ -47,11 +51,19 @@ from ..protocols import (
 from ..registry import PluginRegistry
 from ..rust_patterns import RUST_DESIGN_PATTERNS, RUST_DSA_PATTERNS
 from ..safe_io import SafeReadError, read_bounded_text
-from ._parity import NON_NULL_LIMIT, block_end, downgrade_in_tests, is_test_path
-from ._shared import RegexRulePackBase, line_column, signal_observations
+from ._parity import (
+    NON_NULL_LIMIT,
+    block_end,
+    blocking_in_async_findings,
+    downgrade_in_tests,
+    is_test_path,
+)
+from ..signals import FileSignals, pattern_is_present
+from ._shared import RegexRulePackBase, line_column
+from ._sql import RUST_SQL, dynamic_sql_findings
 
-RUST_ADAPTER_VERSION = "0.1.0"
-RUST_CACHE_CODEC_VERSION = "0.1.0"
+RUST_ADAPTER_VERSION = "1.0.0"
+RUST_CACHE_CODEC_VERSION = "1.0.0"
 RUST_RULE_PACK_ID = "rust-core"
 _MAX_CACHED_STRING = 4 * 1024 * 1024
 _MAX_IDENTIFIERS = 20_000
@@ -440,15 +452,145 @@ class RustUnwrapDensityRule:
 
 
 class RustRulePack(RegexRulePackBase):
-    """Run the bounded built-in Rust pilot rules."""
+    """Run the bounded built-in Rust rules."""
 
     rule_pack_id = RUST_RULE_PACK_ID
     language_id = "rust"
-    ruleset_version = "0.1.0"
+    ruleset_version = "1.0.0"
     plugin_api_version = PLUGIN_API_VERSION
 
     def __init__(self) -> None:
-        self.rules = (RustUnwrapDensityRule(),)
+        self.rules = (
+            RustUnwrapDensityRule(),
+            RustDynamicSqlRule(),
+            RustBlockingInAsyncRule(),
+            RustUnexplainedLintAllowRule(),
+        )
+
+
+class RustDynamicSqlRule:
+    """Detect SQL text built with ``format!`` / ``write!`` or ``+`` concatenation."""
+
+    rule_id = "RS-COR-002"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, RustFacts):
+            return
+        yield from dynamic_sql_findings(self.rule_id, parsed, RUST_SQL)
+
+
+# ``async fn name<T>(…) -> R where … {`` — the header stops before the body.
+_ASYNC_FN_HEADER = re.compile(r"\basync\s+(?:unsafe\s+)?fn\b[^{;]*?\([^()]*\)[^{;]*")
+# Closures own their asynchrony (``spawn_blocking(|| std::fs::read(p))`` is the
+# *correct* way to do blocking work from async code), so their bodies are
+# blanked before the search.
+_RUST_CLOSURE = re.compile(r"\|[^|\n]*\|\s*(?:move\s*)?\{")
+_BLOCKING_ALWAYS = re.compile(
+    r"\b(?:std::)?thread::sleep\s*\(|\bstd::fs::\w+\s*\(|\bstd::fs::File::(?:open|create)\s*\(|"
+    r"\.block_on\s*\(|\bstd::net::TcpStream::connect\s*\(|\breqwest::blocking\b"
+)
+# Unqualified ``fs::read(...)`` is blocking only when ``fs`` is std's; a file
+# that imports ``tokio::fs`` / ``async_std::fs`` / ``async_fs`` is exempt.
+_BLOCKING_STD_FS = re.compile(
+    r"(?<![\w:])fs::(?:read|read_to_string|write|read_dir|create_dir|create_dir_all|"
+    r"remove_file|remove_dir|remove_dir_all|copy|rename|metadata|File::open|File::create)\s*\("
+)
+_ASYNC_FS_IMPORTS = ("tokio::fs", "async_std::fs", "async_fs", "smol::fs")
+
+
+class RustBlockingInAsyncRule:
+    """Detect ``thread::sleep``, ``std::fs``, ``block_on`` inside ``async fn``."""
+
+    rule_id = "RS-COR-003"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        facts = parsed.facts
+        if not isinstance(facts, RustFacts):
+            return
+        uses_async_fs = any(
+            imported.startswith(prefix)
+            for imported in facts.imports
+            for prefix in _ASYNC_FS_IMPORTS
+        )
+        pattern = (
+            _BLOCKING_ALWAYS
+            if uses_async_fs
+            else re.compile(f"{_BLOCKING_ALWAYS.pattern}|{_BLOCKING_STD_FS.pattern}")
+        )
+        yield from blocking_in_async_findings(
+            self.rule_id,
+            parsed,
+            async_header=_ASYNC_FN_HEADER,
+            blocking_call=pattern,
+            nested_opener=_RUST_CLOSURE,
+            what="A blocking call",
+        )
+
+
+# ``#![allow(dead_code)]`` at crate level (inner attribute) for the broad lints;
+# ``reason = "…"`` (stable since Rust 1.81) documents the suppression.
+_CRATE_ALLOW = re.compile(
+    r"^[ \t]*#!\[allow\((?P<lints>[^)]*\b(?:dead_code|unused|unused_imports|unused_variables|"
+    r"warnings|clippy::all)\b[^)]*)\)\]",
+    re.MULTILINE,
+)
+
+
+class RustUnexplainedLintAllowRule:
+    """Detect crate-wide ``#![allow(dead_code | unused | warnings …)]`` without a reason."""
+
+    rule_id = "RS-COR-004"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, RustFacts):
+            return
+        # Attributes are code; the *reason string* is blanked in code_text, so
+        # its presence is checked on the raw source at the same offsets.
+        code_text = parsed.facts.code_text
+        source = parsed.source.content
+        for match in _CRATE_ALLOW.finditer(code_text):
+            raw = source[match.start() : match.end()]
+            if re.search(r"\breason\s*=\s*\"[^\"]{3,}", raw):
+                continue
+            offset = match.start() + (len(match.group(0)) - len(match.group(0).lstrip()))
+            line, column = line_column(code_text, offset)
+            lints = " ".join(match.group("lints").split())
+            yield Finding(
+                rule_id=self.rule_id,
+                category="correctness",
+                severity="warning",
+                confidence="high",
+                message=f"Crate-wide #![allow({lints})] silences the compiler without a reason.",
+                location=Location(
+                    path=parsed.source.display_path,
+                    line=line,
+                    column=column,
+                    identity_path=parsed.source.identity_path,
+                ),
+                remediation=(
+                    "Remove the dead or unused code, scope the allow to the item that "
+                    'needs it, or record why: `#![allow(dead_code, reason = "…")]`.'
+                ),
+            )
+
+
+class _RustFileSignals(FileSignals):
+    """``FileSignals`` whose import anchors match whole ``::`` segments.
+
+    The shared ``has_import`` is a substring test, which suits long dotted
+    import paths but not Rust's short crate names: on ripgrep, ``hyper``
+    matched the local ``hyperlink`` module, ``cached`` matched
+    ``…::cached_…``, and ``redb`` matched a ``…redb…`` path — three phantom
+    design patterns. Here ``hyper`` matches ``hyper`` or ``hyper::…`` only;
+    multi-segment anchors (``tokio::sync``) still match as a path prefix.
+    """
+
+    def has_import(self, fragment: str) -> bool:
+        frag = fragment.lower().replace("-", "_")
+        for imported in self.imports:
+            if imported == frag or imported.startswith(frag + "::"):
+                return True
+        return False
 
 
 class RustArchitectureSignalProvider:
@@ -463,16 +605,27 @@ class RustArchitectureSignalProvider:
         facts = parsed.facts
         if not isinstance(facts, RustFacts):
             raise TypeError("Rust signal provider requires RustFacts")
-        return signal_observations(
-            parsed,
-            facts.identifiers,
-            facts.imports,
-            facts.code_text,
-            (
-                ("architecture.dsa", RUST_DSA_PATTERNS),
-                ("architecture.design", RUST_DESIGN_PATTERNS),
-            ),
+        signals = _RustFileSignals(
+            path=parsed.source.path,
+            line_count=parsed.line_count,
+            code_text=facts.code_text.lower(),
+            identifiers={name.lower() for name in facts.identifiers},
+            imports={imported.lower().replace("-", "_") for imported in facts.imports},
         )
+        for category, definitions in (
+            ("architecture.dsa", RUST_DSA_PATTERNS),
+            ("architecture.design", RUST_DESIGN_PATTERNS),
+        ):
+            for signal_id, definition in definitions.items():
+                present, matched = pattern_is_present(signals, definition)
+                if present:
+                    yield SignalObservation(
+                        category=category,
+                        signal_id=signal_id,
+                        description=definition["description"],
+                        path=parsed.source.display_path,
+                        evidence=tuple(matched),
+                    )
 
 
 class RustCargoPackageProvider:
@@ -656,7 +809,7 @@ def _undeclared_crates(
 
 
 def register_rust_plugins(registry: PluginRegistry) -> PluginRegistry:
-    """Register the Rust pilot (called by the deep module when its grammar is present)."""
+    """Register the built-in Rust plugins."""
     registry.register_language(RustLanguageAdapter())
     registry.register_rule_pack(RustRulePack())
     registry.register_signal_provider(RustArchitectureSignalProvider())

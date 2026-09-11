@@ -759,21 +759,11 @@ def _complexity_finding(
 
 
 def register_deep_plugins(registry: PluginRegistry) -> PluginRegistry:
-    """Register Go and C/C++ deep providers (they self-report availability).
-
-    The Rust pilot is registered *only* when ``tree-sitter-rust`` is
-    installed: without duplication and complexity a Rust project would be
-    capped below every other language, so the whole language is gated on
-    the ``[deep]`` extra rather than shipping a half-scored pilot.
-    """
-    if deep_available("tree-sitter-rust"):
-        from ..languages.rust import register_rust_plugins
-
-        register_rust_plugins(registry)
-        registry.register_project_provider(DeepDuplicationProvider("rust", "RS-DUP-001"))
-        registry.register_project_provider(
-            DeepComplexityProvider("rust", "RS-MAINT-001", "RS-MAINT-002")
-        )
+    """Register Go, C/C++ and Rust deep providers (they self-report availability)."""
+    registry.register_project_provider(DeepDuplicationProvider("rust", "RS-DUP-001"))
+    registry.register_project_provider(
+        DeepComplexityProvider("rust", "RS-MAINT-001", "RS-MAINT-002")
+    )
     registry.register_project_provider(DeepDuplicationProvider("go", "GO-DUP-001"))
     registry.register_project_provider(DeepComplexityProvider("go", "GO-MAINT-001", "GO-MAINT-002"))
     registry.register_project_provider(DeepDuplicationProvider("c_cpp", "C-DUP-001"))

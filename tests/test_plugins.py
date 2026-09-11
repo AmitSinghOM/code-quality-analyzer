@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 
 from cqa_analyzer.__main__ import _pattern_payload, _signal_definitions
-from cqa_analyzer.deep import deep_available
 from cqa_analyzer.findings import Finding, Location
 from cqa_analyzer.plugins import create_default_registry
 from cqa_analyzer.protocols import ParsedFile, SignalObservation, SourceFile
@@ -108,22 +107,28 @@ def test_minimal_plugins_register_and_share_normalized_models():
     assert registry.capabilities() == {
         "plugin_api_version": "1.0.0",
         "languages": {"stub": "1.0.0"},
-        "rule_packs": [{
-            "language_id": "stub",
-            "rule_pack_id": "stub-rules",
-            "ruleset_version": "1.0.0",
-        }],
+        "rule_packs": [
+            {
+                "language_id": "stub",
+                "rule_pack_id": "stub-rules",
+                "ruleset_version": "1.0.0",
+            }
+        ],
         "signal_providers": [],
-        "metric_providers": [{
-            "language_id": "stub",
-            "provider_id": "stub-metrics",
-            "capability_version": "1.0.0",
-        }],
+        "metric_providers": [
+            {
+                "language_id": "stub",
+                "provider_id": "stub-metrics",
+                "capability_version": "1.0.0",
+            }
+        ],
         "project_providers": [],
-        "reporters": [{
-            "format_name": "stub",
-            "capability_version": "1.0.0",
-        }],
+        "reporters": [
+            {
+                "format_name": "stub",
+                "capability_version": "1.0.0",
+            }
+        ],
     }
 
 
@@ -206,23 +211,23 @@ def test_scanner_discovers_registered_extension_without_branching(
         scanner.dsa_evidence,
         verbose=True,
     )
-    assert payload["stub-pattern"]["description"] == (
-        "Synthetic language signal"
-    )
+    assert payload["stub-pattern"]["description"] == ("Synthetic language signal")
     assert design == {}
 
 
 def test_python_project_providers_are_registered_and_cached(project):
-    root = project({
-        "pyproject.toml": "[project]\nname = 'demo'\n",
-        "demo/__init__.py": "",
-        "demo/core.py": (
-            "def pairs(items):\n"
-            "    for left in items:\n"
-            "        for right in items:\n"
-            "            yield left, right\n"
-        ),
-    })
+    root = project(
+        {
+            "pyproject.toml": "[project]\nname = 'demo'\n",
+            "demo/__init__.py": "",
+            "demo/core.py": (
+                "def pairs(items):\n"
+                "    for left in items:\n"
+                "        for right in items:\n"
+                "            yield left, right\n"
+            ),
+        }
+    )
     scanner = CodeScanner(root)
 
     scanner.scan()
@@ -235,12 +240,17 @@ def test_python_project_providers_are_registered_and_cached(project):
     assert first is second
     assert first.payload["total_functions"] == 1
     providers = scanner.registry.capabilities()["project_providers"]
-    if deep_available("tree-sitter-rust"):  # gated Rust pilot adds three providers
-        providers = [p for p in providers if p["language_id"] != "rust"]
-        assert {
-            (p["language_id"], p["capability"])
-            for p in scanner.registry.capabilities()["project_providers"]
-        } >= {("rust", "complexity"), ("rust", "duplication"), ("rust", "package")}
+    rust = [
+        (p["language_id"], p["capability"], p["provider_id"])
+        for p in providers
+        if p["language_id"] == "rust"
+    ]
+    assert rust == [
+        ("rust", "complexity", "rust-deep-complexity"),
+        ("rust", "duplication", "rust-deep-duplication"),
+        ("rust", "package", "rust-cargo-package"),
+    ]
+    providers = [p for p in providers if p["language_id"] != "rust"]
     assert providers == [
         {
             "language_id": "c_cpp",
@@ -354,11 +364,14 @@ def test_registry_negotiates_required_and_optional_capabilities():
     )
 
     assert provider.provider_id == "python-complexity"
-    assert registry.negotiate_project_provider(
-        "python",
-        "missing",
-        optional=True,
-    ) is None
+    assert (
+        registry.negotiate_project_provider(
+            "python",
+            "missing",
+            optional=True,
+        )
+        is None
+    )
     with pytest.raises(CapabilityNegotiationError, match="provides 1.0.0"):
         registry.negotiate_project_provider(
             "python",
@@ -370,9 +383,11 @@ def test_registry_negotiates_required_and_optional_capabilities():
 def test_python_complexity_provider_reuses_scanner_ast(project, monkeypatch):
     import ast
 
-    root = project({
-        "module.py": "def values(items):\n    return list(items)\n",
-    })
+    root = project(
+        {
+            "module.py": "def values(items):\n    return list(items)\n",
+        }
+    )
     scanner = CodeScanner(root)
     scanner.scan()
 
@@ -390,13 +405,9 @@ def test_standard_reporters_are_registered_and_negotiated():
     registry = create_default_registry()
     report = AnalysisReport(structured={"status": "ok"}, text="ready\n")
 
-    assert registry.negotiate_reporter("json").render(report) == (
-        b'{\n  "status": "ok"\n}'
-    )
+    assert registry.negotiate_reporter("json").render(report) == (b'{\n  "status": "ok"\n}')
     assert registry.negotiate_reporter("sarif").format_name == "sarif"
-    assert registry.negotiate_reporter(
-        "sarif", "1.0.0"
-    ).capability_version == "1.0.0"
+    assert registry.negotiate_reporter("sarif", "1.0.0").capability_version == "1.0.0"
     assert registry.negotiate_reporter("text").render(report) == b"ready\n"
     assert registry.capabilities()["reporters"] == [
         {"format_name": "json", "capability_version": "1.0.0"},

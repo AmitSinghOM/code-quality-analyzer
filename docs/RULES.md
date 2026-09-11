@@ -595,7 +595,7 @@ the same operator (`a && b && c`) counts once, as Python's single
 Unlike cyclomatic complexity, this metric is what makes a function hard
 to *read*: six flat `if`s score 6, six nested ones score 21.
 
-## PY-COR-007 / GO-COR-002 / TS-COR-002 / JAVA-COR-002 / KT-COR-002 / CS-COR-002 / C-COR-002: SQL statement assembled from runtime values
+## PY-COR-007 / GO-COR-002 / TS-COR-002 / JAVA-COR-002 / KT-COR-002 / CS-COR-002 / C-COR-002 / RS-COR-002: SQL statement assembled from runtime values
 
 **Category:** Correctness
 **Default severity:** Warning
@@ -623,7 +623,9 @@ Per language the dynamic forms are: Python f-strings, `%`, `.format`, `+`;
 Kotlin `$x`/`${x}` templates, `+`, `String.format`/`.format`; TypeScript
 template `${x}`, `+`; C# `$"…{x}"`, `+`, `string.Format`; Java `+`,
 `String.format`, `.formatted`; Go `+`, `fmt.Sprintf`; C/C++ `+`
-(`std::string`), `snprintf`/`sprintf`, `std::format`/`fmt::format`.
+(`std::string`), `snprintf`/`sprintf`, `std::format`/`fmt::format`; Rust
+`format!`/`write!`/`writeln!` (inline `{id}` holes included) and
+`"…".to_string() + &id`. Raw `r#"…"#` and byte strings are recognised.
 
 Not reported: driver parameters (`?`, `$1`, `:name`, `@p`), literal-only
 concatenation (`"SELECT * FROM t " + "WHERE id = 1"`), numeric constants
@@ -772,7 +774,7 @@ question on Stack Overflow. The directive inside a function body or a
 `namespace { … }` block is scoped and not reported; `.cpp`/`.cc` files are
 not reported.
 
-## RS-COR-001: `unwrap()` density outside test code (Rust pilot, requires `[deep]`)
+## RS-COR-001: `unwrap()` density outside test code
 
 **Category:** Correctness
 **Default severity:** Warning
@@ -796,7 +798,7 @@ let cfg = std::fs::read_to_string(path)?;
 let port = env::var("PORT").expect("PORT is set by the launcher");
 ```
 
-## RS-PKG-001: Undeclared crate / RS-PKG-002: Invalid Cargo.toml (Rust pilot, requires `[deep]`)
+## RS-PKG-001: Undeclared crate / RS-PKG-002: Invalid Cargo.toml
 
 **Category:** Package health
 **Default severity:** Warning (RS-PKG-001) / Error (RS-PKG-002)
@@ -814,7 +816,7 @@ honoured and names are compared with `-`/`_` removed (`md-5` provides
 a string literal is never an import. `RS-PKG-002` reports a manifest
 `tomllib` cannot parse; no drift claim is made under an unreadable chain.
 
-## RS-DUP-001 / RS-MAINT-001 / RS-MAINT-002 (Rust pilot, requires `[deep]`)
+## RS-DUP-001 / RS-MAINT-001 / RS-MAINT-002 (requires `[deep]`)
 
 Rust joins `GO-DUP-001 / C-DUP-001` and `GO-MAINT-001/002 / C-MAINT-001/002`
 above with identical thresholds and reporting, through `tree-sitter-rust`.
@@ -824,3 +826,57 @@ the default (not a decision); `line_comment`/`block_comment` are ignored.
 Calibration: ripgrep's `pcre2` and `regex` matcher crates carry the
 well-known duplicated `word`/`line_terminator_crlf`/`case_smart` trio, which
 `RS-DUP-001` reports.
+
+## RS-COR-003: Blocking call in async function
+
+**Category:** Correctness
+**Default severity:** Warning
+**Confidence:** Medium
+
+The Rust counterpart of PY-COR-005 / CS-COR-004 / KT-COR-004 / TS-COR-003.
+Inside an `async fn`, `std::thread::sleep`, any `std::fs::*` call,
+`.block_on(…)`, `std::net::TcpStream::connect` or `reqwest::blocking` stalls
+the executor thread. Closures are excluded — `spawn_blocking(|| std::fs::read(p))`
+is the correct fix and must not be reported — and a file that imports
+`tokio::fs`, `async_std::fs`, `async_fs` or `smol::fs` keeps its unqualified
+`fs::read(…)` calls (they are the async versions); fully qualified
+`std::fs::` always fires.
+
+```rust
+// Non-compliant
+async fn load(p: &str) -> String {
+    std::thread::sleep(Duration::from_millis(50));
+    std::fs::read_to_string(p).unwrap()
+}
+
+// Compliant
+async fn load(p: &str) -> std::io::Result<String> {
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    tokio::fs::read_to_string(p).await
+}
+```
+
+## RS-COR-004: Crate-wide lint allow without reason
+
+**Category:** Correctness
+**Default severity:** Warning
+**Confidence:** High
+
+A crate-level inner attribute `#![allow(…)]` naming `dead_code`, `unused`,
+`unused_imports`, `unused_variables`, `warnings` or `clippy::all` silences
+the compiler for the whole crate with no record of why — "How do you disable
+dead code warnings at the crate level" is Stack Overflow's 4th most-voted
+Rust question, and the accepted answer is the pattern this rule reports.
+`reason = "…"` (stable since Rust 1.81) documents the suppression and is not
+reported; item-scoped `#[allow(dead_code)]` and narrow lints
+(`non_snake_case`) are not reported.
+
+```rust
+// Non-compliant
+#![allow(dead_code, unused_imports)]
+
+// Compliant
+#![allow(dead_code, reason = "generated bindings are pruned at link time")]
+#[allow(dead_code)]
+fn kept_for_ffi_layout() {}
+```

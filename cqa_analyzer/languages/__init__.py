@@ -32,6 +32,13 @@ from .kotlin import (
     KotlinRulePack,
     register_kotlin_plugins,
 )
+from .rust import (
+    RustArchitectureSignalProvider,
+    RustCargoPackageProvider,
+    RustLanguageAdapter,
+    RustRulePack,
+    register_rust_plugins,
+)
 from .python import (
     PythonComplexityProvider,
     PythonArchitectureSignalProvider,
@@ -79,5 +86,10 @@ __all__ = [
     "register_java_plugins",
     "register_kotlin_plugins",
     "register_python_plugins",
+    "register_rust_plugins",
+    "RustArchitectureSignalProvider",
+    "RustCargoPackageProvider",
+    "RustLanguageAdapter",
+    "RustRulePack",
     "register_typescript_plugins",
 ]

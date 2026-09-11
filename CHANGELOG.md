@@ -4,6 +4,56 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 2.43.0 - 2026-09-12
+
+Rust is a full language. The 2.42.0 pilot was gated on `tree-sitter-rust`
+on the argument that a Rust project without duplication and complexity
+would be scored on fewer dimensions; that argument applies equally to Go
+and C/C++, which have always shipped in the default install with
+`available: false` for the deep metrics. The gate is removed and the rule
+catalog is brought to parity with the other seven languages. No weight or
+curve changed; scoring policy stays 2.0.0, schema 1.12.0. Ruleset 2.24.0.
+68 rules.
+
+### Changed
+
+- Rust registers in the default install (`register_rust_plugins` in
+  `plugins.py`); `RS-DUP-001`/`RS-MAINT-001/002` self-report availability
+  like Go's and C/C++'s. Adapter and rule pack are 1.0.0.
+- Rust import anchors match whole `::` segments (`_RustFileSignals`): the
+  shared substring test let `hyper` match ripgrep's local `hyperlink`
+  module and `cached` match `…::cached_…`.
+- Rust catalog: universal syntax removed as evidence (`dyn`, `impl From<`,
+  `new`, `from`, `default`, `as_ref`, `into_inner`, `state`, `span`,
+  `counter`, `starts_with`, bare `fn union(`, `capacity`, `.chunks(`);
+  `repository_pattern` needs two anchors. ripgrep 8.6 → 6.8 (16 phantom
+  patterns), redis-rs 9.3 → 8.7, axum 9.0 → 8.6.
+
+### Added
+
+- `RS-COR-002` SQL assembled with `format!`/`write!`/`writeln!` or
+  `"…".to_string() + &x`. The shared detector now steps over Rust's
+  `r#`/`b`/`br#` literal prefixes and takes a per-language `concat_right`.
+- `RS-COR-003` blocking call in `async fn` — `thread::sleep`, `std::fs::*`,
+  `.block_on`, `TcpStream::connect`, `reqwest::blocking`. Closure bodies are
+  excluded (`spawn_blocking(|| …)` is the fix); a file importing
+  `tokio::fs`/`async_std::fs`/`async_fs`/`smol::fs` keeps its unqualified
+  `fs::` calls.
+- `RS-COR-004` crate-wide `#![allow(dead_code | unused | unused_imports |
+  unused_variables | warnings | clippy::all)]` without `reason = "…"`.
+- Calibration corpus: Rust rows in all three domains (redis-rs, axum,
+  ripgrep); `docs/calibration-latest.json` now holds 24 rows;
+  `docs/CALIBRATION.md` records the fairness alarm the first run raised and
+  the two defects it exposed.
+- README: Rust pilot section; language lists say eight.
+
+### Tests
+
+- `tests/test_rust.py` 19 (SQL, blocking-in-async with closure and
+  `tokio::fs` cases, crate-wide allow, deep providers unavailable without
+  the grammar); `signal_languages()` is a fixed eight-language list;
+  609 total.
+
 ## 2.42.0 - 2026-09-12
 
 Rust pilot (experimental), gated on the `[deep]` extra. Decision recorded as

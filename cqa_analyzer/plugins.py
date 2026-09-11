@@ -8,6 +8,7 @@ from .languages import (
     register_java_plugins,
     register_kotlin_plugins,
     register_python_plugins,
+    register_rust_plugins,
     register_typescript_plugins,
 )
 from .registry import PluginRegistry
@@ -23,5 +24,6 @@ def create_default_registry() -> PluginRegistry:
     registry = register_kotlin_plugins(registry)
     registry = register_csharp_plugins(registry)
     registry = register_c_plugins(registry)
+    registry = register_rust_plugins(registry)
     registry = register_deep_plugins(registry)
     return register_standard_reporters(registry)
