@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from cqa_analyzer.__main__ import _pattern_payload, _signal_definitions
+from cqa_analyzer.deep import deep_available
 from cqa_analyzer.findings import Finding, Location
 from cqa_analyzer.plugins import create_default_registry
 from cqa_analyzer.protocols import ParsedFile, SignalObservation, SourceFile
@@ -233,7 +234,14 @@ def test_python_project_providers_are_registered_and_cached(project):
     assert package.health == {"errors": 0, "complete": True}
     assert first is second
     assert first.payload["total_functions"] == 1
-    assert scanner.registry.capabilities()["project_providers"] == [
+    providers = scanner.registry.capabilities()["project_providers"]
+    if deep_available("tree-sitter-rust"):  # gated Rust pilot adds three providers
+        providers = [p for p in providers if p["language_id"] != "rust"]
+        assert {
+            (p["language_id"], p["capability"])
+            for p in scanner.registry.capabilities()["project_providers"]
+        } >= {("rust", "complexity"), ("rust", "duplication"), ("rust", "package")}
+    assert providers == [
         {
             "language_id": "c_cpp",
             "capability": "complexity",

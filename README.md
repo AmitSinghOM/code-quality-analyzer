@@ -142,13 +142,26 @@ install is pure Python with no native dependencies.
 pipx install 'cqa-analyzer[deep]'      # or: pip install 'cqa-analyzer[deep]'
 ```
 
-Adds tree-sitter and the Go, C, and C++ grammars (compiled wheels, no
+Adds tree-sitter and the Go, C, C++ and Rust grammars (compiled wheels, no
 network, no toolchain execution) and unlocks `GO-DUP-001`, `C-DUP-001`
 (cross-file duplicate functions) and `GO-MAINT-001`, `C-MAINT-001`
 (cyclomatic complexity over 10) — the same metrics, thresholds, and
 reporting Python already has. Without the extra, the report says so
 (`"available": false` with the install hint) instead of inventing a
 number. See [`docs/RULES.md`](docs/RULES.md).
+
+The extra also enables the **Rust pilot** (experimental). Rust is the only
+language gated on `[deep]`: without duplication and complexity a Rust
+project would be scored on fewer dimensions than every other language, so
+the whole pilot — `.rs` discovery, `RS-COR-001` (`.unwrap()` density outside
+test code), `RS-PKG-001`/`RS-PKG-002` (Cargo drift and unreadable
+`Cargo.toml`), the 56-pattern signal catalog anchored on std collections and
+crates, and `RS-DUP-001`/`RS-MAINT-001`/`RS-MAINT-002` via tree-sitter —
+appears only when `tree-sitter-rust` is installed. A plain install neither
+registers nor mentions Rust. Calibrated on axum (300 files, 9.0), ripgrep
+(110 files, 8.6) and sqlx (456 files, 9.3): 866 files, zero lexer failures,
+8,843 functions through the grammar, and every remaining package finding
+verified against upstream.
 
 ### Recommended: pipx (isolated, always on PATH)
 
@@ -198,8 +211,8 @@ python3 -m pip install --upgrade cqa-analyzer
 python3 -m pip install --upgrade 'cqa-analyzer[deep]'   # with the optional extra
 
 # a specific version
-pipx install --force 'cqa-analyzer==2.41.0'
-python3 -m pip install 'cqa-analyzer==2.41.0'
+pipx install --force 'cqa-analyzer==2.42.0'
+python3 -m pip install 'cqa-analyzer==2.42.0'
 ```
 
 Check with `code-quality-analyzer --version`. If the number does not

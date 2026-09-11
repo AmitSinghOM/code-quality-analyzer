@@ -36,3 +36,13 @@ def function_node(source: str, name: str):
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name == name:
             return node
     raise AssertionError(f"function {name!r} not found")
+
+
+def signal_languages() -> list[str]:
+    """Signal-capable language IDs in registry order; Rust only with its grammar."""
+    from cqa_analyzer.deep import deep_available
+
+    languages = ["c_cpp", "csharp", "go", "java", "kotlin", "python", "typescript"]
+    if deep_available("tree-sitter-rust"):  # the Rust pilot is gated on [deep]
+        languages.insert(6, "rust")
+    return languages

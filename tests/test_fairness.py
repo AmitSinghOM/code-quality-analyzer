@@ -9,6 +9,7 @@ from cqa_analyzer.java_patterns import JAVA_DESIGN_PATTERNS, JAVA_DSA_PATTERNS
 from cqa_analyzer.kotlin_patterns import KOTLIN_DESIGN_PATTERNS, KOTLIN_DSA_PATTERNS
 from cqa_analyzer.patterns import DSA_PATTERNS, SYSTEM_DESIGN_PATTERNS
 from cqa_analyzer.rater import QualityRater
+from cqa_analyzer.rust_patterns import RUST_DESIGN_PATTERNS, RUST_DSA_PATTERNS
 from cqa_analyzer.ts_patterns import TS_DESIGN_PATTERNS, TS_DSA_PATTERNS
 
 CATALOGS = {
@@ -18,6 +19,7 @@ CATALOGS = {
     "kotlin": (KOTLIN_DSA_PATTERNS, KOTLIN_DESIGN_PATTERNS),
     "csharp": (CSHARP_DSA_PATTERNS, CSHARP_DESIGN_PATTERNS),
     "c_cpp": (C_DSA_PATTERNS, C_DESIGN_PATTERNS),
+    "rust": (RUST_DSA_PATTERNS, RUST_DESIGN_PATTERNS),
 }
 
 

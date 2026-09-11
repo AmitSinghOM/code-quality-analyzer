@@ -163,6 +163,28 @@ CPP_SPEC = GrammarSpec(
     nested_function_types=frozenset({"lambda_expression"}),
 )
 _BOOLEAN_OPERATORS = frozenset({"&&", "||"})
+# Rust (tree-sitter-rust ≥ 0.23): functions are ``function_item``; closures
+# are their own scope; ``match`` arms are cases (a ``_`` arm is Rust's
+# default and is not a decision, mirroring Go's ``default_case``).
+RUST_SPEC = GrammarSpec(
+    module="tree_sitter_rust",
+    function_types=frozenset({"function_item"}),
+    body_field="body",
+    params_field="parameters",
+    decision_types=frozenset(
+        {"if_expression", "while_expression", "for_expression", "loop_expression", "match_arm"}
+    ),
+    name_types=frozenset({"identifier"}),
+    comment_types=frozenset({"line_comment", "block_comment"}),
+    default_case_types=frozenset(),
+    branch_types=frozenset(
+        {"if_expression", "while_expression", "for_expression", "loop_expression"}
+    ),
+    switch_types=frozenset({"match_expression"}),
+    case_types=frozenset({"match_arm"}),
+    nested_function_types=frozenset({"closure_expression"}),
+)
+_GRAMMAR_DISTS = ("tree-sitter-go", "tree-sitter-c", "tree-sitter-cpp", "tree-sitter-rust")
 _CPP_EXTENSIONS = frozenset({".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx"})
 # A `.h` is C unless it visibly uses C++ syntax. Calibration on hiredis:
 # the C++ grammar failed 111/127 functions in a macro-heavy C header that
@@ -176,7 +198,7 @@ _CPP_HEADER_MARKERS = re.compile(
 def availability() -> dict[str, str | None]:
     """Return installed versions of the deep engine and grammars (None = missing)."""
     versions: dict[str, str | None] = {}
-    for dist in ("tree-sitter", "tree-sitter-go", "tree-sitter-c", "tree-sitter-cpp"):
+    for dist in ("tree-sitter", *_GRAMMAR_DISTS):
         try:
             versions[dist] = importlib.metadata.version(dist)
         except importlib.metadata.PackageNotFoundError:
@@ -435,6 +457,11 @@ def _cyclomatic(body, spec: GrammarSpec) -> int:
                 and node.children[0].type == "default"
             ):
                 continue
+            if node.type == "match_arm":
+                # Rust: ``_ => …`` is the default arm, not a decision.
+                pattern = node.child_by_field_name("pattern")
+                if pattern is not None and _text(pattern).strip() == "_":
+                    continue
             complexity += 1
         elif node.type == "binary_expression":
             operator = node.child_by_field_name("operator")
@@ -446,6 +473,8 @@ def _cyclomatic(body, spec: GrammarSpec) -> int:
 def _spec_for(parsed: ParsedFile, language_id: str) -> GrammarSpec:
     if language_id == "go":
         return GO_SPEC
+    if language_id == "rust":
+        return RUST_SPEC
     suffix = parsed.source.path.suffix
     if suffix in _CPP_EXTENSIONS:
         return CPP_SPEC
@@ -461,7 +490,11 @@ def _spec_for(parsed: ParsedFile, language_id: str) -> GrammarSpec:
 
 
 def _grammars_for(language_id: str) -> tuple[str, ...]:
-    return ("tree-sitter-go",) if language_id == "go" else ("tree-sitter-c", "tree-sitter-cpp")
+    if language_id == "go":
+        return ("tree-sitter-go",)
+    if language_id == "rust":
+        return ("tree-sitter-rust",)
+    return ("tree-sitter-c", "tree-sitter-cpp")
 
 
 def _unavailable(language_id: str) -> ProviderResult:
@@ -726,7 +759,21 @@ def _complexity_finding(
 
 
 def register_deep_plugins(registry: PluginRegistry) -> PluginRegistry:
-    """Register Go and C/C++ deep providers (they self-report availability)."""
+    """Register Go and C/C++ deep providers (they self-report availability).
+
+    The Rust pilot is registered *only* when ``tree-sitter-rust`` is
+    installed: without duplication and complexity a Rust project would be
+    capped below every other language, so the whole language is gated on
+    the ``[deep]`` extra rather than shipping a half-scored pilot.
+    """
+    if deep_available("tree-sitter-rust"):
+        from ..languages.rust import register_rust_plugins
+
+        register_rust_plugins(registry)
+        registry.register_project_provider(DeepDuplicationProvider("rust", "RS-DUP-001"))
+        registry.register_project_provider(
+            DeepComplexityProvider("rust", "RS-MAINT-001", "RS-MAINT-002")
+        )
     registry.register_project_provider(DeepDuplicationProvider("go", "GO-DUP-001"))
     registry.register_project_provider(DeepComplexityProvider("go", "GO-MAINT-001", "GO-MAINT-002"))
     registry.register_project_provider(DeepDuplicationProvider("c_cpp", "C-DUP-001"))

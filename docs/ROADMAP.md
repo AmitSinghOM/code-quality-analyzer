@@ -267,11 +267,42 @@ duplication and complexity metrics for C/C++, tied to item 3.
 
 ## 9. Explicit non-goals
 
-- Executing `go build`, `go vet`, `tsc`, `node`, or any language
+- Executing `go build`, `go vet`, `tsc`, `node`, `cargo`, or any language
   toolchain — ever.
 - Network-backed rule registries or telemetry.
 - New languages beyond the pilots above until an existing pilot has
   architecture signals and at least one user-validated release.
+
+## 10. Rust (✅ decided: experimental pilot gated on `[deep]`, 2.42.0)
+
+The 2025 Stack Overflow survey put Rust at 14.8 % usage and "most admired"
+for the third year; its own note reads "Python developers aspire to use
+Rust and Go". Against that, `rustc` and `clippy` already catch most of
+what a linter finds in other languages, so the value-add is narrower.
+**Decision: an experimental pilot registered only when `tree-sitter-rust`
+is present**, for one structural reason — without the deep providers a
+Rust project would have no duplication or complexity dimension and would
+be capped below every other language. Gating the whole pilot on the extra
+is more honest than shipping a half-scored language.
+
+Scope: lexer (nested block comments, `r#"…"#` raw strings, byte strings,
+char-vs-lifetime disambiguation, `r#ident` raw identifiers); `use` roots
+as imports; `RS-COR-001` `.unwrap()` density outside `#[cfg(test)]` /
+`#[test]` / `tests/` / `benches/` / `examples/`; `RS-PKG-001` crate drift
+against the nearest `Cargo.toml` chain (all dependency tables, workspace
+dependencies, `package =` renames, separator-insensitive names so `md-5`
+matches `md5`); `RS-PKG-002` unreadable manifest; full 56-ID catalog
+anchored on std collections and the crate ecosystem; `RS-DUP-001` /
+`RS-MAINT-001` / `RS-MAINT-002` through `RUST_SPEC` (closures are their
+own scope, `_ =>` is the default arm).
+
+Calibrated on axum, ripgrep and sqlx (866 files, 0 lexer failures, 8,843
+functions). Calibration fixed three defects before release: `use` paths
+read from unblanked text (ripgrep embeds `extern crate snap;` in a string
+literal), `md-5`/`md5` lib-name mismatch, and `mod r#type;` lexed as a
+raw-string opener. `.expect("why")` is deliberately not counted: it is the
+documented form of the same operation. Out of scope: macro expansion,
+trait resolution, `unsafe` accounting, build scripts.
 
 ## Sequencing
 

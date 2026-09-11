@@ -594,6 +594,77 @@ _RULES = (
         "implementation file or a function body.",
         language="c_cpp",
     ),
+    # ---- Rust pilot (experimental; registered only with the [deep] extra) ----
+    _rule(
+        "RS-COR-001",
+        "unwrap-density",
+        "unwrap() density outside test code",
+        "A file calls .unwrap() more than the limit outside #[cfg(test)] / "
+        "#[test] code; each call is a latent panic.",
+        "correctness",
+        "warning",
+        "Propagate with `?`, match on the Option/Result, or use "
+        "`.expect(\"why this cannot fail\")` to document the invariant.",
+        language="rust",
+        confidence="medium",
+    ),
+    _rule(
+        "RS-PKG-001",
+        "undeclared-crate",
+        "Undeclared crate",
+        "A crate named by `use` or `extern crate` is not declared in any "
+        "governing Cargo.toml dependency table.",
+        "package-health",
+        "warning",
+        "Add the crate to [dependencies] (or [dev-dependencies]) or remove the use.",
+        language="rust",
+        confidence="medium",
+    ),
+    _rule(
+        "RS-PKG-002",
+        "invalid-cargo-manifest",
+        "Invalid Cargo.toml",
+        "A Cargo.toml cannot be read as TOML.",
+        "package-health",
+        "error",
+        "Correct the Cargo.toml syntax and run analysis again.",
+        language="rust",
+    ),
+    _rule(
+        "RS-DUP-001",
+        "duplicate-function-implementation",
+        "Duplicate function implementation",
+        "A significant function body is structurally identical to another "
+        "function in the project. Requires the optional [deep] extra.",
+        "duplication",
+        "warning",
+        "Extract the shared implementation into one function and call it "
+        "from each location.",
+        language="rust",
+    ),
+    _rule(
+        "RS-MAINT-001",
+        "high-cyclomatic-complexity",
+        "High cyclomatic complexity",
+        "A function exceeds the supported cyclomatic complexity limit. "
+        "Requires the optional [deep] extra.",
+        "maintainability",
+        "warning",
+        "Extract independent decisions into focused helper functions.",
+        language="rust",
+    ),
+    _rule(
+        "RS-MAINT-002",
+        "high-cognitive-complexity",
+        "High cognitive complexity",
+        "A function exceeds the supported cognitive complexity limit "
+        "(nesting-weighted branches). Requires the optional [deep] extra.",
+        "maintainability",
+        "warning",
+        "Flatten nested branches with early returns or extract the inner "
+        "levels into named helpers.",
+        language="rust",
+    ),
 )
 
 _CATALOG = MappingProxyType({rule.rule_id: rule for rule in _RULES})
