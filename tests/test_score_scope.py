@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 from click.testing import CliRunner
+from conftest import signal_languages
 
 from cqa_analyzer.__main__ import (
     EXIT_BELOW_THRESHOLD,
@@ -39,7 +40,7 @@ def test_go_only_project_score_is_now_applicable(project):
     assert result.exit_code == EXIT_OK
     assert isinstance(payload["architecture_signal_score"], float)
     scope = payload["architecture_signal_scope"]
-    assert scope["languages"] == ["c_cpp", "csharp", "go", "java", "kotlin", "python", "typescript"]
+    assert scope["languages"] == signal_languages()
     assert scope["applicable"] is True
     assert isinstance(scope["by_language"], dict)
 
@@ -91,7 +92,7 @@ def test_python_project_score_remains_applicable(project):
     assert result.exit_code == EXIT_OK
     assert isinstance(payload["architecture_signal_score"], float)
     scope = payload["architecture_signal_scope"]
-    assert scope["languages"] == ["c_cpp", "csharp", "go", "java", "kotlin", "python", "typescript"]
+    assert scope["languages"] == signal_languages()
     assert scope["applicable"] is True
     assert isinstance(scope["by_language"], dict)
 

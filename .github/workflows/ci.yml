@@ -69,9 +69,10 @@ jobs:
         run: pytest
 
   deep-test:
-    # The optional [deep] extra (tree-sitter for Go and C/C++) on the floor
-    # and ceiling interpreters. The default `test` job proves the pure-Python
-    # install still works and that tests/test_deep.py skips cleanly without it.
+    # The optional [deep] extra (tree-sitter for Go, C/C++ and the gated Rust
+    # pilot) on the floor and ceiling interpreters. The default `test` job
+    # proves the pure-Python install still works, that tests/test_deep.py
+    # skips cleanly, and that Rust is not registered without its grammar.
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -96,8 +97,9 @@ jobs:
       - name: Deep tests must run, not skip
         run: |
           set -euo pipefail
-          pytest tests/test_deep.py -rs | tee deep.log
-          if grep -q SKIPPED deep.log; then
+          pytest tests/test_deep.py tests/test_rust.py -rs | tee deep.log
+          # The one expected skip is the "without the grammar" Rust test.
+          if grep SKIPPED deep.log | grep -v "checks behaviour without the grammar"; then
             echo "deep tests skipped although the extra is installed" >&2
             exit 1
           fi

@@ -4,6 +4,53 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 2.42.0 - 2026-09-12
+
+Rust pilot (experimental), gated on the `[deep]` extra. Decision recorded as
+roadmap item 10: without duplication and complexity a Rust project would be
+scored on fewer dimensions than every other language, so the whole pilot
+registers only when `tree-sitter-rust` is installed. A plain install neither
+discovers `.rs` files nor mentions Rust. No weight or curve changed; scoring
+policy stays 2.0.0, report schema 1.12.0. Ruleset 2.23.0.
+
+### Added
+
+- `languages/rust.py`: lexer (nested block comments, `r#"…"#` raw and `b"…"`
+  byte strings, char literals vs lifetimes, `r#ident` raw identifiers),
+  `use`/`extern crate` roots as imports, bounded identifiers, portable cache
+  codec.
+- `RS-COR-001` `.unwrap()` density outside test code (`#[cfg(test)]` blocks,
+  `#[test]`/`#[tokio::test]`/`#[rstest]` functions, `tests/`, `benches/`,
+  `examples/` excluded; `.expect("why")` not counted).
+- `RS-PKG-001` undeclared crate against the nearest `Cargo.toml` chain
+  (all dependency tables, `[workspace.dependencies]`, `package =` renames,
+  separator-insensitive names) and `RS-PKG-002` unreadable manifest.
+- `rust_patterns.py`: full 56-ID catalog anchored on std collections
+  (`BinaryHeap`, `VecDeque`, `BTreeMap` …) and the crate ecosystem (tokio,
+  serde, sqlx, tracing, axum …); fairness-gated like every other language.
+- `RS-DUP-001`, `RS-MAINT-001`, `RS-MAINT-002` through `RUST_SPEC` in the
+  deep engine; `_ =>` is the default arm, closures are their own scope.
+- `pyproject` `[deep]` extra adds `tree-sitter-rust>=0.23,<0.25`;
+  `deep.availability()` reports it; CI's `deep-test` job runs
+  `tests/test_rust.py` and fails on unexpected skips.
+
+### Calibration (axum, ripgrep, sqlx — 866 files, 0 lexer failures, 8,843 functions)
+
+- `use` paths are read from *blanked* text: ripgrep embeds
+  `extern crate snap;` and prose beginning "use the …" inside string
+  literals, which became phantom crates before the fix.
+- Crate names are compared with `-`/`_` removed: sqlx declares `md-5` and
+  imports `md5::Md5`.
+- `mod r#type;` (raw identifier) was lexed as a raw-string opener.
+- `Vec::dedup` no longer claims the `idempotency` pattern in Rust.
+- Remaining `RS-PKG-001` on sqlx (`sqlx_rt` in a `#![allow(dead_code)]`
+  file) verified as a genuine dead import.
+
+### Tests
+
+- `tests/test_rust.py` (14; one runs only *without* the grammar);
+  `signal_languages()` conftest helper for the gated adapter list; 606 total.
+
 ## 2.41.0 - 2026-09-12
 
 Parity release. Before this, "seven languages" meant Python's 18 rules plus

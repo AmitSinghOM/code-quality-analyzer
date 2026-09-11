@@ -45,6 +45,7 @@ deep = [
     "tree-sitter-go>=0.23,<0.26",
     "tree-sitter-c>=0.23,<0.25",
     "tree-sitter-cpp>=0.23,<0.24",
+    "tree-sitter-rust>=0.23,<0.25",
 ]
 dev = [
     "build==1.6.0",

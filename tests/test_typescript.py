@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from click.testing import CliRunner
+from conftest import signal_languages
 
 from cqa_analyzer.__main__ import main
 from cqa_analyzer.languages.typescript import (
@@ -461,7 +462,7 @@ def test_ts_only_project_now_earns_a_real_score(project):
     assert result.exit_code == 0
     assert isinstance(payload["architecture_signal_score"], float)
     scope = payload["architecture_signal_scope"]
-    assert scope["languages"] == ["c_cpp", "csharp", "go", "java", "kotlin", "python", "typescript"]
+    assert scope["languages"] == signal_languages()
     assert scope["applicable"] is True
     assert isinstance(scope["by_language"], dict)
     assert [f["rule_id"] for f in payload["findings"]] == ["TS-COR-001"]

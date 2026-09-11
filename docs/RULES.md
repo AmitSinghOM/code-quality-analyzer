@@ -771,3 +771,56 @@ name lookup for code that never asked for it — the 6th most-voted C++
 question on Stack Overflow. The directive inside a function body or a
 `namespace { … }` block is scoped and not reported; `.cpp`/`.cc` files are
 not reported.
+
+## RS-COR-001: `unwrap()` density outside test code (Rust pilot, requires `[deep]`)
+
+**Category:** Correctness
+**Default severity:** Warning
+**Confidence:** Medium
+
+One finding per file, anchored on the first call, when a file calls
+`.unwrap()` more than four times outside test code. Each call is a latent
+panic; `.expect("why this cannot fail")` documents the invariant and is
+*not* counted. Test code is excluded structurally — `#[cfg(test)] mod … { }`
+blocks and functions preceded by `#[test]`, `#[tokio::test]`,
+`#[async_std::test]` or `#[rstest]` are blanked before counting — and by
+path (`tests/`, `benches/`, `examples/`). Raw and byte strings are blanked,
+so an `.unwrap()` inside a doc string is never counted.
+
+```rust
+// Non-compliant (five or more of these in one production file)
+let cfg = std::fs::read_to_string(path).unwrap();
+
+// Compliant
+let cfg = std::fs::read_to_string(path)?;
+let port = env::var("PORT").expect("PORT is set by the launcher");
+```
+
+## RS-PKG-001: Undeclared crate / RS-PKG-002: Invalid Cargo.toml (Rust pilot, requires `[deep]`)
+
+**Category:** Package health
+**Default severity:** Warning (RS-PKG-001) / Error (RS-PKG-002)
+**Confidence:** Medium / High
+
+Governing manifest = nearest enclosing `Cargo.toml`, with every ancestor's
+`[dependencies]`, `[dev-dependencies]`, `[build-dependencies]`,
+`[target.*.dependencies]` and `[workspace.dependencies]` counting. A crate
+root named by `use foo::…` or `extern crate foo;` is undeclared when it is
+not `std`/`core`/`alloc`/`crate`/`self`/`super`, not a module declared
+anywhere in the project (`mod foo;`, `src/foo.rs`), not the crate's own
+package name, and absent from the chain. `package = "real-name"` renames are
+honoured and names are compared with `-`/`_` removed (`md-5` provides
+`md5`). `use` paths are read from blanked text, so an `extern crate` inside
+a string literal is never an import. `RS-PKG-002` reports a manifest
+`tomllib` cannot parse; no drift claim is made under an unreadable chain.
+
+## RS-DUP-001 / RS-MAINT-001 / RS-MAINT-002 (Rust pilot, requires `[deep]`)
+
+Rust joins `GO-DUP-001 / C-DUP-001` and `GO-MAINT-001/002 / C-MAINT-001/002`
+above with identical thresholds and reporting, through `tree-sitter-rust`.
+Functions are `function_item`; closures are their own scope and are not
+entered; `match` arms count as cases with the `_ =>` wildcard arm treated as
+the default (not a decision); `line_comment`/`block_comment` are ignored.
+Calibration: ripgrep's `pcre2` and `regex` matcher crates carry the
+well-known duplicated `word`/`line_terminator_crlf`/`case_smart` trio, which
+`RS-DUP-001` reports.

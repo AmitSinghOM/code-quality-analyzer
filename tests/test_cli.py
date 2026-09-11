@@ -4,6 +4,7 @@ import json
 
 from click.testing import CliRunner
 
+from cqa_analyzer.deep import deep_available
 from cqa_analyzer.__main__ import (
     EXIT_BELOW_THRESHOLD,
     EXIT_COVERAGE_GAP,
@@ -38,7 +39,7 @@ def test_version_flag_reports_analyzer_version():
     result = run(["--version"])
 
     assert result.exit_code == EXIT_OK
-    assert result.output.strip() == ("code-quality-analyzer, version 2.41.0")
+    assert result.output.strip() == ("code-quality-analyzer, version 2.42.0")
 
 
 def test_json_output_is_valid_and_includes_health(project):
@@ -49,11 +50,11 @@ def test_json_output_is_valid_and_includes_health(project):
 
     assert result.exit_code == EXIT_OK
     assert payload["schema_version"] == "1.12.0"
-    assert payload["analyzer_version"] == "2.41.0"
-    assert payload["ruleset_version"] == "2.22.0"
+    assert payload["analyzer_version"] == "2.42.0"
+    assert payload["ruleset_version"] == "2.23.0"
     assert payload["scoring_policy_version"] == "2.0.0"
     assert len(payload["configuration_fingerprint"]) == 64
-    assert payload["language_adapters"] == {
+    expected_adapters = {
         "c_cpp": "1.0.0",
         "csharp": "1.0.0",
         "go": "1.1.0",
@@ -62,6 +63,9 @@ def test_json_output_is_valid_and_includes_health(project):
         "typescript": "1.0.0",
         "python": "1.0.0",
     }
+    if deep_available("tree-sitter-rust"):  # the Rust pilot is gated on [deep]
+        expected_adapters["rust"] = "0.1.0"
+    assert payload["language_adapters"] == expected_adapters
     assert payload["project"] == root.name
     assert 1.0 <= payload["architecture_signal_score"] <= 10.0
     assert payload["rating"] == payload["architecture_signal_score"]
