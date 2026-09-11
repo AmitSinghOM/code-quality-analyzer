@@ -50,6 +50,8 @@ from ..registry import PluginRegistry
 from ..safe_io import SafeReadError, read_bounded_text
 from ..signals import FileSignals, pattern_is_present
 from ._shared import RegexRulePackBase, empty_catch_finding
+from ._parity import blocking_in_async_findings, broad_catch_findings
+from ._sql import CSHARP_SQL, dynamic_sql_findings
 
 CSHARP_ADAPTER_VERSION = "1.0.0"
 CSHARP_CACHE_CODEC_VERSION = "1.0.0"
@@ -404,16 +406,81 @@ class CSharpEmptyCatchRule:
             yield empty_catch_finding(self.rule_id, parsed, match, rethrow_word="exception")
 
 
+class CSharpDynamicSqlRule:
+    """Detect SQL text built with ``$""`` interpolation, ``+`` or ``Format``."""
+
+    rule_id = "CS-COR-002"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, CSharpFacts):
+            return
+        yield from dynamic_sql_findings(self.rule_id, parsed, CSHARP_SQL)
+
+
+# ``catch (Exception e)``, ``catch (System.Exception)`` and the bare ``catch``.
+# An exception filter (``when (...)``) narrows the clause and is not reported.
+_CS_BROAD_CATCH = re.compile(
+    r"\bcatch\s*(?:\(\s*(?P<type>(?:System\.)?Exception)(?:\s+\w+)?\s*\))?\s*(?!when\b)\{"
+)
+# ``async`` modifier through the parameter list; lambdas (``async (x) =>``)
+# and local functions match as well.
+_CS_ASYNC_HEADER = re.compile(r"\basync\b[^;{]*?\([^()]*\)")
+# ``.Result`` only on a call-shaped receiver (``GetAsync(x).Result``,
+# ``task.Result`` where the name says Task): a bare ``msg.Result`` is a
+# property on a plain object (found on StackExchange.Redis during
+# calibration). ``.Wait()`` / ``GetResult()`` are Task-specific already.
+_CS_BLOCKING = re.compile(
+    r"(?:(?<=\))|(?<=[Tt]ask))\.Result\b(?!\s*=[^=])|\.Wait\s*\(|"
+    r"\.GetAwaiter\s*\(\s*\)\s*\.GetResult\s*\(|\bThread\.Sleep\s*\("
+)
+# Nested lambdas own their own async-ness; blank their bodies.
+_CS_NESTED = re.compile(r"=>\s*\{")
+
+
+class CSharpBroadCatchRule:
+    """Detect handlers that catch Exception or everything."""
+
+    rule_id = "CS-COR-003"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, CSharpFacts):
+            return
+        yield from broad_catch_findings(self.rule_id, parsed, _CS_BROAD_CATCH)
+
+
+class CSharpBlockingInAsyncRule:
+    """Detect ``.Result`` / ``.Wait()`` / ``GetResult()`` inside ``async`` bodies."""
+
+    rule_id = "CS-COR-004"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, CSharpFacts):
+            return
+        yield from blocking_in_async_findings(
+            self.rule_id,
+            parsed,
+            async_header=_CS_ASYNC_HEADER,
+            blocking_call=_CS_BLOCKING,
+            nested_opener=_CS_NESTED,
+            what="A synchronous wait on a Task",
+        )
+
+
 class CSharpRulePack(RegexRulePackBase):
     """Run the bounded built-in C# pilot rules."""
 
     rule_pack_id = CSHARP_RULE_PACK_ID
     language_id = "csharp"
-    ruleset_version = "1.0.0"
+    ruleset_version = "1.1.0"
     plugin_api_version = PLUGIN_API_VERSION
 
     def __init__(self) -> None:
-        self.rules = (CSharpEmptyCatchRule(),)
+        self.rules = (
+            CSharpEmptyCatchRule(),
+            CSharpDynamicSqlRule(),
+            CSharpBroadCatchRule(),
+            CSharpBlockingInAsyncRule(),
+        )
 
 
 class CSharpArchitectureSignalProvider:

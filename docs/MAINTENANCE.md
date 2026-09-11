@@ -94,3 +94,16 @@ regular contributor joins.
   that manifest chain; Gradle build scripts with unresolvable catalog
   accessors likewise. Both are reported (`variable_bound_links`,
   `unresolved_catalog_refs`) rather than guessed.
+- **Broad-catch rethrow grading is asymmetric**: JAVA/KT/CS/C-COR-003 grade a
+  handler that rethrows as `note`; PY-COR-002 predates that rule and still
+  warns on `except Exception: … raise`. Aligning Python would change every
+  recorded Python baseline; do it in a scoring-policy release, not a patch.
+- **Dynamic-SQL rules follow the literal, not the data flow**: a query built
+  with `StringBuilder.append`, `+=` accumulation, or across statements is not
+  reported; a dynamic literal later bound as a parameter *is* reported,
+  because the text itself is the hazard. Zero false positives were observed
+  on the 11 non-SQL calibration repositories; all 19 hits were in drogon's ORM.
+- **Idiom-in-tests rules** (GO-COR-003, TS-COR-005, KT-COR-005) are `note`
+  under `is_test_path`; the path conventions are listed in
+  `languages/_parity.py`. A test tree with an unconventional name is graded
+  as production code.

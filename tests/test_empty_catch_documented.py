@@ -59,7 +59,10 @@ def test_documented_empty_catch_is_a_note_and_bare_one_is_a_warning(
     def findings(body):
         source = template.replace("BODY", body)
         parsed = adapter().parse(SourceFile(Path(name), name, name, source))
-        return list(pack().evaluate(parsed))
+        # The fixtures catch ``Exception`` / ``...``, which the 2.41.0
+        # broad-catch rules also report (as Python does); this test is about
+        # the empty-catch grading only.
+        return [f for f in pack().evaluate(parsed) if f.rule_id == rule_id]
 
     bare = findings(" ")
     assert [f.rule_id for f in bare] == [rule_id]

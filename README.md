@@ -198,8 +198,8 @@ python3 -m pip install --upgrade cqa-analyzer
 python3 -m pip install --upgrade 'cqa-analyzer[deep]'   # with the optional extra
 
 # a specific version
-pipx install --force 'cqa-analyzer==2.40.0'
-python3 -m pip install 'cqa-analyzer==2.40.0'
+pipx install --force 'cqa-analyzer==2.41.0'
+python3 -m pip install 'cqa-analyzer==2.41.0'
 ```
 
 Check with `code-quality-analyzer --version`. If the number does not
@@ -802,7 +802,9 @@ language. Tokens that are common words in other contexts (`projection`,
 Python receives actionable rules, package intelligence, architecture signals,
 and experimental complexity analysis. The Go pilot discovers `.go` files,
 preserves import aliases, emits `GO-COR-001` for discarded errors from a
-narrow set of imported standard-library calls, extracts Go-idiom DSA and
+narrow set of imported standard-library calls, `GO-COR-002` for SQL built
+from runtime values, `GO-COR-003` for unchecked type assertions and
+`GO-COR-004` for `defer` inside a loop, extracts Go-idiom DSA and
 design signals from blanked source (`container/heap`, `sort.Search`,
 corroborated BFS/DFS, `net/http`/gRPC API design, `database/sql`/GORM,
 message queues, `sync.Once` singletons, and more), and passively aggregates
@@ -818,8 +820,10 @@ The TypeScript/JavaScript pilot covers `.ts`, `.tsx`, `.js`, `.jsx`,
 `.mjs`, and `.cjs` with the same bounded, no-toolchain discipline: it
 blanks comments, strings, and template literals (interpolations included,
 so literals are never evidence), extracts bounded identifiers and import
-specifiers by regex, emits `TS-COR-001` for empty catch blocks, and
-passively reads the root `package.json` to flag imported-but-undeclared
+specifiers by regex, emits `TS-COR-001` for empty catch blocks,
+`TS-COR-002` for SQL built from runtime values, `TS-COR-003` for `*Sync`
+I/O inside `async` functions, `TS-COR-004` for `@ts-ignore` without a
+reason and `TS-COR-005` for non-null-assertion density, and passively reads the root `package.json` to flag imported-but-undeclared
 dependencies (`TS-PKG-001`) and invalid manifests (`TS-PKG-002`).
 Workspace (monorepo) manifests skip drift analysis, node builtins and
 path aliases are never flagged, and generated output directories
@@ -835,7 +839,9 @@ aggregate one score across all three languages.
 The Java pilot (`.java`) blanks comments, strings, char literals, and
 `"""` text blocks; extracts imports and bounded identifiers
 (declarations, annotations, generic type uses, `new` targets, calls);
-emits `JAVA-COR-001` for empty catch blocks; and passively discovers
+emits `JAVA-COR-001` for empty catch blocks, `JAVA-COR-002` for SQL built
+from runtime values and `JAVA-COR-003` for broad `catch (Exception |
+Throwable)` handlers (rethrowing handlers are notes); and passively discovers
 `pom.xml` and `build.gradle(.kts)` modules with the same nested-manifest
 machinery, reporting invalid manifests (`JAVA-PKG-002`) and — for a
 curated set of almost-always-direct libraries only, because Maven and
@@ -848,8 +854,10 @@ The C#/.NET pilot (`.cs`) blanks comments and every string form —
 regular, verbatim `@""`, interpolated `$""` with nested holes, raw
 `"""`, and char literals; extracts `using` directives (static, alias,
 global), declared namespaces, and bounded identifiers; emits
-`CS-COR-001` for empty catch blocks (including `when`-filtered); and
-reads `.csproj` `PackageReference`s (`CS-PKG-002` on invalid files),
+`CS-COR-001` for empty catch blocks (including `when`-filtered),
+`CS-COR-002` for SQL built from runtime values, `CS-COR-003` for broad or
+bare `catch` and `CS-COR-004` for `.Result`/`.Wait()` inside `async`
+bodies; and reads `.csproj` `PackageReference`s (`CS-PKG-002` on invalid files),
 flagging `using` namespaces with no package matching by prefix in
 either direction (`CS-PKG-001`) while skipping `System.*`,
 shared-framework `Microsoft.*`, and the project's own namespaces.
@@ -865,7 +873,10 @@ kotest/MockK, and the `mapOf`/`mutableListOf` collection builders. Its
 lexer handles nested block comments, `$name`/`${expr}` string templates
 (lexed as code holes, blanked), raw `"""` strings whose terminator is the
 last quote of a run, and semicolon-free imports with `as` aliases.
-`KT-COR-001` reports empty catch blocks.
+`KT-COR-001` reports empty catch blocks, `KT-COR-002` SQL built from
+`$` templates or concatenation, `KT-COR-003` broad catches, `KT-COR-004`
+`runBlocking`/`Thread.sleep` inside `suspend fun`, and `KT-COR-005` `!!`
+density.
 
 None of the JVM or .NET pilots execute `javac`, `kotlinc`, Maven, Gradle,
 `dotnet`, or MSBuild, and all parse build XML fail-closed: documents
@@ -891,7 +902,9 @@ The C-family pilot (`.c`, `.cc`, `.cpp`, `.cxx`, `.h`, `.hh`, `.hpp`,
   tokens appear nowhere in the governing manifest chain — `find_package`,
   imported targets, `FetchContent`, and `pkg_check_modules` all count.
   Conan, vcpkg, Bazel, Meson, and Makefiles are not read.
-- **One lexical rule.** `C-COR-001` reports empty C++ catch blocks.
+- **Four lexical rules.** `C-COR-001` reports empty C++ catch blocks,
+  `C-COR-002` SQL built with `+`/`snprintf`/`std::format`, `C-COR-003`
+  `catch (...)`, and `C-COR-004` file-scope `using namespace` in headers.
   Nothing here claims to understand types, ownership, or lifetimes; no
   compiler is executed.
 

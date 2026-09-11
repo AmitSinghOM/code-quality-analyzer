@@ -35,7 +35,13 @@ from ..registry import PluginRegistry
 from ..safe_io import SafeReadError, read_bounded_text
 from ..signals import FileSignals, pattern_is_present
 from ..ts_patterns import TS_DESIGN_PATTERNS, TS_DSA_PATTERNS
-from ._shared import RegexRulePackBase, empty_catch_finding
+from ._parity import (
+    blocking_in_async_findings,
+    downgrade_in_tests,
+    non_null_density_findings,
+)
+from ._shared import RegexRulePackBase, empty_catch_finding, line_column
+from ._sql import TYPESCRIPT_SQL, dynamic_sql_findings
 
 TS_ADAPTER_VERSION = "1.0.0"
 TS_CACHE_CODEC_VERSION = "1.0.0"
@@ -430,16 +436,115 @@ class TsEmptyCatchRule:
             yield empty_catch_finding(self.rule_id, parsed, match, rethrow_word="error")
 
 
+class TsDynamicSqlRule:
+    """Detect SQL text built with template ``${}`` or ``+`` concatenation."""
+
+    rule_id = "TS-COR-002"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, TsFacts):
+            return
+        yield from dynamic_sql_findings(self.rule_id, parsed, TYPESCRIPT_SQL)
+
+
+# ``async function f(...)``, ``async f(...)`` methods and ``async (...) =>``.
+_TS_ASYNC_HEADER = re.compile(r"\basync\b[^;{]*?\([^()]*\)")
+# Node's synchronous I/O family plus child_process's blocking spawns.
+_TS_BLOCKING = re.compile(r"\.\w+Sync\s*\(|\b(?:execSync|execFileSync|spawnSync)\s*\(")
+_TS_NESTED = re.compile(r"(?:=>|\bfunction\b[^{;]*)\s*\{")
+# Suppression comments live in the *source* (comments are blanked in
+# code_text); a reason is anything past the directive besides punctuation.
+_TS_SUPPRESSION = re.compile(
+    r"(?://|/\*)\s*@ts-(?P<directive>ignore|nocheck|expect-error)\b(?P<reason>[^\n]*)"
+)
+# Postfix ``!`` after an identifier, call or index, before a member access,
+# call, index or statement end. ``!=`` / ``!==`` never match.
+_TS_NON_NULL = re.compile(r"(?<=[\w)\]])!(?=\s*[.\[\),;])")
+
+
+class TsBlockingInAsyncRule:
+    """Detect ``*Sync`` calls inside ``async`` functions."""
+
+    rule_id = "TS-COR-003"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, TsFacts):
+            return
+        yield from blocking_in_async_findings(
+            self.rule_id,
+            parsed,
+            async_header=_TS_ASYNC_HEADER,
+            blocking_call=_TS_BLOCKING,
+            nested_opener=_TS_NESTED,
+            what="A synchronous I/O call",
+        )
+
+
+class TsUnexplainedSuppressionRule:
+    """Detect ``@ts-ignore`` / ``@ts-expect-error`` / ``@ts-nocheck`` without a reason."""
+
+    rule_id = "TS-COR-004"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, TsFacts):
+            return
+        source = parsed.source.content
+        for match in _TS_SUPPRESSION.finditer(source):
+            reason = match.group("reason").replace("*/", "").strip(" \t:-–—")
+            if len(reason) >= 3:
+                continue
+            line, column = line_column(source, match.start())
+            directive = match.group("directive")
+            yield Finding(
+                rule_id=self.rule_id,
+                category="correctness",
+                severity="warning",
+                confidence="high",
+                message=f"@ts-{directive} suppresses the type checker without a reason.",
+                location=Location(
+                    path=parsed.source.display_path,
+                    line=line,
+                    column=column,
+                    identity_path=parsed.source.identity_path,
+                ),
+                remediation=(
+                    "Fix the type error, or document why it is suppressed: "
+                    "`// @ts-expect-error <reason>` (expect-error fails when the "
+                    "error disappears)."
+                ),
+            )
+
+
+class TsNonNullDensityRule:
+    """Report files that lean on the postfix ``!`` operator."""
+
+    rule_id = "TS-COR-005"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, TsFacts):
+            return
+        if parsed.source.path.suffix.lower() not in {".ts", ".tsx", ".mts", ".cts"}:
+            return  # postfix ! does not exist in JavaScript
+        for finding in non_null_density_findings(self.rule_id, parsed, _TS_NON_NULL, operator="!"):
+            yield downgrade_in_tests(parsed, finding)
+
+
 class TypeScriptRulePack(RegexRulePackBase):
     """Run the bounded built-in TypeScript/JavaScript pilot rules."""
 
     rule_pack_id = TS_RULE_PACK_ID
     language_id = "typescript"
-    ruleset_version = "1.0.0"
+    ruleset_version = "1.1.0"
     plugin_api_version = PLUGIN_API_VERSION
 
     def __init__(self) -> None:
-        self.rules = (TsEmptyCatchRule(),)
+        self.rules = (
+            TsEmptyCatchRule(),
+            TsDynamicSqlRule(),
+            TsBlockingInAsyncRule(),
+            TsUnexplainedSuppressionRule(),
+            TsNonNullDensityRule(),
+        )
 
 
 class TsArchitectureSignalProvider:

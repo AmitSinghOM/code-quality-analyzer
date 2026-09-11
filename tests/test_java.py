@@ -112,10 +112,10 @@ def test_empty_catch_is_reported_and_handled_catch_is_not():
     good = parse_java(
         "class A {\n  void f() {\n    try { g(); } catch (Exception e) { log(e); }\n  }\n}\n"
     )
-    findings = list(JavaRulePack().evaluate(bad))
+    findings = [f for f in JavaRulePack().evaluate(bad) if f.rule_id == "JAVA-COR-001"]
     assert [f.rule_id for f in findings] == ["JAVA-COR-001"]
     assert findings[0].location.line == 3
-    assert list(JavaRulePack().evaluate(good)) == []
+    assert [f for f in JavaRulePack().evaluate(good) if f.rule_id == "JAVA-COR-001"] == []
 
 
 def test_every_java_pattern_id_is_scored_by_the_shared_catalog():

@@ -594,3 +594,180 @@ the same operator (`a && b && c`) counts once, as Python's single
 `BoolOp` node does; Go `func` literals and C++ lambdas are not entered.
 Unlike cyclomatic complexity, this metric is what makes a function hard
 to *read*: six flat `if`s score 6, six nested ones score 21.
+
+## PY-COR-007 / GO-COR-002 / TS-COR-002 / JAVA-COR-002 / KT-COR-002 / CS-COR-002 / C-COR-002: SQL statement assembled from runtime values
+
+**Category:** Correctness
+**Default severity:** Warning
+**Confidence:** Medium
+
+A string literal that reads as the head of a SQL statement (`SELECT … FROM`,
+`INSERT INTO … VALUES`, `UPDATE … SET`, `DELETE FROM … WHERE`, DDL) is
+combined with runtime values by interpolation, `+` concatenation or a
+formatting call. The statement text — not its execution site — is the hazard,
+so a dynamically built query later passed to a prepared-statement API is
+still reported. One finding per statement line.
+
+```python
+# Non-compliant
+cur.execute(f"SELECT * FROM users WHERE id = {user_id}")
+cur.execute("SELECT * FROM users WHERE id = %s" % user_id)
+cur.execute("SELECT * FROM users WHERE id = " + str(user_id))
+
+# Compliant
+cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+cur.execute("SELECT * FROM users WHERE id = ?", [user_id])
+```
+
+Per language the dynamic forms are: Python f-strings, `%`, `.format`, `+`;
+Kotlin `$x`/`${x}` templates, `+`, `String.format`/`.format`; TypeScript
+template `${x}`, `+`; C# `$"…{x}"`, `+`, `string.Format`; Java `+`,
+`String.format`, `.formatted`; Go `+`, `fmt.Sprintf`; C/C++ `+`
+(`std::string`), `snprintf`/`sprintf`, `std::format`/`fmt::format`.
+
+Not reported: driver parameters (`?`, `$1`, `:name`, `@p`), literal-only
+concatenation (`"SELECT * FROM t " + "WHERE id = 1"`), numeric constants
+(`"… LIMIT " + 10`), and prose that merely contains SQL words — the statement
+and clause keywords must share case (`SELECT … FROM` or `select … from`);
+`"Select an item from the list"` mixes case and is rejected. Known bounds:
+`StringBuilder.append`, `+=` accumulation and queries assembled across
+statements are not followed.
+
+## JAVA-COR-003 / KT-COR-003 / CS-COR-003 / C-COR-003: Broad exception handler
+
+**Category:** Correctness
+**Default severity:** Warning (Note when the handler rethrows)
+**Confidence:** High
+
+The counterpart of PY-COR-002. Java and Kotlin report `Exception`,
+`Throwable`, `RuntimeException` and `Error` (including in multi-catch); C#
+reports `Exception`, `System.Exception` and the bare `catch`; C++ reports
+`catch (...)`. C# exception filters (`catch (Exception e) when (…)`) narrow
+the clause and are not reported. A handler whose body contains `throw` is
+graded **Note** — wrap-and-rethrow is an accepted idiom — while
+catch-and-continue keeps the warning. This grading is *not* applied to
+PY-COR-002, whose semantics predate it; the asymmetry is documented in
+MAINTENANCE.md.
+
+```java
+// Non-compliant (warning)
+try { load(); } catch (Exception e) { log.warn("failed", e); }
+
+// Note: wraps and rethrows
+try { load(); } catch (Exception e) { throw new LoadFailed(e); }
+
+// Compliant
+try { load(); } catch (IOException e) { retry(); }
+```
+
+## CS-COR-004 / KT-COR-004 / TS-COR-003: Blocking call in an asynchronous body
+
+**Category:** Correctness
+**Default severity:** Warning
+**Confidence:** Medium
+
+The counterpart of PY-COR-005. Inside an `async` method or lambda (C#), a
+`suspend fun` (Kotlin) or an `async` function/method/arrow (TypeScript), a
+synchronous blocking call defeats the asynchrony and, on a thread-pool
+scheduler, can deadlock. Nested lambdas own their own asynchrony and are not
+attributed to the enclosing declaration.
+
+| Language | Reported calls |
+|---|---|
+| C# | `<call>.Result`, `<task>.Result`, `.Wait()`, `.GetAwaiter().GetResult()`, `Thread.Sleep` |
+| Kotlin | `runBlocking`, `Thread.sleep` (also in expression bodies: `suspend fun f() = runBlocking { … }`) |
+| TypeScript | `fs.*Sync(...)` and any `.xxxSync(` member, `execSync`, `execFileSync`, `spawnSync` |
+
+Known bounds: C# `.Result` requires a call-shaped receiver (`GetAsync().Result`)
+or a receiver named `*task*` so a plain property named `Result` on a message
+type is not reported (calibrated on StackExchange.Redis); a guarded
+`if (task.IsCompleted) task.Result` is still reported because it is the
+target pattern. Expression-bodied C# members (`=> …;`) are not analysed.
+
+## TS-COR-004: Unexplained type-check suppression
+
+**Category:** Correctness
+**Default severity:** Warning
+**Confidence:** High
+
+`// @ts-ignore`, `// @ts-expect-error` or `/* @ts-nocheck */` without a
+reason (at least three characters after the directive, punctuation excluded)
+disables the compiler at that line with no record of why. The 4th, 7th and
+9th most-voted TypeScript questions on Stack Overflow are about `any`,
+`unknown` and implicit-`any` errors — the errors these directives hide.
+
+```ts
+// Non-compliant
+// @ts-ignore
+const port = config.port;
+
+// Compliant: the reason is recorded and the suppression self-expires
+// @ts-expect-error upstream types lag the 4.x runtime; remove with #1234
+const port = config.port;
+```
+
+## TS-COR-005 / KT-COR-005: Non-null assertion density
+
+**Category:** Correctness
+**Default severity:** Warning (Note in test files)
+**Confidence:** Medium
+
+One finding per file, anchored on the first assertion, when a file uses more
+than four postfix `!` (TypeScript) or `!!` (Kotlin) operators. Each assertion
+switches off null safety at that point; a handful is a local judgement call,
+a file full of them is a design signal ("the `!` operator" is the 4th
+most-voted TypeScript question). `!=`/`!==` never count, strings are blanked
+before counting, and `.js` files are exempt (postfix `!` does not exist in
+JavaScript). In test paths (`*.spec.ts`, `*Test.kt`, `tests/`, `__tests__/`,
+`e2e/`) the finding is a **Note**: compact test bodies idiomatically assert
+non-null (calibration: most of ktor's and nest's density was in tests).
+
+## GO-COR-003: Unchecked type assertion
+
+**Category:** Correctness
+**Default severity:** Warning (Note in `_test.go`)
+**Confidence:** Medium
+
+`x.(T)` in single-value form panics when the dynamic type differs. The
+two-value form `v, ok := x.(T)` and the type switch `switch v := x.(type)`
+are not reported. In `_test.go` files the finding is a **Note**: test bodies
+assert the type on purpose (calibration: 167 of go-redis's 209 assertions
+were in tests). "Pointers vs. values" and "how to find the type of an object"
+are among Go's most-voted questions; this is the runtime consequence.
+
+## GO-COR-004: defer inside a loop
+
+**Category:** Correctness
+**Default severity:** Warning
+**Confidence:** High
+
+`defer` directly inside a `for` body runs only when the enclosing function
+returns, so files, locks or connections accumulate across iterations.
+Function literals inside the loop own their own defers and are not reported.
+Nested loops report each defer once.
+
+```go
+// Non-compliant
+for _, p := range paths {
+    f, _ := os.Open(p)
+    defer f.Close() // all files stay open until the function returns
+}
+
+// Compliant
+for _, p := range paths {
+    if err := process(p); err != nil { return err } // process defers f.Close()
+}
+```
+
+## C-COR-004: `using namespace` in a header
+
+**Category:** Correctness
+**Default severity:** Warning
+**Confidence:** High
+
+A file-scope `using namespace X;` in a header (`.h`, `.hh`, `.hpp`, `.hxx`)
+is injected into every translation unit that includes it, silently changing
+name lookup for code that never asked for it — the 6th most-voted C++
+question on Stack Overflow. The directive inside a function body or a
+`namespace { … }` block is scoped and not reported; `.cpp`/`.cc` files are
+not reported.

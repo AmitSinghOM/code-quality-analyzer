@@ -45,7 +45,9 @@ from ..protocols import (
 )
 from ..registry import PluginRegistry
 from ..safe_io import SafeReadError, read_bounded_text
-from ._shared import RegexRulePackBase, empty_catch_finding, signal_observations
+from ._parity import broad_catch_findings
+from ._shared import RegexRulePackBase, empty_catch_finding, line_column, signal_observations
+from ._sql import C_SQL, dynamic_sql_findings
 
 C_ADAPTER_VERSION = "1.0.0"
 C_CACHE_CODEC_VERSION = "1.0.0"
@@ -549,16 +551,84 @@ class CEmptyCatchRule:
             yield empty_catch_finding(self.rule_id, parsed, match, rethrow_word="exception")
 
 
+class CDynamicSqlRule:
+    """Detect SQL text built with ``+`` or ``snprintf``/``std::format``."""
+
+    rule_id = "C-COR-002"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, CFacts):
+            return
+        yield from dynamic_sql_findings(self.rule_id, parsed, C_SQL)
+
+
+_CATCH_ALL = re.compile(r"\bcatch\s*\(\s*(?P<type>\.\.\.)\s*\)\s*\{")
+_USING_NAMESPACE = re.compile(r"^[ \t]*using\s+namespace\s+[\w:]+\s*;", re.MULTILINE)
+_HEADER_SUFFIXES = frozenset({".h", ".hh", ".hpp", ".hxx"})
+
+
+class CCatchAllRule:
+    """Detect ``catch (...)`` handlers, which swallow every exception type."""
+
+    rule_id = "C-COR-003"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, CFacts):
+            return
+        yield from broad_catch_findings(self.rule_id, parsed, _CATCH_ALL)
+
+
+class CUsingNamespaceInHeaderRule:
+    """Detect file-scope ``using namespace`` in a header (leaks to every includer)."""
+
+    rule_id = "C-COR-004"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, CFacts):
+            return
+        if parsed.source.path.suffix.lower() not in _HEADER_SUFFIXES:
+            return
+        code_text = parsed.facts.code_text
+        for match in _USING_NAMESPACE.finditer(code_text):
+            head = code_text[: match.start()]
+            if head.count("{") != head.count("}"):
+                continue  # scoped to a function or namespace body
+            offset = match.start() + len(match.group(0)) - len(match.group(0).lstrip())
+            line, column = line_column(code_text, offset)
+            yield Finding(
+                rule_id=self.rule_id,
+                category="correctness",
+                severity="warning",
+                confidence="high",
+                message="`using namespace` at file scope in a header leaks into every includer.",
+                location=Location(
+                    path=parsed.source.display_path,
+                    line=line,
+                    column=column,
+                    identity_path=parsed.source.identity_path,
+                ),
+                remediation=(
+                    "Qualify names in the header, or move the directive into the "
+                    "implementation file or a function body."
+                ),
+            )
+
+
 class CRulePack(RegexRulePackBase):
     """Run the bounded built-in C/C++ pilot rules."""
 
     rule_pack_id = C_RULE_PACK_ID
     language_id = "c_cpp"
-    ruleset_version = "1.0.0"
+    ruleset_version = "1.1.0"
     plugin_api_version = PLUGIN_API_VERSION
 
     def __init__(self) -> None:
-        self.rules = (CEmptyCatchRule(),)
+        self.rules = (
+            CEmptyCatchRule(),
+            CDynamicSqlRule(),
+            CCatchAllRule(),
+            CUsingNamespaceInHeaderRule(),
+        )
 
 
 class CArchitectureSignalProvider:

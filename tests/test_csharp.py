@@ -123,9 +123,9 @@ def test_empty_catch_including_filter_is_reported():
         "} }\n"
     )
     good = parse_cs("class A { void F() { try { G(); } catch (Exception e) { Log(e); } } }\n")
-    findings = list(CSharpRulePack().evaluate(bad))
+    findings = [f for f in CSharpRulePack().evaluate(bad) if f.rule_id == "CS-COR-001"]
     assert [f.location.line for f in findings] == [2, 3]
-    assert list(CSharpRulePack().evaluate(good)) == []
+    assert [f for f in CSharpRulePack().evaluate(good) if f.rule_id == "CS-COR-001"] == []
 
 
 def test_every_csharp_pattern_id_is_scored_by_the_shared_catalog():

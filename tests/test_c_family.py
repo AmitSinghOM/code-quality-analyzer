@@ -135,7 +135,7 @@ def test_identifier_extraction_covers_cpp_shapes():
 
 def test_empty_catch_rule():
     bad = parse_c("void f() {\n  try { g(); } catch (const std::exception&) {}\n}\n")
-    good = parse_c("void f() {\n  try { g(); } catch (...) { log(); }\n}\n")
+    good = parse_c("void f() {\n  try { g(); } catch (const std::exception&) { log(); }\n}\n")
     findings = list(CRulePack().evaluate(bad))
     assert [f.rule_id for f in findings] == ["C-COR-001"]
     assert findings[0].location.line == 2

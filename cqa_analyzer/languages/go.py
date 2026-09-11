@@ -21,7 +21,9 @@ from ..protocols import (
 from ..registry import PluginRegistry
 from ..safe_io import SafeReadError, read_bounded_text
 from ..signals import FileSignals, pattern_is_present
+from ._parity import block_end, downgrade_in_tests, strip_nested_blocks
 from ._shared import line_column
+from ._sql import GO_SQL, dynamic_sql_findings
 
 GO_ADAPTER_VERSION = "1.1.0"
 GO_CACHE_CODEC_VERSION = "1.1.0"
@@ -312,6 +314,114 @@ class GoIgnoredErrorRule:
             )
 
 
+class GoDynamicSqlRule:
+    """Detect SQL text built with ``+`` or ``fmt.Sprintf``."""
+
+    rule_id = "GO-COR-002"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, GoFacts):
+            return
+        yield from dynamic_sql_findings(self.rule_id, parsed, GO_SQL)
+
+
+# ``x.(T)`` — but not the type-switch form ``x.(type)``.
+_TYPE_ASSERTION = re.compile(r"\.\(\s*(?!type\b)(?P<type>[\w.*\[\]]+)\s*\)")
+# ``for ... {`` headers; composite literals in the header are rare enough
+# that the first ``{`` is taken as the body.
+_FOR_HEADER = re.compile(r"\bfor\b[^{]*\{")
+_FUNC_LITERAL = re.compile(r"\bfunc\s*\([^()]*\)[^{;]*\{")
+_DEFER = re.compile(r"\bdefer\b")
+
+
+def _is_two_value_form(code_text: str, offset: int) -> bool:
+    """True when the assertion at ``offset`` is bound as ``v, ok := x.(T)``.
+
+    Looks at the statement head on the same line: a comma before the
+    assignment operator means the ok-boolean is received.
+    """
+    line_start = code_text.rfind("\n", 0, offset) + 1
+    head = code_text[line_start:offset]
+    for token in (":=", "="):
+        position = head.find(token)
+        if position >= 0 and "," in head[:position]:
+            return True
+    return False
+
+
+class GoUncheckedTypeAssertionRule:
+    """Detect single-value type assertions, which panic on mismatch."""
+
+    rule_id = "GO-COR-003"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, GoFacts):
+            return
+        code_text = parsed.facts.code_text
+        for match in _TYPE_ASSERTION.finditer(code_text):
+            if _is_two_value_form(code_text, match.start()):
+                continue
+            line, column = line_column(code_text, match.start())
+            finding = Finding(
+                rule_id=self.rule_id,
+                category="correctness",
+                severity="warning",
+                confidence="medium",
+                message=(
+                    f"Type assertion to {match.group('type')} is unchecked and "
+                    "panics on mismatch."
+                ),
+                location=Location(
+                    path=parsed.source.display_path,
+                    line=line,
+                    column=column,
+                    identity_path=parsed.source.identity_path,
+                ),
+                remediation="Use the two-value form `v, ok := x.(T)` and handle !ok.",
+            )
+            yield downgrade_in_tests(parsed, finding)
+
+
+class GoDeferInLoopRule:
+    """Detect ``defer`` directly inside a ``for`` body (runs at function exit)."""
+
+    rule_id = "GO-COR-004"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, GoFacts):
+            return
+        code_text = parsed.facts.code_text
+        reported: set[int] = set()
+        for header in _FOR_HEADER.finditer(code_text):
+            open_brace = header.end() - 1
+            body_start = open_brace + 1
+            body = code_text[body_start : block_end(code_text, open_brace) - 1]
+            body = strip_nested_blocks(body, _FUNC_LITERAL)
+            for defer in _DEFER.finditer(body):
+                offset = body_start + defer.start()
+                if offset in reported:  # nested loops share inner defers
+                    continue
+                reported.add(offset)
+                line, column = line_column(code_text, offset)
+                yield Finding(
+                    rule_id=self.rule_id,
+                    category="correctness",
+                    severity="warning",
+                    confidence="high",
+                    message="defer inside a loop runs only when the function returns.",
+                    location=Location(
+                        path=parsed.source.display_path,
+                        line=line,
+                        column=column,
+                        identity_path=parsed.source.identity_path,
+                    ),
+                    remediation=(
+                        "Move the loop body into a function so each iteration's "
+                        "defer runs, or release the resource explicitly."
+                    ),
+                )
+
+
 class GoPackageGraphProvider:
     """Build a passive multi-file Go package graph from shared facts."""
 
@@ -391,11 +501,16 @@ class GoRulePack:
 
     rule_pack_id = GO_RULE_PACK_ID
     language_id = "go"
-    ruleset_version = "2.5.0"
+    ruleset_version = "2.6.0"
     plugin_api_version = PLUGIN_API_VERSION
 
     def __init__(self) -> None:
-        self.rules = (GoIgnoredErrorRule(),)
+        self.rules = (
+            GoIgnoredErrorRule(),
+            GoDynamicSqlRule(),
+            GoUncheckedTypeAssertionRule(),
+            GoDeferInLoopRule(),
+        )
 
     def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
         if not parsed.complete:
