@@ -129,10 +129,10 @@ def test_metadata_pass_preserves_content_with_same_structure():
 def test_empty_catch_is_reported_and_handled_catch_is_not():
     bad = parse_kt("fun f() {\n  try { g() } catch (e: Exception) {}\n}\n")
     good = parse_kt("fun f() {\n  try { g() } catch (e: Exception) { log(e) }\n}\n")
-    findings = list(KotlinRulePack().evaluate(bad))
+    findings = [f for f in KotlinRulePack().evaluate(bad) if f.rule_id == "KT-COR-001"]
     assert [f.rule_id for f in findings] == ["KT-COR-001"]
     assert findings[0].location.line == 2
-    assert list(KotlinRulePack().evaluate(good)) == []
+    assert [f for f in KotlinRulePack().evaluate(good) if f.rule_id == "KT-COR-001"] == []
 
 
 def test_kotlin_catalog_extends_java_and_stays_in_shared_catalog():

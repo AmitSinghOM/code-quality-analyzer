@@ -441,6 +441,159 @@ _RULES = (
         "Correct the package.json syntax and run analysis again.",
         language="typescript",
     ),
+    # ---- 2.41.0: dynamic SQL (every language) ------------------------------
+    *(
+        _rule(
+            rule_id,
+            "dynamic-sql-statement",
+            "SQL statement assembled from runtime values",
+            "A SQL statement is built with interpolation, concatenation or "
+            "string formatting instead of driver parameters.",
+            "correctness",
+            "warning",
+            "Pass runtime values as driver parameters (bind variables); "
+            "allowlist identifiers such as table or column names.",
+            language=language,
+            confidence="medium",
+        )
+        for rule_id, language in (
+            ("PY-COR-007", "python"),
+            ("GO-COR-002", "go"),
+            ("JAVA-COR-002", "java"),
+            ("KT-COR-002", "kotlin"),
+            ("CS-COR-002", "csharp"),
+            ("TS-COR-002", "typescript"),
+            ("C-COR-002", "c_cpp"),
+        )
+    ),
+    # ---- 2.41.0: parity with the Python catalog -----------------------------
+    *(
+        _rule(
+            rule_id,
+            "broad-exception-handler",
+            "Broad exception handler",
+            "An exception handler catches a root exception type (or everything); "
+            "handlers that rethrow are reported as notes.",
+            "correctness",
+            "warning",
+            "Catch the narrow exception types the operation can recover from.",
+            language=language,
+        )
+        for rule_id, language in (
+            ("JAVA-COR-003", "java"),
+            ("KT-COR-003", "kotlin"),
+            ("CS-COR-003", "csharp"),
+            ("C-COR-003", "c_cpp"),
+        )
+    ),
+    _rule(
+        "KT-COR-004",
+        "blocking-call-in-suspend-function",
+        "Blocking call in suspend function",
+        "runBlocking or Thread.sleep is called inside a suspend function.",
+        "correctness",
+        "warning",
+        "Await the asynchronous form of the call, or move the blocking work "
+        "off the async path.",
+        language="kotlin",
+        confidence="medium",
+    ),
+    _rule(
+        "KT-COR-005",
+        "non-null-assertion-density",
+        "Non-null assertion density",
+        "A file uses more !! operators than the limit, disabling null safety "
+        "at each site.",
+        "correctness",
+        "warning",
+        "Narrow the type with a check or early return instead of asserting.",
+        language="kotlin",
+        confidence="medium",
+    ),
+    _rule(
+        "CS-COR-004",
+        "blocking-wait-in-async-method",
+        "Blocking wait in async method",
+        ".Result, .Wait() or GetAwaiter().GetResult() is used inside an async "
+        "body.",
+        "correctness",
+        "warning",
+        "Await the asynchronous form of the call, or move the blocking work "
+        "off the async path.",
+        language="csharp",
+        confidence="medium",
+    ),
+    _rule(
+        "TS-COR-003",
+        "synchronous-io-in-async-function",
+        "Synchronous I/O in async function",
+        "A *Sync call (fs, child_process) is used inside an async function.",
+        "correctness",
+        "warning",
+        "Await the asynchronous form of the call, or move the blocking work "
+        "off the async path.",
+        language="typescript",
+        confidence="medium",
+    ),
+    _rule(
+        "TS-COR-004",
+        "unexplained-type-suppression",
+        "Unexplained type-check suppression",
+        "@ts-ignore, @ts-expect-error or @ts-nocheck is used without a reason.",
+        "correctness",
+        "warning",
+        "Fix the type error, or document why it is suppressed with "
+        "`// @ts-expect-error <reason>`.",
+        language="typescript",
+    ),
+    _rule(
+        "TS-COR-005",
+        "non-null-assertion-density",
+        "Non-null assertion density",
+        "A file uses more postfix ! operators than the limit, disabling null "
+        "safety at each site.",
+        "correctness",
+        "warning",
+        "Narrow the type with a check or early return instead of asserting.",
+        language="typescript",
+        confidence="medium",
+    ),
+    _rule(
+        "GO-COR-003",
+        "unchecked-type-assertion",
+        "Unchecked type assertion",
+        "A single-value type assertion x.(T) panics when the dynamic type "
+        "differs.",
+        "correctness",
+        "warning",
+        "Use the two-value form `v, ok := x.(T)` and handle !ok.",
+        language="go",
+        confidence="medium",
+    ),
+    _rule(
+        "GO-COR-004",
+        "defer-in-loop",
+        "defer inside a loop",
+        "A defer statement inside a for body runs only when the function "
+        "returns, accumulating resources across iterations.",
+        "correctness",
+        "warning",
+        "Move the loop body into a function so each iteration's defer runs, "
+        "or release the resource explicitly.",
+        language="go",
+    ),
+    _rule(
+        "C-COR-004",
+        "using-namespace-in-header",
+        "using namespace in header",
+        "A file-scope `using namespace` directive in a header leaks into every "
+        "translation unit that includes it.",
+        "correctness",
+        "warning",
+        "Qualify names in the header, or move the directive into the "
+        "implementation file or a function body.",
+        language="c_cpp",
+    ),
 )
 
 _CATALOG = MappingProxyType({rule.rule_id: rule for rule in _RULES})

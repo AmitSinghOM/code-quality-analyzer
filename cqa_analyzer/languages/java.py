@@ -42,6 +42,8 @@ from ..registry import PluginRegistry
 from ..safe_io import SafeReadError, read_bounded_text
 from ..signals import FileSignals, pattern_is_present
 from ._shared import RegexRulePackBase, empty_catch_finding
+from ._parity import broad_catch_findings
+from ._sql import JAVA_SQL, dynamic_sql_findings
 
 JAVA_ADAPTER_VERSION = "1.0.0"
 JAVA_CACHE_CODEC_VERSION = "1.0.0"
@@ -411,16 +413,47 @@ class JavaEmptyCatchRule:
             yield empty_catch_finding(self.rule_id, parsed, match, rethrow_word="exception")
 
 
+class JavaDynamicSqlRule:
+    """Detect SQL text built with ``+``, ``String.format`` or ``formatted``."""
+
+    rule_id = "JAVA-COR-002"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, JavaFacts):
+            return
+        yield from dynamic_sql_findings(self.rule_id, parsed, JAVA_SQL)
+
+
+# ``catch (Exception e)``, ``catch (final Throwable t)``, ``catch (java.lang.Error
+# | IOException e)``: any alternative that names a root type is broad.
+_BROAD_CATCH = re.compile(
+    r"\bcatch\s*\(\s*(?:final\s+)?(?:[\w.]+\s*\|\s*)*"
+    r"(?P<type>(?:java\.lang\.)?(?:Exception|Throwable|RuntimeException|Error))\b"
+    r"(?:\s*\|\s*[\w.]+)*\s+\w+\s*\)\s*\{"
+)
+
+
+class JavaBroadCatchRule:
+    """Detect handlers that catch Exception, Throwable, RuntimeException or Error."""
+
+    rule_id = "JAVA-COR-003"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, JavaFacts):
+            return
+        yield from broad_catch_findings(self.rule_id, parsed, _BROAD_CATCH)
+
+
 class JavaRulePack(RegexRulePackBase):
     """Run the bounded built-in Java pilot rules."""
 
     rule_pack_id = JAVA_RULE_PACK_ID
     language_id = "java"
-    ruleset_version = "1.0.0"
+    ruleset_version = "1.1.0"
     plugin_api_version = PLUGIN_API_VERSION
 
     def __init__(self) -> None:
-        self.rules = (JavaEmptyCatchRule(),)
+        self.rules = (JavaEmptyCatchRule(), JavaDynamicSqlRule(), JavaBroadCatchRule())
 
 
 class JavaArchitectureSignalProvider:

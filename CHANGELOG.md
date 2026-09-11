@@ -4,6 +4,78 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 2.41.0 - 2026-09-12
+
+Parity release. Before this, "seven languages" meant Python's 18 rules plus
+one empty-catch rule in each other language. A Stack Overflow review of the
+most-voted questions per language tag (2025 survey: JavaScript 66 %, SQL
+58.6 %, Python 57.9 %, …) showed the same defect classes Python already
+covers are the top concerns elsewhere; this release adds 20 rules (39 → 59)
+so every language has correctness rules anchored to its own idioms. No
+weight or curve changed; scoring policy stays 2.0.0, report schema 1.12.0.
+Ruleset 2.22.0. All 12 probed calibration scores are unchanged to the
+decimal — findings are reported, never scored.
+
+### Added — dynamic SQL, every language
+
+- `PY-COR-007`, `GO-COR-002`, `TS-COR-002`, `JAVA-COR-002`, `KT-COR-002`,
+  `CS-COR-002`, `C-COR-002`: a SQL statement assembled with interpolation,
+  `+` concatenation or a formatting call. One classifier
+  (`cqa_analyzer/sql_text.py`) decides "is this SQL" for all seven languages
+  — statement and clause keywords must share case, so prose such as
+  `"Select an item from the list"` is rejected. Python uses the AST; the
+  regex languages read literals through the blanked text via
+  `languages/_sql.py`, which honours multi-line literals, triple-quoted
+  text blocks and C#'s `$`/`@` prefixes. Driver parameters, literal-only
+  concatenation and numeric constants never fire. Precision on the
+  calibration corpus: 0 findings across 11 non-SQL repositories; 19 in
+  drogon's ORM, all genuine.
+
+### Added — parity with the Python catalog
+
+- `JAVA-COR-003`, `KT-COR-003`, `CS-COR-003`, `C-COR-003`: broad exception
+  handler (PY-COR-002's counterpart). Java/Kotlin: `Exception`, `Throwable`,
+  `RuntimeException`, `Error`, including multi-catch; C#: `Exception`,
+  `System.Exception`, bare `catch` (exception filters exempt); C++:
+  `catch (...)`. A handler that rethrows is a `note`.
+- `CS-COR-004`, `KT-COR-004`, `TS-COR-003`: blocking call in an
+  asynchronous body (PY-COR-005's counterpart) — `.Result`/`.Wait()`/
+  `GetAwaiter().GetResult()` in `async`; `runBlocking`/`Thread.sleep` in
+  `suspend fun` (expression bodies included); `*Sync` I/O in `async`
+  functions. Nested lambdas are not attributed to the enclosing declaration.
+- `TS-COR-004`: `@ts-ignore` / `@ts-expect-error` / `@ts-nocheck` without a
+  reason.
+- `TS-COR-005`, `KT-COR-005`: non-null assertion density (`!` / `!!`), one
+  finding per file above four; `note` in test paths.
+- `GO-COR-003`: unchecked single-value type assertion (`note` in
+  `_test.go`); `GO-COR-004`: `defer` directly inside a loop.
+- `C-COR-004`: file-scope `using namespace` in a header.
+
+### Changed
+
+- Rule-pack `ruleset_version`: python 2.14.0, go 2.6.0, java/kotlin/csharp/
+  typescript/c_cpp 1.1.0.
+- New shared helpers `languages/_parity.py` (`block_end`,
+  `strip_nested_blocks`, `broad_catch_findings`,
+  `blocking_in_async_findings`, `non_null_density_findings`,
+  `is_test_path`, `downgrade_in_tests`).
+
+### Calibration notes (precision fixes made before release)
+
+- C# `.Result` requires a call-shaped or `*task*` receiver: StackExchange.Redis
+  exposed `msg.Result` as a plain struct property (56 → 26 findings; the
+  remainder are guarded-but-real `task.Result` reads).
+- Unchecked Go assertions and `!`/`!!` density are graded `note` in test
+  files: 167 of go-redis's 209 assertions and most of ktor's and nest's
+  density were in tests.
+
+### Tests
+
+- `tests/test_sql_rules.py` (32) and `tests/test_parity_rules.py` (18);
+  existing empty-catch fixtures that catch `Exception` are scoped to
+  `*-COR-001` because the broad-catch rules now also fire on them, exactly
+  as PY-COR-002 and PY-COR-003 both fire on `except Exception: pass`.
+
 ## 2.40.0 - 2026-09-10
 
 Actionability release, found by dogfooding on a 391-file Python service

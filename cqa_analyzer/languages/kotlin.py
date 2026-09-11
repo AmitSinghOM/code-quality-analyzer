@@ -24,6 +24,13 @@ from ..protocols import (
 )
 from ..registry import PluginRegistry
 from ._shared import RegexRulePackBase, empty_catch_finding, signal_observations
+from ._parity import (
+    blocking_in_async_findings,
+    broad_catch_findings,
+    downgrade_in_tests,
+    non_null_density_findings,
+)
+from ._sql import KOTLIN_SQL, dynamic_sql_findings
 from .java import JavaFacts, JavaPackageProvider
 
 KOTLIN_ADAPTER_VERSION = "1.0.0"
@@ -379,16 +386,85 @@ class KotlinEmptyCatchRule:
             yield empty_catch_finding(self.rule_id, parsed, match, rethrow_word="exception")
 
 
+class KotlinDynamicSqlRule:
+    """Detect SQL text built with ``$`` templates, ``+`` or ``format``."""
+
+    rule_id = "KT-COR-002"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, KotlinFacts):
+            return
+        yield from dynamic_sql_findings(self.rule_id, parsed, KOTLIN_SQL)
+
+
+_KT_BROAD_CATCH = re.compile(
+    r"\bcatch\s*\(\s*\w+\s*:\s*"
+    r"(?P<type>(?:kotlin\.|java\.lang\.)?(?:Exception|Throwable|RuntimeException|Error))"
+    r"\s*\)\s*\{"
+)
+# ``suspend fun name(...)`` up to the parameter list's closing paren; the
+# return type and body follow.
+_KT_SUSPEND_HEADER = re.compile(r"\bsuspend\s+(?:inline\s+)?fun\b[^{=;(]*\([^()]*\)[^{=;]*")
+_KT_BLOCKING = re.compile(r"\b(?:runBlocking|Thread\.sleep)\s*[({]")
+_KT_NON_NULL = re.compile(r"!!(?!=)")
+
+
+class KotlinBroadCatchRule:
+    """Detect handlers that catch Exception, Throwable, RuntimeException or Error."""
+
+    rule_id = "KT-COR-003"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, KotlinFacts):
+            return
+        yield from broad_catch_findings(self.rule_id, parsed, _KT_BROAD_CATCH)
+
+
+class KotlinBlockingInSuspendRule:
+    """Detect ``runBlocking`` / ``Thread.sleep`` inside a ``suspend fun``."""
+
+    rule_id = "KT-COR-004"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, KotlinFacts):
+            return
+        yield from blocking_in_async_findings(
+            self.rule_id,
+            parsed,
+            async_header=_KT_SUSPEND_HEADER,
+            blocking_call=_KT_BLOCKING,
+            what="A blocking call",
+        )
+
+
+class KotlinNonNullDensityRule:
+    """Report files that lean on the ``!!`` operator."""
+
+    rule_id = "KT-COR-005"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, KotlinFacts):
+            return
+        for finding in non_null_density_findings(self.rule_id, parsed, _KT_NON_NULL, operator="!!"):
+            yield downgrade_in_tests(parsed, finding)
+
+
 class KotlinRulePack(RegexRulePackBase):
     """Run the bounded built-in Kotlin pilot rules."""
 
     rule_pack_id = KOTLIN_RULE_PACK_ID
     language_id = "kotlin"
-    ruleset_version = "1.0.0"
+    ruleset_version = "1.1.0"
     plugin_api_version = PLUGIN_API_VERSION
 
     def __init__(self) -> None:
-        self.rules = (KotlinEmptyCatchRule(),)
+        self.rules = (
+            KotlinEmptyCatchRule(),
+            KotlinDynamicSqlRule(),
+            KotlinBroadCatchRule(),
+            KotlinBlockingInSuspendRule(),
+            KotlinNonNullDensityRule(),
+        )
 
 
 class KotlinArchitectureSignalProvider:
