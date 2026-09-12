@@ -11,7 +11,11 @@ Every pattern ID exists in the Python catalog (regression-locked).
 
 from __future__ import annotations
 
-from .production_patterns import PRODUCTION_DSA_PATTERNS, production_design_patterns
+from .production_patterns import (
+    PRODUCTION_DSA_PATTERNS,
+    extend_shared_anchors,
+    production_design_patterns,
+)
 
 C_DSA_PATTERNS = {
     "hash_map": {
@@ -553,6 +557,7 @@ C_DESIGN_PATTERNS = {
 # shared specs with C/C++'s idiomatic libraries and primitives. Includes are
 # the strongest evidence in C-family code, so most anchors are header paths.
 C_DSA_PATTERNS.update(PRODUCTION_DSA_PATTERNS)
+extend_shared_anchors(C_DSA_PATTERNS)
 C_DESIGN_PATTERNS.update(
     production_design_patterns(
         imports={

@@ -17,7 +17,11 @@ Every pattern ID here MUST also exist in the Python pattern catalog
 corroboration.
 """
 
-from .production_patterns import PRODUCTION_DSA_PATTERNS, production_design_patterns
+from .production_patterns import (
+    PRODUCTION_DSA_PATTERNS,
+    extend_shared_anchors,
+    production_design_patterns,
+)
 
 CSHARP_DSA_PATTERNS = {
     "hash_map": {
@@ -291,6 +295,7 @@ CSHARP_DESIGN_PATTERNS = {
 # Scoring policy 2.0.0: production-systems and GoF patterns, merged from the
 # shared specs with .NET's idiomatic libraries and primitives.
 CSHARP_DSA_PATTERNS.update(PRODUCTION_DSA_PATTERNS)
+extend_shared_anchors(CSHARP_DSA_PATTERNS)
 CSHARP_DESIGN_PATTERNS.update(production_design_patterns(
     imports={
         "resilience": [

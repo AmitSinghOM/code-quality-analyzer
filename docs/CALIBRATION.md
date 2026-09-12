@@ -9,7 +9,7 @@ network).
 
 Does the architecture signal score depend on the *language* a project
 is written in, or only on what the project does? Eight languages share
-one 56-pattern catalog and one scoring curve, but each language has its
+one 62-pattern catalog (56 before policy 2.1.0) and one scoring curve, but each language has its
 own anchor vocabulary and its own lexer, so a language could be
 penalised structurally (catalog gaps, weak anchors) or operationally
 (lexer failures that make files non-authoritative).
@@ -352,3 +352,58 @@ Rust's remaining lead is within the ±1 band the corpus treats as project
 scope rather than language bias; both leading projects are unusually
 algorithm-dense for their domain. Machine-readable rows are merged into
 `docs/calibration-latest.json` (24 rows).
+
+## Scoring policy 2.1.0 (2.44.0): six new IDs, labuladong anchors — 24 projects
+
+Policy 2.1.0 (ADR 003) added `distributed_locking`, `optimistic_concurrency`,
+`security_hardening`, `scheduling`, `ring_buffer` and `randomized_sampling`,
+extended eight DSA IDs with labuladong vocabulary, and moved the maturity
+target from 28 to 31. Curves are unchanged. Full rerun, before → after:
+
+| domain | language | repo | 2.0.0 | 2.1.0 | Δ | new patterns |
+|---|---|---|---|---|---|---|
+| cli-tool | c_cpp | jqlang/jq | 4.4 | 4.4 | 0 | — |
+| cli-tool | csharp | dotnet-outdated/dotnet-outdated | 5.1 | 5.1 | 0 | — |
+| cli-tool | go | junegunn/fzf | 5.8 | 6.0 | +0.2 | security_hardening |
+| cli-tool | java | jbangdev/jbang | 6.3 | 6.8 | +0.5 | ring_buffer |
+| cli-tool | kotlin | JakeWharton/diffuse | 4.8 | 4.8 | 0 | — |
+| cli-tool | python | httpie/cli | 6.0 | 6.2 | +0.2 | randomized_sampling |
+| cli-tool | rust | BurntSushi/ripgrep | 6.8 | 7.0 | +0.2 | security_hardening |
+| cli-tool | typescript | google/zx | 5.0 | 5.0 | 0 | — |
+| redis-client | c_cpp | redis/hiredis | 3.3 | 3.2 | -0.1 | — |
+| redis-client | csharp | StackExchange/StackExchange.Redis | 8.0 | 8.2 | +0.2 | distributed_locking |
+| redis-client | go | redis/go-redis | 8.8 | 8.9 | +0.1 | optimistic_concurrency, security_hardening |
+| redis-client | java | redis/jedis | 8.5 | 8.7 | +0.2 | ring_buffer, scheduling, security_hardening |
+| redis-client | kotlin | crackthecodeabhi/kreds | 3.8 | 3.8 | 0 | — |
+| redis-client | python | redis/redis-py | 8.7 | 9.0 | +0.3 | distributed_locking, optimistic_concurrency, randomized_sampling, scheduling, security_hardening |
+| redis-client | rust | redis-rs/redis-rs | 8.7 | 8.8 | +0.1 | randomized_sampling, security_hardening |
+| redis-client | typescript | redis/ioredis | 6.6 | 6.5 | -0.1 | — |
+| web-framework | c_cpp | drogonframework/drogon | 7.9 | 7.9 | 0 | security_hardening |
+| web-framework | csharp | FastEndpoints/FastEndpoints | 8.0 | 8.3 | +0.3 | scheduling, security_hardening |
+| web-framework | go | gin-gonic/gin | 5.6 | 5.8 | +0.2 | security_hardening |
+| web-framework | java | javalin/javalin | 7.1 | 7.3 | +0.2 | ring_buffer |
+| web-framework | kotlin | ktorio/ktor | 7.9 | 8.1 | +0.2 | security_hardening |
+| web-framework | python | fastapi/fastapi | 7.6 | 7.6 | 0 | security_hardening |
+| web-framework | rust | tokio-rs/axum | 8.6 | 8.7 | +0.1 | security_hardening |
+| web-framework | typescript | nestjs/nest | 7.7 | 7.6 | -0.1 | — |
+
+17 of 24 moved; the range is −0.1 … +0.5 and the median +0.1. The three
+−0.1 moves are the maturity target alone (same breadth, larger catalog).
+Every increase was traced to its anchor with the signal providers before
+release; the probe removed four anchors that fired wrongly:
+
+- `IF_MATCH`, `PRECONDITION_FAILED`, `CONTENT_SECURITY_POLICY` on javalin's
+  HTTP constant tables (optimistic concurrency / hardening) — header name
+  tables are not concurrency control.
+- fzf's keybinding *denylist* (hardening) — generic allow/deny lists are
+  configuration, not egress control; only SSRF/egress/signing vocabulary
+  remains.
+- `import secrets` in wallet-transfer-service's load script — random IDs
+  are not hardening.
+- HUMM's circuit breaker `CompareAndSwap` — an atomic flag flip is not
+  optimistic record versioning; the anchor now requires `…_version`.
+
+Genuine hits worth noting: jbang's `RingBuffer` (+0.5, the largest move),
+redis-py's five new patterns (locks, versioned writes, sampling, scheduler,
+HMAC), fzf's and gin's constant-time compares. Rank order within each
+domain is unchanged.

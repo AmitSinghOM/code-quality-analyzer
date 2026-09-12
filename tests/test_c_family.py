@@ -145,7 +145,7 @@ def test_empty_catch_rule():
 def test_catalog_ids_are_in_the_shared_catalog():
     assert set(C_DSA_PATTERNS) <= set(DSA_PATTERNS)
     assert set(C_DESIGN_PATTERNS) <= set(SYSTEM_DESIGN_PATTERNS)
-    assert len(C_DSA_PATTERNS) == 29 and len(C_DESIGN_PATTERNS) == 27
+    assert len(C_DSA_PATTERNS) == 31 and len(C_DESIGN_PATTERNS) == 31
 
 
 def test_includes_and_identifiers_fire_signals():

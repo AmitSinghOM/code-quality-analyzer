@@ -28,10 +28,10 @@ _PILOTS = {
 
 
 def test_policy_2_catalog_shape():
-    assert SCORING_POLICY_VERSION == "2.0.0"
-    assert len(DSA_PATTERNS) == 29
-    assert len(SYSTEM_DESIGN_PATTERNS) == 27
-    assert MATURITY_PATTERN_TARGET == 28
+    assert SCORING_POLICY_VERSION == "2.1.0"
+    assert len(DSA_PATTERNS) == 31
+    assert len(SYSTEM_DESIGN_PATTERNS) == 31
+    assert MATURITY_PATTERN_TARGET == 31
     for definition in list(DSA_PATTERNS.values()) + list(SYSTEM_DESIGN_PATTERNS.values()):
         assert definition["weight"] > 0
         assert definition["min_signals"] >= 1
@@ -102,5 +102,5 @@ def test_json_report_carries_policy_2(project):
     root = project({"m.py": "class RetryPolicy:\n    max_retries = 3\n"})
     result = CliRunner().invoke(main, [str(root), "-f", "json"])
     payload = json.loads(result.output)
-    assert payload["scoring_policy_version"] == "2.0.0"
+    assert payload["scoring_policy_version"] == "2.1.0"
     assert "resilience" in payload["design_patterns"]

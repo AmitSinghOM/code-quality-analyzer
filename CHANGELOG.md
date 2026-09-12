@@ -4,6 +4,61 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 2.44.0 - 2026-09-12
+
+Scoring policy **2.1.0** (ADR 003). Two reviews found the 56-pattern catalog
+blind to the coordination-and-safety mechanisms that lead the maintainer's own
+backends (leases / `SKIP LOCKED`, expected-version writes, HMAC signing and
+SSRF egress control, schedulers) and to several chapters of labuladong's
+algorithm framework. Scores are not comparable with policy 2.0.0; reports
+carry `scoring_policy_version`. Ruleset stays 2.24.0 (no rule changed),
+schema 1.12.0.
+
+### Added — catalog 56 → 62
+
+- Design: `distributed_locking` (leases, fencing tokens, `SKIP LOCKED`,
+  advisory locks, redlock), `optimistic_concurrency` (expected-version
+  writes, version conflicts, row versions), `security_hardening`
+  (SSRF/egress control, HMAC signing and verification, constant-time
+  compares, replay windows), `scheduling` (cron, periodic and background
+  jobs; two signals required).
+- DSA: `ring_buffer` (circular buffers; `deque(maxlen=)` needs a ring
+  anchor), `randomized_sampling` (weighted choice, reservoir sampling,
+  Fisher-Yates, alias tables; plain `random()` is not evidence).
+- Specs live once in `production_patterns.py` and are inherited by all eight
+  language catalogs, so the fairness gate holds by construction; Python and
+  Rust add library imports (redis.lock/redlock/etcd3, apscheduler/celery
+  beat/croniter, `rand::distributions::WeightedIndex`, tokio-cron-scheduler…).
+- `SHARED_ANCHOR_EXTENSIONS` / `extend_shared_anchors`: labuladong
+  vocabulary added to eight existing DSA IDs — monotonic queue, difference
+  array, two-heap median, ordered maps (TreeMap, SortedDict, BTreeMap, skip
+  list, red-black, AVL), Floyd-Warshall/SPFA, bipartite and cycle checks,
+  flood fill, sweep line / meeting rooms, Rabin-Karp / rolling hash / KMP.
+
+### Changed
+
+- `MATURITY_PATTERN_TARGET` 28 → 31 (half the vocabulary, as ADR 002 set
+  it). Curves unchanged: the new patterns are rarer than the 2.0.0
+  additions, so added weight lifts only projects that have them.
+
+### Calibration (24 projects, full rerun)
+
+- 17 scores moved, range −0.1 … +0.5, median +0.1; the three −0.1 moves are
+  the maturity target alone. Rank order within each domain unchanged.
+- Four anchors removed after tracing hits to source: HTTP constant tables
+  (`IF_MATCH`, `PRECONDITION_FAILED`, `CONTENT_SECURITY_POLICY` on javalin),
+  generic allow/deny lists (fzf keybindings), bare `import secrets` (wallet
+  load script), atomic `CompareAndSwap` (HUMM circuit breaker).
+- Maintainer repos, which motivated the design IDs: fastapi-microservices-
+  platform 8.1 → 8.6, cloudscale 7.3 → 8.0, HUMM 7.4 → 7.5, wallet 6.0.
+
+### Tests
+
+- `tests/test_catalog_policy_2_1.py` (22): every new ID and every extension
+  anchor reachable in all eight catalogs, one recognition and one refusal
+  per new ID, one recognition per labuladong anchor; golden fixture and
+  policy pins updated. 631 total.
+
 ## 2.43.0 - 2026-09-12
 
 Rust is a full language. The 2.42.0 pilot was gated on `tree-sitter-rust`

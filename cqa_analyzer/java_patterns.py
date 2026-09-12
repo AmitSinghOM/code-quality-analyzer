@@ -19,7 +19,11 @@ approximate, so generic terms keep the same ``min_signals``
 corroboration discipline as the other languages.
 """
 
-from .production_patterns import PRODUCTION_DSA_PATTERNS, production_design_patterns
+from .production_patterns import (
+    PRODUCTION_DSA_PATTERNS,
+    extend_shared_anchors,
+    production_design_patterns,
+)
 
 JAVA_DSA_PATTERNS = {
     "hash_map": {
@@ -304,6 +308,7 @@ JAVA_DESIGN_PATTERNS = {
 # Scoring policy 2.0.0: production-systems and GoF patterns, merged from the
 # shared specs with Java's idiomatic libraries and primitives.
 JAVA_DSA_PATTERNS.update(PRODUCTION_DSA_PATTERNS)
+extend_shared_anchors(JAVA_DSA_PATTERNS)
 JAVA_DESIGN_PATTERNS.update(production_design_patterns(
     imports={
         "resilience": [
