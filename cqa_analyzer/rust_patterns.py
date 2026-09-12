@@ -13,7 +13,11 @@ Every pattern ID exists in the Python catalog (regression-locked by
 
 from __future__ import annotations
 
-from .production_patterns import PRODUCTION_DSA_PATTERNS, production_design_patterns
+from .production_patterns import (
+    PRODUCTION_DSA_PATTERNS,
+    extend_shared_anchors,
+    production_design_patterns,
+)
 
 RUST_DSA_PATTERNS = {
     "hash_map": {
@@ -625,6 +629,31 @@ RUST_DESIGN_PATTERNS = {
 RUST_DSA_PATTERNS.update(
     {k: v for k, v in PRODUCTION_DSA_PATTERNS.items() if k not in RUST_DSA_PATTERNS}
 )
+extend_shared_anchors(RUST_DSA_PATTERNS)
+# Rust idioms for the policy-2.1.0 DSA IDs.
+RUST_DSA_PATTERNS["ring_buffer"]["imports"] = [
+    "ringbuf",
+    "ringbuffer",
+    "circular_buffer",
+    "heapless::spsc",
+    "arraydeque",
+]
+RUST_DSA_PATTERNS["ring_buffer"]["identifiers"] += [
+    "allocringbuffer",
+    "constgenericringbuffer",
+    "heaplessqueue",
+]
+RUST_DSA_PATTERNS["randomized_sampling"]["imports"] = [
+    "rand::distributions::weightedindex",
+    "rand::seq",
+    "rand_distr",
+]
+RUST_DSA_PATTERNS["randomized_sampling"]["identifiers"] += [
+    "weightedindex",
+    "choose_weighted",
+    "choose_multiple",
+    "sliceRandom".lower(),
+]
 RUST_DESIGN_PATTERNS.update(
     production_design_patterns(
         imports={
@@ -704,6 +733,31 @@ RUST_DESIGN_PATTERNS.update(
                 "bus",
             ],
             "strategy_pattern": [],
+            "distributed_locking": [
+                "redlock",
+                "etcd_client",
+                "zookeeper",
+                "consul::session",
+                "tokio::sync::semaphore",
+            ],
+            "optimistic_concurrency": ["sea_orm::activemodel", "diesel::result::error::notfound"],
+            "security_hardening": [
+                "hmac",
+                "sha2",
+                "subtle",
+                "ring::hmac",
+                "constant_time_eq",
+                "zeroize",
+                "secrecy",
+            ],
+            "scheduling": [
+                "tokio_cron_scheduler",
+                "cron",
+                "clokwerk",
+                "apalis",
+                "tokio::time::interval",
+                "job_scheduler",
+            ],
         },
         identifiers={
             "concurrency": [

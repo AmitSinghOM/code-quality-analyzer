@@ -24,7 +24,11 @@ pattern is a cross-language scoring-policy change tracked in the
 roadmap.
 """
 
-from .production_patterns import PRODUCTION_DSA_PATTERNS, production_design_patterns
+from .production_patterns import (
+    PRODUCTION_DSA_PATTERNS,
+    extend_shared_anchors,
+    production_design_patterns,
+)
 
 TS_DSA_PATTERNS = {
     "hash_map": {
@@ -287,6 +291,7 @@ TS_DESIGN_PATTERNS = {
 # Scoring policy 2.0.0: production-systems and GoF patterns, merged from the
 # shared specs with the JavaScript ecosystem's libraries and primitives.
 TS_DSA_PATTERNS.update(PRODUCTION_DSA_PATTERNS)
+extend_shared_anchors(TS_DSA_PATTERNS)
 TS_DESIGN_PATTERNS.update(production_design_patterns(
     imports={
         "resilience": [

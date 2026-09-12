@@ -15,8 +15,9 @@ SIZE_SATURATION_LINES = 2_000
 
 # Distinct patterns at which the maturity component maxes out.
 # Scoring policy 2.0.0 raised this from 20 when the catalog grew from 38
-# to 56 patterns, so breadth is measured against the larger vocabulary.
-MATURITY_PATTERN_TARGET = 28
+# to 56 patterns; policy 2.1.0 raised it to 31 for the 62-pattern catalog
+# (docs/adr/003), keeping the target at half the vocabulary.
+MATURITY_PATTERN_TARGET = 31
 
 
 class QualityRater:

@@ -68,9 +68,14 @@ and project size no longer adds score, so most projects will score lower than
 they did before. Scores under **scoring policy 2.0.0** (analyzer 2.32.0+) are
 likewise not comparable to policy 1.0.0: the catalog grew from 38 to 56
 patterns to cover production-systems engineering, and the rating curves were
-rescaled. Every JSON report carries `scoring_policy_version`. See
-[Scoring](#scoring) and
-[`docs/adr/002-scoring-policy-2-production-systems-catalog.md`](docs/adr/002-scoring-policy-2-production-systems-catalog.md).
+rescaled. **Scoring policy 2.1.0** (analyzer 2.44.0+) grew the catalog to 62 —
+distributed locking, optimistic concurrency, security hardening, scheduling,
+ring buffers and randomized sampling — and raised the maturity target to 31;
+curves are unchanged, so scores move by at most a few tenths and only for
+projects that have the new patterns. Every JSON report carries
+`scoring_policy_version`. See [Scoring](#scoring),
+[`docs/adr/002-scoring-policy-2-production-systems-catalog.md`](docs/adr/002-scoring-policy-2-production-systems-catalog.md)
+and [`docs/adr/003-scoring-policy-2-1-locking-hardening-labuladong.md`](docs/adr/003-scoring-policy-2-1-locking-hardening-labuladong.md).
 
 ## Project Structure
 
@@ -202,8 +207,8 @@ python3 -m pip install --upgrade cqa-analyzer
 python3 -m pip install --upgrade 'cqa-analyzer[deep]'   # with the optional extra
 
 # a specific version
-pipx install --force 'cqa-analyzer==2.43.0'
-python3 -m pip install 'cqa-analyzer==2.43.0'
+pipx install --force 'cqa-analyzer==2.44.0'
+python3 -m pip install 'cqa-analyzer==2.44.0'
 ```
 
 Check with `code-quality-analyzer --version`. If the number does not
@@ -606,6 +611,16 @@ target rose from 20 to 28 distinct patterns — partial rather than
 proportional scaling, because the added production-systems patterns are rarer
 than the originals. Re-derive any `--fail-under` threshold once after
 upgrading.
+
+**Scoring policy 2.1.0.** Six IDs were added (62 patterns) for coordination
+and safety mechanisms the 2.0.0 catalog could not see — leases / `SKIP
+LOCKED` / fencing tokens, expected-version writes, HMAC signing and
+SSRF-egress control, schedulers — plus ring buffers and weighted / reservoir
+sampling, and eight DSA IDs gained labuladong's vocabulary (monotonic queues,
+difference arrays, two-heap medians, ordered maps, Floyd-Warshall, bipartite
+and cycle checks, sweep line, Rabin-Karp). The maturity target moved 28 → 31;
+curves did not move. On the 24-project corpus 17 scores changed, all within
+−0.1 … +0.5 (median +0.1); every increase traces to a verified pattern.
 
 ## Scan Safety
 

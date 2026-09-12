@@ -324,3 +324,16 @@ trait resolution, `unsafe` accounting, build scripts.
 3. TS/JS pilot entry (item 4) in parallel with the item 3 parser
    evaluation.
 4. Go duplication/complexity (item 3) only if Option A is accepted.
+
+## 11. Scoring policy 2.1.0 (✅ shipped in 2.44.0)
+
+Two reviews of the 56-pattern catalog: a Stack Overflow / labuladong
+mapping of DSA vocabulary, and a scan of the maintainer's own backends for
+system-design mechanisms the catalog could not see. Decision (ADR 003):
+four design IDs (`distributed_locking`, `optimistic_concurrency`,
+`security_hardening`, `scheduling`), two DSA IDs (`ring_buffer`,
+`randomized_sampling`), labuladong anchors on eight existing DSA IDs,
+maturity target 28 → 31, curves unchanged. Specs live once in
+`production_patterns.py` so every language inherits them. Calibrated on
+the full 24-project corpus before release; four anchors removed from the
+evidence (`docs/CALIBRATION.md`, "Scoring policy 2.1.0").

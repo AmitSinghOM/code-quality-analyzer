@@ -16,6 +16,14 @@ pattern is reported. Generic patterns need corroboration; a single mention of
 ``visited`` is not a graph traversal.
 """
 
+from .production_patterns import (
+    PRODUCTION_DSA_PATTERNS as _PRODUCTION_DSA,
+    extend_shared_anchors,
+    production_design_patterns as _production_design_patterns,
+)
+
+_PRODUCTION_DESIGN = _production_design_patterns()
+
 # DSA patterns to detect
 DSA_PATTERNS = {
     "hash_map": {
@@ -23,23 +31,28 @@ DSA_PATTERNS = {
         "imports": ["collections.counter", "collections.defaultdict"],
         "weight": 1.5,
         "min_signals": 1,
-        "description": "Hash-based data structures for O(1) lookups"
+        "description": "Hash-based data structures for O(1) lookups",
     },
     "set_operations": {
         "identifiers": [
-            "frozenset", "union", "intersection", "difference",
-            "issubset", "issuperset", "symmetric_difference",
+            "frozenset",
+            "union",
+            "intersection",
+            "difference",
+            "issubset",
+            "issuperset",
+            "symmetric_difference",
         ],
         "weight": 1.2,
         "min_signals": 1,
-        "description": "Set operations for unique elements and fast membership"
+        "description": "Set operations for unique elements and fast membership",
     },
     "sorting": {
         "identifiers": ["sorted", "sort", "heapq", "bisect", "itemgetter"],
         "imports": ["heapq", "bisect", "operator.itemgetter"],
         "weight": 1.3,
         "min_signals": 1,
-        "description": "Sorting algorithms and ordered operations"
+        "description": "Sorting algorithms and ordered operations",
     },
     "binary_search": {
         "identifiers": ["bisect_left", "bisect_right", "binary_search", "insort"],
@@ -47,17 +60,23 @@ DSA_PATTERNS = {
         "imports": ["bisect"],
         "weight": 2.0,
         "min_signals": 2,
-        "description": "Binary search for O(log n) lookups"
+        "description": "Binary search for O(log n) lookups",
     },
     "graph_traversal": {
         "identifiers": [
-            "bfs", "dfs", "visited", "neighbors", "neighbours",
-            "adjacency", "adj_list", "graph",
+            "bfs",
+            "dfs",
+            "visited",
+            "neighbors",
+            "neighbours",
+            "adjacency",
+            "adj_list",
+            "graph",
         ],
         "imports": ["collections.deque", "networkx"],
         "weight": 2.5,
         "min_signals": 2,
-        "description": "Graph traversal algorithms (BFS/DFS)"
+        "description": "Graph traversal algorithms (BFS/DFS)",
     },
     "dynamic_programming": {
         "identifiers": ["lru_cache", "memoize", "memo", "dp", "tabulation"],
@@ -65,7 +84,7 @@ DSA_PATTERNS = {
         "imports": ["functools.lru_cache", "functools.cache"],
         "weight": 3.0,
         "min_signals": 1,
-        "description": "Dynamic programming and memoization"
+        "description": "Dynamic programming and memoization",
     },
     "tree_structures": {
         "identifiers": ["treenode", "left_child", "right_child", "subtree"],
@@ -73,7 +92,7 @@ DSA_PATTERNS = {
         "text": ["root.left", "root.right", "node.left", "node.right"],
         "weight": 2.0,
         "min_signals": 1,
-        "description": "Tree data structures"
+        "description": "Tree data structures",
     },
     "linked_list": {
         "identifiers": ["listnode", "next_node", "prev_node"],
@@ -81,7 +100,7 @@ DSA_PATTERNS = {
         "text": ["head.next", "curr.next", "current.next", "node.next"],
         "weight": 1.5,
         "min_signals": 1,
-        "description": "Linked list implementations"
+        "description": "Linked list implementations",
     },
     "queue_stack": {
         "identifiers": ["deque", "lifoqueue", "simplequeue", "popleft", "appendleft"],
@@ -89,112 +108,153 @@ DSA_PATTERNS = {
         "imports": ["collections.deque", "queue.queue", "queue.lifoqueue"],
         "weight": 1.2,
         "min_signals": 1,
-        "description": "Queue and stack data structures"
+        "description": "Queue and stack data structures",
     },
     "heap_priority": {
         "identifiers": [
-            "heappush", "heappop", "heapify", "heappushpop", "heapreplace",
-            "priorityqueue", "nlargest", "nsmallest",
+            "heappush",
+            "heappop",
+            "heapify",
+            "heappushpop",
+            "heapreplace",
+            "priorityqueue",
+            "nlargest",
+            "nsmallest",
         ],
         "imports": ["heapq", "queue.priorityqueue"],
         "weight": 2.0,
         "min_signals": 1,
-        "description": "Heap/priority queue for efficient min/max operations"
+        "description": "Heap/priority queue for efficient min/max operations",
     },
     "trie": {
         "identifiers": ["trienode", "trie", "prefix_tree", "insert_word", "search_prefix"],
         "identifier_contains": ["trienode"],
         "weight": 2.5,
         "min_signals": 1,
-        "description": "Trie/prefix tree for string operations"
+        "description": "Trie/prefix tree for string operations",
     },
     "union_find": {
         "identifiers": [
-            "unionfind", "disjointset", "find_parent", "find_root",
-            "path_compression", "union_by_rank",
+            "unionfind",
+            "disjointset",
+            "find_parent",
+            "find_root",
+            "path_compression",
+            "union_by_rank",
         ],
         "identifier_contains": ["unionfind", "disjointset"],
         "text": ["parent[", "rank["],
         "weight": 2.5,
         "min_signals": 2,
-        "description": "Union-Find/Disjoint Set for connectivity"
+        "description": "Union-Find/Disjoint Set for connectivity",
     },
     "topological_sort": {
         "identifiers": [
-            "topological_sort", "toposort", "in_degree", "indegree",
-            "kahn", "topologicalsorter",
+            "topological_sort",
+            "toposort",
+            "in_degree",
+            "indegree",
+            "kahn",
+            "topologicalsorter",
         ],
         "identifier_contains": ["topological"],
         "imports": ["graphlib", "toposort"],
         "weight": 2.5,
         "min_signals": 1,
-        "description": "Topological sorting for DAG ordering"
+        "description": "Topological sorting for DAG ordering",
     },
     "sliding_window": {
         "identifiers": [
-            "window_start", "window_end", "window_size",
-            "shrink_window", "expand_window", "sliding_window",
+            "window_start",
+            "window_end",
+            "window_size",
+            "shrink_window",
+            "expand_window",
+            "sliding_window",
         ],
         "weight": 2.0,
         "min_signals": 1,
-        "description": "Sliding window technique for subarray problems"
+        "description": "Sliding window technique for subarray problems",
     },
     "two_pointers": {
         "identifiers": [
-            "two_pointer", "two_pointers", "left_pointer", "right_pointer",
-            "slow_fast", "fast_slow", "tortoise_hare", "slow", "fast",
+            "two_pointer",
+            "two_pointers",
+            "left_pointer",
+            "right_pointer",
+            "slow_fast",
+            "fast_slow",
+            "tortoise_hare",
+            "slow",
+            "fast",
         ],
         "weight": 1.5,
         "min_signals": 2,
-        "description": "Two pointers technique for array traversal"
+        "description": "Two pointers technique for array traversal",
     },
     "backtracking": {
         "identifiers": ["backtrack", "backtracking", "unchoose", "is_valid_state", "prune"],
         "identifier_contains": ["backtrack"],
         "weight": 2.5,
         "min_signals": 1,
-        "description": "Backtracking for constraint satisfaction"
+        "description": "Backtracking for constraint satisfaction",
     },
     "segment_tree": {
         "identifiers": [
-            "segmenttree", "segment_tree", "range_query", "range_update",
-            "build_tree", "query_range", "lazy_propagation",
+            "segmenttree",
+            "segment_tree",
+            "range_query",
+            "range_update",
+            "build_tree",
+            "query_range",
+            "lazy_propagation",
         ],
         "identifier_contains": ["segmenttree"],
         "weight": 3.0,
         "min_signals": 1,
-        "description": "Segment tree for range queries"
+        "description": "Segment tree for range queries",
     },
     "fenwick_tree": {
         "identifiers": [
-            "fenwicktree", "fenwick_tree", "binaryindexedtree",
-            "update_bit", "query_bit",
+            "fenwicktree",
+            "fenwick_tree",
+            "binaryindexedtree",
+            "update_bit",
+            "query_bit",
         ],
         "identifier_contains": ["fenwick", "binaryindexedtree"],
         "weight": 3.0,
         "min_signals": 1,
-        "description": "Fenwick/Binary Indexed Tree for prefix operations"
+        "description": "Fenwick/Binary Indexed Tree for prefix operations",
     },
     "lru_cache_manual": {
         "identifiers": [
-            "ordereddict", "move_to_end", "popitem", "capacity",
-            "evict", "cache_hit", "cache_miss",
+            "ordereddict",
+            "move_to_end",
+            "popitem",
+            "capacity",
+            "evict",
+            "cache_hit",
+            "cache_miss",
         ],
         "imports": ["collections.ordereddict"],
         "weight": 2.0,
         "min_signals": 2,
-        "description": "Manual LRU cache implementation"
+        "description": "Manual LRU cache implementation",
     },
     "bloom_filter": {
         "identifiers": [
-            "bloomfilter", "bloom_filter", "hash_functions",
-            "bit_array", "false_positive_rate",
+            "bloomfilter",
+            "bloom_filter",
+            "hash_functions",
+            "bit_array",
+            "false_positive_rate",
         ],
         "identifier_contains": ["bloomfilter"],
         "imports": ["pybloom", "bloom_filter", "bitarray"],
         "weight": 2.5,
         "min_signals": 1,
-        "description": "Bloom filter for probabilistic membership"
+        "description": "Bloom filter for probabilistic membership",
     },
     "dijkstra": {
         "identifiers": ["dijkstra", "bellman_ford", "shortest_path", "a_star", "astar"],
@@ -202,7 +262,7 @@ DSA_PATTERNS = {
         "imports": ["networkx.dijkstra", "networkx.shortest_path"],
         "weight": 2.5,
         "min_signals": 1,
-        "description": "Shortest path algorithms (Dijkstra/Bellman-Ford)"
+        "description": "Shortest path algorithms (Dijkstra/Bellman-Ford)",
     },
     "minimum_spanning_tree": {
         "identifiers": ["kruskal", "prim", "mst", "minimum_spanning", "spanning_tree"],
@@ -210,68 +270,106 @@ DSA_PATTERNS = {
         "imports": ["networkx.minimum_spanning_tree"],
         "weight": 2.5,
         "min_signals": 1,
-        "description": "Minimum spanning tree algorithms"
+        "description": "Minimum spanning tree algorithms",
     },
     "monotonic_stack": {
         "identifiers": [
-            "monotonic_stack", "monotonicstack", "mono_stack", "next_greater",
-            "next_smaller", "previous_greater", "previous_smaller",
+            "monotonic_stack",
+            "monotonicstack",
+            "mono_stack",
+            "next_greater",
+            "next_smaller",
+            "previous_greater",
+            "previous_smaller",
         ],
         "weight": 2.0,
         "min_signals": 1,
-        "description": "Monotonic stack for next greater/smaller element"
+        "description": "Monotonic stack for next greater/smaller element",
     },
     "interval_operations": {
         "identifiers": [
-            "merge_intervals", "interval_overlap", "interval_intersection",
-            "intervaltree", "overlaps",
+            "merge_intervals",
+            "interval_overlap",
+            "interval_intersection",
+            "intervaltree",
+            "overlaps",
         ],
         "text": ["intervals.sort"],
         "imports": ["intervaltree"],
         "weight": 2.0,
         "min_signals": 1,
-        "description": "Interval merging and overlap detection"
+        "description": "Interval merging and overlap detection",
     },
     # --- Scoring policy 2.0.0 additions ---
     "bit_manipulation": {
         "identifiers": [
-            "bitmask", "popcount", "bit_count", "bitcount", "lowbit", "xor",
-            "bit_length", "set_bit", "clear_bit", "toggle_bit",
+            "bitmask",
+            "popcount",
+            "bit_count",
+            "bitcount",
+            "lowbit",
+            "xor",
+            "bit_length",
+            "set_bit",
+            "clear_bit",
+            "toggle_bit",
         ],
         "text": ["1 <<", "& (1 <<", "^= 1 <<", ">> 1) & 1"],
         "weight": 2.0,
         "min_signals": 1,
-        "description": "Bit manipulation and bitmask techniques"
+        "description": "Bit manipulation and bitmask techniques",
     },
     "prefix_sum": {
         "identifier_contains": [
-            "prefix_sum", "prefixsum", "cumsum", "cumulative_sum", "running_sum",
-            "runningsum", "prefix_sums",
+            "prefix_sum",
+            "prefixsum",
+            "cumsum",
+            "cumulative_sum",
+            "running_sum",
+            "runningsum",
+            "prefix_sums",
         ],
         "identifiers": ["accumulate"],
         "imports": ["itertools.accumulate"],
         "weight": 2.0,
         "min_signals": 1,
-        "description": "Prefix sums and cumulative arrays"
+        "description": "Prefix sums and cumulative arrays",
     },
     "string_matching": {
         "identifiers": [
-            "kmp", "rabin_karp", "rabinkarp", "rolling_hash", "rollinghash",
-            "z_function", "zfunction", "lps", "failure_function", "aho_corasick",
-            "ahocorasick", "suffix_array", "suffixarray", "suffix_automaton",
+            "kmp",
+            "rabin_karp",
+            "rabinkarp",
+            "rolling_hash",
+            "rollinghash",
+            "z_function",
+            "zfunction",
+            "lps",
+            "failure_function",
+            "aho_corasick",
+            "ahocorasick",
+            "suffix_array",
+            "suffixarray",
+            "suffix_automaton",
         ],
         "weight": 2.5,
         "min_signals": 1,
-        "description": "String matching algorithms (KMP, Rabin-Karp, Z, Aho-Corasick)"
+        "description": "String matching algorithms (KMP, Rabin-Karp, Z, Aho-Corasick)",
     },
     "consistent_hashing": {
         "identifier_contains": [
-            "consistenthash", "consistent_hash", "hashring", "hash_ring",
-            "virtual_node", "virtualnode", "vnode", "rendezvous",
+            "consistenthash",
+            "consistent_hash",
+            "hashring",
+            "hash_ring",
+            "virtual_node",
+            "virtualnode",
+            "vnode",
+            "rendezvous",
         ],
         "weight": 3.0,
         "min_signals": 1,
-        "description": "Consistent hashing and hash rings"
+        "description": "Consistent hashing and hash rings",
     },
     "lfu_cache": {
         # Substring "lfu" alone matched "...SSLFuncs" (found live in hiredis).
@@ -279,9 +377,28 @@ DSA_PATTERNS = {
         "identifiers": ["lfu", "min_freq", "minfreq", "frequency_map", "freq_map", "freq_to_keys"],
         "weight": 2.0,
         "min_signals": 1,
-        "description": "LFU cache with frequency buckets"
-    }
+        "description": "LFU cache with frequency buckets",
+    },
+    # ---- scoring policy 2.1.0 (docs/adr/003) --------------------------------
+    "ring_buffer": {
+        **_PRODUCTION_DSA["ring_buffer"],
+        "imports": ["collections.deque"],  # deque(maxlen=n) is Python's ring buffer
+        "text": _PRODUCTION_DSA["ring_buffer"]["text"] + ["maxlen="],
+        "weight": 2.0,
+        "min_signals": 2,  # deque alone is a queue; corroborate with a ring anchor
+    },
+    "randomized_sampling": {
+        **_PRODUCTION_DSA["randomized_sampling"],
+        "imports": ["random.choices", "numpy.random.choice"],
+        "identifiers": _PRODUCTION_DSA["randomized_sampling"]["identifiers"]
+        + [
+            "choices",
+            "cum_weights",
+        ],
+        "weight": 2.0,
+    },
 }
+extend_shared_anchors(DSA_PATTERNS)
 
 # System Design patterns to detect
 SYSTEM_DESIGN_PATTERNS = {
@@ -291,49 +408,74 @@ SYSTEM_DESIGN_PATTERNS = {
         "imports": ["fastapi", "flask", "django.urls", "starlette", "aiohttp.web"],
         "weight": 2.0,
         "min_signals": 1,
-        "description": "RESTful API design"
+        "description": "RESTful API design",
     },
     "database_orm": {
         "identifiers": [
-            "foreignkey", "relationship", "declarative_base",
-            "sessionmaker", "column", "querySet",
+            "foreignkey",
+            "relationship",
+            "declarative_base",
+            "sessionmaker",
+            "column",
+            "querySet",
         ],
         "text": ["base.metadata", "session.query", "objects.filter"],
         "imports": [
-            "sqlalchemy", "django.db", "peewee", "tortoise", "sqlmodel", "sqlite3",
-            "psycopg", "psycopg2", "asyncpg", "aiosqlite", "pymongo", "motor",
-            "databases", "duckdb", "aiomysql", "pymysql",
+            "sqlalchemy",
+            "django.db",
+            "peewee",
+            "tortoise",
+            "sqlmodel",
+            "sqlite3",
+            "psycopg",
+            "psycopg2",
+            "asyncpg",
+            "aiosqlite",
+            "pymongo",
+            "motor",
+            "databases",
+            "duckdb",
+            "aiomysql",
+            "pymysql",
         ],
         "weight": 2.0,
         "min_signals": 1,
-        "description": "Database ORM patterns"
+        "description": "Database ORM patterns",
     },
     "caching": {
         "identifiers": ["redis", "memcached", "cache_key", "ttl", "cached", "cache_clear"],
         "imports": ["redis", "cachetools", "django.core.cache", "aiocache", "diskcache"],
         "weight": 2.5,
         "min_signals": 1,
-        "description": "Caching layer implementation"
+        "description": "Caching layer implementation",
     },
     "message_queue": {
         "identifiers": [
-            "celery", "kafkaproducer", "kafkaconsumer",
-            "basic_publish", "send_message",
+            "celery",
+            "kafkaproducer",
+            "kafkaconsumer",
+            "basic_publish",
+            "send_message",
         ],
         "identifier_contains": ["rabbitmq", "kafka"],
         "imports": ["celery", "pika", "kafka", "aiokafka", "kombu"],
         "weight": 3.0,
         "min_signals": 1,
-        "description": "Message queue/async processing"
+        "description": "Message queue/async processing",
     },
     "factory_pattern": {
         "identifiers": [
-            "factory", "factory_method", "factorymethod", "get_instance",
-            "create_instance", "from_config", "abstractfactory",
+            "factory",
+            "factory_method",
+            "factorymethod",
+            "get_instance",
+            "create_instance",
+            "from_config",
+            "abstractfactory",
         ],
         "weight": 1.5,
         "min_signals": 1,
-        "description": "Factory design pattern"
+        "description": "Factory design pattern",
     },
     "singleton_pattern": {
         "identifiers": ["_instance", "getinstance", "singleton"],
@@ -341,7 +483,7 @@ SYSTEM_DESIGN_PATTERNS = {
         "text": ["def __new__"],
         "weight": 1.0,
         "min_signals": 2,
-        "description": "Singleton design pattern"
+        "description": "Singleton design pattern",
     },
     "dependency_injection": {
         "identifiers": ["depends", "inject", "provider", "container"],
@@ -349,7 +491,7 @@ SYSTEM_DESIGN_PATTERNS = {
         "imports": ["dependency_injector", "fastapi", "injector"],
         "weight": 2.5,
         "min_signals": 2,
-        "description": "Dependency injection pattern"
+        "description": "Dependency injection pattern",
     },
     "error_handling": {
         "identifiers": ["httpexception", "exception_handler", "errorhandler"],
@@ -357,24 +499,31 @@ SYSTEM_DESIGN_PATTERNS = {
         "text": ["except ", "raise "],
         "weight": 1.5,
         "min_signals": 2,
-        "description": "Structured error handling"
+        "description": "Structured error handling",
     },
     "logging": {
         "identifiers": ["getlogger", "logger", "structlog", "loguru", "basicconfig"],
         "imports": ["logging", "structlog", "loguru"],
         "weight": 1.5,
         "min_signals": 2,
-        "description": "Logging implementation"
+        "description": "Logging implementation",
     },
     "authentication": {
         "identifiers": [
-            "jwt", "oauth", "authenticate", "authorize", "verify_password",
-            "password_hash", "hash_password", "access_token", "bearer",
+            "jwt",
+            "oauth",
+            "authenticate",
+            "authorize",
+            "verify_password",
+            "password_hash",
+            "hash_password",
+            "access_token",
+            "bearer",
         ],
         "imports": ["jwt", "jose", "passlib", "authlib", "bcrypt", "argon2"],
         "weight": 2.5,
         "min_signals": 1,
-        "description": "Authentication/Authorization"
+        "description": "Authentication/Authorization",
     },
     "testing": {
         "identifiers": ["pytest", "unittest", "fixture", "monkeypatch", "mock", "patch"],
@@ -382,7 +531,7 @@ SYSTEM_DESIGN_PATTERNS = {
         "imports": ["pytest", "unittest", "mock", "hypothesis"],
         "weight": 2.0,
         "min_signals": 2,
-        "description": "Testing patterns"
+        "description": "Testing patterns",
     },
     "microservices": {
         "identifiers": ["grpc", "httpx", "aiohttp", "servicestub", "channel"],
@@ -390,33 +539,37 @@ SYSTEM_DESIGN_PATTERNS = {
         "imports": ["grpc", "httpx", "aiohttp", "requests"],
         "weight": 2.5,
         "min_signals": 2,
-        "description": "Microservices architecture"
+        "description": "Microservices architecture",
     },
     "repository_pattern": {
         "identifiers": ["get_by_id", "find_all", "find_by", "baserepository"],
         "identifier_contains": ["repository"],
         "weight": 2.0,
         "min_signals": 2,
-        "description": "Repository pattern for data access"
+        "description": "Repository pattern for data access",
     },
     "config_management": {
         "identifiers": ["basesettings", "getenv", "load_dotenv", "environ", "settings"],
         "imports": ["pydantic_settings", "dotenv", "dynaconf", "environs"],
         "weight": 1.5,
         "min_signals": 2,
-        "description": "Configuration management"
+        "description": "Configuration management",
     },
     # --- Scoring policy 2.0.0: production-systems and GoF patterns ---
     "resilience": {
         "identifier_contains": [
-            "circuitbreaker", "circuit_breaker", "retrypolicy", "retry_policy",
-            "backoff", "bulkhead",
+            "circuitbreaker",
+            "circuit_breaker",
+            "retrypolicy",
+            "retry_policy",
+            "backoff",
+            "bulkhead",
         ],
         "identifiers": ["jitter", "max_retries", "max_attempts", "half_open", "retry_after"],
         "imports": ["tenacity", "backoff", "pybreaker", "aiobreaker", "stamina", "circuitbreaker"],
         "weight": 2.5,
         "min_signals": 1,
-        "description": "Resilience: retries with backoff, circuit breakers, bulkheads"
+        "description": "Resilience: retries with backoff, circuit breakers, bulkheads",
     },
     "rate_limiting": {
         "identifier_contains": ["ratelimit", "rate_limit", "throttl"],
@@ -424,91 +577,131 @@ SYSTEM_DESIGN_PATTERNS = {
         "imports": ["limits", "slowapi", "ratelimit", "aiolimiter", "throttled"],
         "weight": 2.0,
         "min_signals": 1,
-        "description": "Rate limiting and throttling"
+        "description": "Rate limiting and throttling",
     },
     "idempotency": {
         "identifier_contains": ["idempot"],
         "identifiers": ["dedupe", "deduplicate", "exactly_once", "at_least_once"],
         "weight": 2.5,
         "min_signals": 1,
-        "description": "Idempotency keys and duplicate suppression"
+        "description": "Idempotency keys and duplicate suppression",
     },
     "event_sourcing_cqrs": {
         "identifier_contains": [
-            "eventstore", "event_store", "eventsourc", "event_sourc", "cqrs",
-            "commandhandler", "command_handler", "queryhandler", "query_handler",
-            "projection", "aggregateroot", "aggregate_root",
+            "eventstore",
+            "event_store",
+            "eventsourc",
+            "event_sourc",
+            "cqrs",
+            "commandhandler",
+            "command_handler",
+            "queryhandler",
+            "query_handler",
+            "projection",
+            "aggregateroot",
+            "aggregate_root",
         ],
         "identifiers": ["append_event", "replay", "snapshot", "read_model", "write_model"],
         "weight": 3.0,
         "min_signals": 2,
-        "description": "Event sourcing and CQRS"
+        "description": "Event sourcing and CQRS",
     },
     "dead_letter_outbox": {
         "identifier_contains": [
-            "deadletter", "dead_letter", "outbox", "redrive", "poisonmessage",
+            "deadletter",
+            "dead_letter",
+            "outbox",
+            "redrive",
+            "poisonmessage",
             "poison_message",
         ],
         "identifiers": ["dlq"],
         "weight": 2.5,
         "min_signals": 1,
-        "description": "Dead-letter queues, redrive, and transactional outbox"
+        "description": "Dead-letter queues, redrive, and transactional outbox",
     },
     "observability": {
         "identifier_contains": ["healthcheck", "health_check", "tracer", "start_span", "startspan"],
         "identifiers": ["readiness", "liveness", "histogram", "span", "trace_id", "correlation_id"],
         "imports": [
-            "opentelemetry", "prometheus_client", "statsd", "datadog", "sentry_sdk",
-            "ddtrace", "aws_xray_sdk",
+            "opentelemetry",
+            "prometheus_client",
+            "statsd",
+            "datadog",
+            "sentry_sdk",
+            "ddtrace",
+            "aws_xray_sdk",
         ],
         "weight": 2.0,
         "min_signals": 1,
-        "description": "Observability: tracing, metrics, health checks"
+        "description": "Observability: tracing, metrics, health checks",
     },
     "concurrency": {
         "identifiers": [
-            "threadpoolexecutor", "processpoolexecutor", "semaphore", "gather",
-            "create_task", "taskgroup", "as_completed", "boundedsemaphore",
+            "threadpoolexecutor",
+            "processpoolexecutor",
+            "semaphore",
+            "gather",
+            "create_task",
+            "taskgroup",
+            "as_completed",
+            "boundedsemaphore",
         ],
         "imports": [
-            "asyncio", "concurrent.futures", "threading", "multiprocessing", "anyio",
+            "asyncio",
+            "concurrent.futures",
+            "threading",
+            "multiprocessing",
+            "anyio",
             "trio",
         ],
         "weight": 2.0,
         "min_signals": 2,
-        "description": "Concurrency and parallelism primitives"
+        "description": "Concurrency and parallelism primitives",
     },
     "pagination": {
         "identifier_contains": [
-            "paginat", "page_size", "pagesize", "next_token", "nexttoken",
-            "page_token", "pagetoken", "next_cursor", "nextcursor",
+            "paginat",
+            "page_size",
+            "pagesize",
+            "next_token",
+            "nexttoken",
+            "page_token",
+            "pagetoken",
+            "next_cursor",
+            "nextcursor",
         ],
         "identifiers": ["cursor", "has_more", "hasmore"],
         "weight": 1.5,
         "min_signals": 2,
-        "description": "Cursor or page-based pagination"
+        "description": "Cursor or page-based pagination",
     },
     "strategy_pattern": {
         "identifier_contains": ["strategy"],
         "weight": 1.5,
         "min_signals": 1,
-        "description": "Strategy pattern: interchangeable algorithms behind one interface"
+        "description": "Strategy pattern: interchangeable algorithms behind one interface",
     },
     "observer_pattern": {
         "identifier_contains": [
-            "observer", "subscriber", "eventemitter", "event_emitter", "pubsub",
-            "eventbus", "event_bus",
+            "observer",
+            "subscriber",
+            "eventemitter",
+            "event_emitter",
+            "pubsub",
+            "eventbus",
+            "event_bus",
         ],
         "identifiers": ["subscribe", "unsubscribe", "publish", "notify_observers", "emit"],
         "weight": 1.5,
         "min_signals": 2,
-        "description": "Observer / publish-subscribe pattern"
+        "description": "Observer / publish-subscribe pattern",
     },
     "adapter_pattern": {
         "identifier_contains": ["adapter"],
         "weight": 1.5,
         "min_signals": 1,
-        "description": "Adapter pattern: interface translation at boundaries"
+        "description": "Adapter pattern: interface translation at boundaries",
     },
     "decorator_pattern": {
         "identifier_contains": ["decorator", "middleware", "interceptor"],
@@ -516,12 +709,54 @@ SYSTEM_DESIGN_PATTERNS = {
         "imports": ["functools.wraps"],
         "weight": 1.5,
         "min_signals": 1,
-        "description": "Decorator / middleware / interceptor layering"
+        "description": "Decorator / middleware / interceptor layering",
     },
     "builder_pattern": {
         "identifier_contains": ["builder"],
         "weight": 1.2,
         "min_signals": 1,
-        "description": "Builder pattern: stepwise construction"
-    }
+        "description": "Builder pattern: stepwise construction",
+    },
+    # ---- scoring policy 2.1.0 (docs/adr/003) --------------------------------
+    "distributed_locking": {
+        **_PRODUCTION_DESIGN["distributed_locking"],
+        "imports": ["redis.lock", "redlock", "pottery", "filelock", "kazoo.recipe.lock", "etcd3"],
+        "weight": 2.5,
+    },
+    "optimistic_concurrency": {
+        **_PRODUCTION_DESIGN["optimistic_concurrency"],
+        "imports": ["sqlalchemy.orm.exc.staledataerror"],
+        "identifiers": _PRODUCTION_DESIGN["optimistic_concurrency"]["identifiers"]
+        + [
+            "version_id_col",
+            "staledataerror",
+            "with_for_update",
+        ],
+        "weight": 2.5,
+    },
+    "security_hardening": {
+        **_PRODUCTION_DESIGN["security_hardening"],
+        "imports": ["hmac", "ipaddress", "hashlib.blake2b", "cryptography.hazmat"],
+        "identifiers": _PRODUCTION_DESIGN["security_hardening"]["identifiers"]
+        + [
+            "is_private",
+            "is_loopback",
+            "is_link_local",
+            "token_urlsafe",
+        ],
+        "weight": 2.5,
+    },
+    "scheduling": {
+        **_PRODUCTION_DESIGN["scheduling"],
+        "imports": [
+            "apscheduler",
+            "celery.schedules",
+            "schedule",
+            "croniter",
+            "rq_scheduler",
+            "huey",
+            "dramatiq",
+        ],
+        "weight": 1.5,
+    },
 }

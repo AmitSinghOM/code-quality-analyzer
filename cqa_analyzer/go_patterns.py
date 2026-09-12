@@ -24,7 +24,11 @@ yet because the shared scoring catalog has no such ID; adding one is a
 cross-language scoring-policy change tracked in the roadmap.
 """
 
-from .production_patterns import PRODUCTION_DSA_PATTERNS, production_design_patterns
+from .production_patterns import (
+    PRODUCTION_DSA_PATTERNS,
+    extend_shared_anchors,
+    production_design_patterns,
+)
 
 GO_DSA_PATTERNS = {
     "hash_map": {
@@ -305,6 +309,7 @@ GO_DESIGN_PATTERNS = {
 # Scoring policy 2.0.0: production-systems and GoF patterns, merged from the
 # shared specs with Go's idiomatic libraries and primitives.
 GO_DSA_PATTERNS.update(PRODUCTION_DSA_PATTERNS)
+extend_shared_anchors(GO_DSA_PATTERNS)
 GO_DESIGN_PATTERNS.update(production_design_patterns(
     imports={
         "resilience": [
