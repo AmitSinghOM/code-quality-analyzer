@@ -32,6 +32,7 @@ CORPUS = [
     ("kotlin", "redis-client", "crackthecodeabhi/kreds", ""),
     ("csharp", "redis-client", "StackExchange/StackExchange.Redis", ""),
     ("c_cpp", "redis-client", "redis/hiredis", ""),
+    ("rust", "redis-client", "redis-rs/redis-rs", ""),
     ("python", "web-framework", "fastapi/fastapi", ""),
     ("go", "web-framework", "gin-gonic/gin", ""),
     ("typescript", "web-framework", "nestjs/nest", ""),
@@ -39,6 +40,7 @@ CORPUS = [
     ("kotlin", "web-framework", "ktorio/ktor", "ktor-server"),
     ("csharp", "web-framework", "FastEndpoints/FastEndpoints", ""),
     ("c_cpp", "web-framework", "drogonframework/drogon", ""),
+    ("rust", "web-framework", "tokio-rs/axum", ""),
     # Round 2: command-line tools — small, single-purpose, DSA-light by
     # nature; the domain most likely to expose anchor-depth differences.
     ("python", "cli-tool", "httpie/cli", ""),
@@ -48,6 +50,7 @@ CORPUS = [
     ("kotlin", "cli-tool", "JakeWharton/diffuse", ""),
     ("csharp", "cli-tool", "dotnet-outdated/dotnet-outdated", ""),
     ("c_cpp", "cli-tool", "jqlang/jq", ""),
+    ("rust", "cli-tool", "BurntSushi/ripgrep", ""),
 ]
 
 

@@ -609,6 +609,44 @@ _RULES = (
         confidence="medium",
     ),
     _rule(
+        "RS-COR-002",
+        "dynamic-sql-statement",
+        "SQL statement assembled from runtime values",
+        "A SQL statement is built with format!/write! or + concatenation "
+        "instead of driver parameters.",
+        "correctness",
+        "warning",
+        "Pass runtime values as driver parameters (bind variables); "
+        "allowlist identifiers such as table or column names.",
+        language="rust",
+        confidence="medium",
+    ),
+    _rule(
+        "RS-COR-003",
+        "blocking-call-in-async-function",
+        "Blocking call in async function",
+        "thread::sleep, std::fs, block_on or a blocking connect is called "
+        "inside an async fn (closures excluded).",
+        "correctness",
+        "warning",
+        "Await the asynchronous form (tokio::fs, tokio::time::sleep) or move "
+        "the work to spawn_blocking.",
+        language="rust",
+        confidence="medium",
+    ),
+    _rule(
+        "RS-COR-004",
+        "unexplained-crate-wide-lint-allow",
+        "Crate-wide lint allow without reason",
+        "#![allow(dead_code | unused | warnings | clippy::all)] at crate level "
+        "silences the compiler with no recorded reason.",
+        "correctness",
+        "warning",
+        "Remove the dead or unused code, scope the allow to the item that "
+        'needs it, or record why: `#![allow(dead_code, reason = "…")]`.',
+        language="rust",
+    ),
+    _rule(
         "RS-PKG-001",
         "undeclared-crate",
         "Undeclared crate",

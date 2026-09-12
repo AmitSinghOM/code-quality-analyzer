@@ -8,7 +8,7 @@ network).
 ## Question
 
 Does the architecture signal score depend on the *language* a project
-is written in, or only on what the project does? Seven languages share
+is written in, or only on what the project does? Eight languages share
 one 56-pattern catalog and one scoring curve, but each language has its
 own anchor vocabulary and its own lexer, so a language could be
 penalised structurally (catalog gaps, weak anchors) or operationally
@@ -316,3 +316,39 @@ precision fix and verified against the source:
 Nothing moved in a direction that was not a precision or recall fix, and
 all 21 remain authoritative. Machine-readable rows:
 `docs/calibration-latest.json` (written by the corpus script).
+
+## 2.43.0: Rust joins the corpus (24 projects, eight languages)
+
+Rust rows added to all three domains: redis-rs (redis-client), axum
+(web-framework), ripgrep (cli-tool). The first run put Rust *first in
+every domain* — 9.3 / 9.0 / 8.6 against next-best 8.8 / 8.0 / 6.3 — which
+is the fairness alarm this corpus exists to raise. Root-causing ripgrep's
+16 design patterns (a grep tool does not have `database_orm`,
+`api_design`, `dependency_injection`, `union_find` …) found two catalog
+defects, both Rust-specific:
+
+- **Substring import matching does not suit short crate names.** The
+  shared `has_import` is a substring test; `hyper` matched ripgrep's local
+  `hyperlink` module, `cached` matched `…::cached_…`. Rust now matches
+  import anchors as whole `::` segments (`_RustFileSignals`), so `hyper`
+  means the crate `hyper`. `redb` survived the fix: ripgrep's `index`
+  crate really does use the redb embedded database.
+- **Universal Rust syntax was evidence.** `dyn`, `impl From<`, `new`,
+  `from`, `default`, `as_ref`, `into_inner`, `state`, `span`, `counter`,
+  `starts_with`, `fn union(`, `capacity`, `.chunks(` appear in nearly
+  every crate. Removed from every pattern that used them;
+  `repository_pattern` now needs two anchors because `repository` alone is
+  git vocabulary.
+
+After the fixes:
+
+| domain | rust | best other | Rust rank |
+|---|---|---|---|
+| redis-client | redis-rs 8.7 | go-redis 8.8, redis-py 8.7 | tied 2nd |
+| web-framework | axum 8.6 | FastEndpoints 8.0, drogon/ktor 7.9 | 1st (axum is a 46 k-line framework core with 22 design patterns, all verified) |
+| cli-tool | ripgrep 6.8 | jbang 6.3, httpie 6.0 | 1st (ripgrep: 56 k lines; the 8 DSA patterns — string matching, binary search, bit manipulation, sorting, sets, hash maps, deques, `.windows(` — are its job) |
+
+Rust's remaining lead is within the ±1 band the corpus treats as project
+scope rather than language bias; both leading projects are unusually
+algorithm-dense for their domain. Machine-readable rows are merged into
+`docs/calibration-latest.json` (24 rows).

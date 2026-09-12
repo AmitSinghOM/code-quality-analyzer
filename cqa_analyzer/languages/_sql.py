@@ -39,6 +39,9 @@ _QUOTES = frozenset('"\'`')
 _CONCAT_RIGHT = re.compile(r"^\s*\)?\s*\+\s*(?=[A-Za-z_(\[])")
 # ``+`` on the left with a non-literal operand: ``prefix + "SELECT ..."``.
 _CONCAT_LEFT = re.compile(r"[A-Za-z0-9_)\]]\s*\+\s*\(?\s*$")
+# Literal prefixes the adapters blank together with the quote: C# ``$``/``@``
+# (interpolated/verbatim), Rust ``r#``/``b``/``br#`` (raw/byte strings).
+_PREFIXED_QUOTE = re.compile(r'(?:\$@|@\$|\$|@|br#*|r#*|b)?(["\'`])')
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +59,10 @@ class SqlSyntax:
     format_method: re.Pattern | None = None
     """Matches ``code_text`` immediately *after* the literal for
     ``"...".format(x)`` / ``"...".formatted(x)`` styles."""
+
+    concat_right: re.Pattern = _CONCAT_RIGHT
+    """``+`` with a non-literal right operand; languages that need an adapter
+    call between literal and ``+`` (Rust ``"…".to_string() + &id``) override."""
 
 
 def _no_interpolation(delimiter: str, prefix: str, content: str) -> bool:
@@ -133,12 +140,11 @@ def literal_spans(source: str, code_text: str) -> Iterable[tuple[int, int]]:
                 pending = None
                 position = close
                 continue
-            current = source[position]
-            if current in "$@" and position + 1 < run_end and source[position + 1] in '$@"':
-                position += 1  # C# interpolated/verbatim prefix, blanked by the adapter
-                continue
-            if current not in _QUOTES:
+            prefixed = _PREFIXED_QUOTE.match(source, position, run_end)
+            if prefixed is None:
                 break  # comment or directive: skip the rest of the run
+            position = prefixed.start(1)  # step over a blanked prefix to the quote
+            current = source[position]
             delimiter = current * 3 if source.startswith(current * 3, position) else current
             close = _find_closer(source, position + len(delimiter), run_end, delimiter)
             if close is None:
@@ -170,7 +176,7 @@ def dynamic_sql_offsets(
         reason = None
         if syntax.interpolates(delimiter, prefix, content):
             reason = "string interpolation"
-        elif _CONCAT_RIGHT.match(code_text[end:]) or (
+        elif syntax.concat_right.match(code_text[end:]) or (
             _CONCAT_LEFT.search(code_text[:start])
         ):
             reason = "string concatenation"
@@ -258,6 +264,13 @@ CSHARP_SQL = SqlSyntax(
 GO_SQL = SqlSyntax(
     interpolates=NO_INTERPOLATION,
     format_call=_format_call("fmt.Sprintf", "fmt.Sprint", "fmt.Sprintln"),
+)
+RUST_SQL = SqlSyntax(
+    interpolates=NO_INTERPOLATION,  # ``format!("{id}")`` is a formatting call below
+    format_call=_format_call("format!", "write!", "writeln!", "print!", "println!"),
+    concat_right=re.compile(
+        r"^\s*(?:\.(?:to_string|to_owned|into)\(\))?\s*\+\s*(?=[&A-Za-z_(\[])"
+    ),
 )
 C_SQL = SqlSyntax(
     interpolates=NO_INTERPOLATION,

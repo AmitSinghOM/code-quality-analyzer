@@ -53,7 +53,7 @@ RUST_DSA_PATTERNS = {
     },
     "heap_priority": {
         "imports": ["std::collections::binaryheap", "priority-queue", "priority_queue"],
-        "identifiers": ["binaryheap", "priorityqueue", "reverse", "peek_mut"],
+        "identifiers": ["binaryheap", "priorityqueue", "peek_mut"],
         "min_signals": 1,
         "description": "Heap / priority queue usage",
     },
@@ -63,7 +63,7 @@ RUST_DSA_PATTERNS = {
             "std::collections::linkedlist",
             "crossbeam_deque",
         ],
-        "identifiers": ["vecdeque", "push_back", "pop_front", "push_front", "pop_back", "deque"],
+        "identifiers": ["vecdeque", "pop_front", "push_front", "deque"],
         "min_signals": 1,
         "description": "Queue and stack processing",
     },
@@ -119,7 +119,6 @@ RUST_DSA_PATTERNS = {
             "memoization",
             "knapsack",
             "lcs",
-            "cached",
         ],
         "imports": ["cached", "memoize"],
         "min_signals": 1,
@@ -132,8 +131,8 @@ RUST_DSA_PATTERNS = {
         "description": "Two-pointer techniques",
     },
     "sliding_window": {
-        "identifiers": ["window", "window_start", "window_end", "windows", "chunks", "window_size"],
-        "text": [".windows(", ".chunks("],
+        "identifiers": ["window_start", "window_end", "window_size", "sliding_window"],
+        "text": [".windows(", "window_start"],
         "min_signals": 1,
         "description": "Sliding-window computation",
     },
@@ -177,7 +176,6 @@ RUST_DSA_PATTERNS = {
             "prefix_tree",
             "radix_tree",
             "insert_word",
-            "starts_with",
         ],
         "min_signals": 1,
         "description": "Trie / prefix tree",
@@ -185,7 +183,7 @@ RUST_DSA_PATTERNS = {
     "union_find": {
         "imports": ["petgraph::unionfind", "union_find", "disjoint-sets", "disjoint_sets"],
         "identifiers": ["unionfind", "union_find", "disjoint_set", "find_root", "find_parent"],
-        "text": ["fn find(", "fn union("],
+        "text": ["fn find_root(", "fn find_parent(", "union_find"],
         "min_signals": 1,
         "description": "Union-find / disjoint set",
     },
@@ -232,7 +230,6 @@ RUST_DSA_PATTERNS = {
             "lru",
             "evict",
             "eviction",
-            "capacity",
             "recently_used",
         ],
         "min_signals": 1,
@@ -863,3 +860,38 @@ RUST_DESIGN_PATTERNS.update(
 RUST_DESIGN_PATTERNS["idempotency"]["identifiers"] = [
     name for name in RUST_DESIGN_PATTERNS["idempotency"]["identifiers"] if name != "dedup"
 ]
+
+# Calibration (ripgrep, 2.43.0): anchors that are universal Rust syntax or std
+# vocabulary claimed patterns a grep tool does not have. ``dyn``, ``impl From<``,
+# ``new``/``from``/``default``, ``as_ref``/``into_inner``, ``state``, ``span``
+# and ``counter`` appear in nearly every crate and are removed here; the
+# patterns keep their library and domain-vocabulary anchors.
+_UNIVERSAL_RUST = {
+    "strategy_pattern": {"dyn", "impl_trait", "algorithm"},
+    "adapter_pattern": {"as_ref", "into_inner", "port"},
+    "dependency_injection": {"dyn", "state"},
+    "observability": {"span", "counter", "metrics"},
+    "factory_pattern": {"new", "from", "default", "try_from", "create", "builder"},
+    "repository_pattern": {"store", "save", "repo"},
+}
+_UNIVERSAL_RUST_TEXT = {
+    "strategy_pattern": {"box<dyn ", "arc<dyn ", "&dyn "},
+    "adapter_pattern": {"impl from<", "impl into<", "impl asref<"},
+    "dependency_injection": {"arc<dyn ", "box<dyn "},
+    "factory_pattern": {"impl from<", "fn create("},
+}
+for _name, _drop in _UNIVERSAL_RUST.items():
+    RUST_DESIGN_PATTERNS[_name]["identifiers"] = [
+        anchor
+        for anchor in RUST_DESIGN_PATTERNS[_name].get("identifiers", [])
+        if anchor not in _drop
+    ]
+for _name, _drop in _UNIVERSAL_RUST_TEXT.items():
+    RUST_DESIGN_PATTERNS[_name]["text"] = [
+        anchor for anchor in RUST_DESIGN_PATTERNS[_name].get("text", []) if anchor not in _drop
+    ]
+RUST_DESIGN_PATTERNS["strategy_pattern"]["text"] += ["trait strategy", "dyn strategy", "dyn policy"]
+RUST_DESIGN_PATTERNS["adapter_pattern"]["text"] += ["adapter for", "trait adapter"]
+RUST_DESIGN_PATTERNS["repository_pattern"]["identifier_contains"] = ["repository"]
+# "repository" alone is git vocabulary; require a second anchor.
+RUST_DESIGN_PATTERNS["repository_pattern"]["min_signals"] = 2

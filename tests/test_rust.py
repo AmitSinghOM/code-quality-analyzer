@@ -1,9 +1,9 @@
-"""Rust pilot (experimental, gated on the ``[deep]`` extra).
+"""Rust language support.
 
-The adapter, rules and Cargo provider are pure Python and are tested
-unconditionally; registration and the tree-sitter providers are tested only
-when ``tree-sitter-rust`` is installed, and their *absence* is tested the
-other way round (no `.rs` discovery without the grammar).
+The adapter, rules, signals and Cargo provider are pure Python and always
+registered; the tree-sitter duplication/complexity providers run only with
+``tree-sitter-rust`` and self-report ``available: false`` without it, exactly
+as Go and C/C++ do.
 """
 
 from __future__ import annotations
@@ -145,7 +145,6 @@ CARGO = (
 )
 
 
-@needs_rust
 def test_cargo_drift_and_own_crate_and_renames(project):
     root = project(
         {
@@ -206,25 +205,92 @@ def test_deep_rust_duplication_and_complexity(project):
 
 
 @pytest.mark.skipif(HAS_RUST, reason="checks behaviour without the grammar")
-def test_rust_is_not_discovered_without_the_grammar(project):
-    root = project({"Cargo.toml": CARGO, "src/lib.rs": "fn f() {}\n"})
-    result = CliRunner().invoke(main, [str(root), "-f", "json", "--offline"])
-    payload = json.loads(result.output)
-    # No adapter, so a Rust-only tree has no source candidates: the existing
-    # "nothing to analyse" verdict (exit 2, non-authoritative), not a crash.
-    assert result.exit_code == 2
-    assert "rust" not in payload["language_adapters"]
-    assert payload["scan_health"]["languages"] == {}
-    assert payload["analysis_health"]["reasons"] == ["no_source_candidates"]
+def test_rust_deep_providers_self_report_unavailable_without_the_grammar(project):
+    root = project({"Cargo.toml": CARGO, "src/lib.rs": "use tokio::spawn;\nfn f() {}\n"})
+    payload = scan_json(root)
+    # Rust is discovered and scored; only duplication/complexity are absent,
+    # and they say so (same contract as Go and C/C++ without the extra).
+    assert payload["scan_health"]["languages"] == {"rust": 1}
+    assert payload["language_adapters"]["rust"] == "1.0.0"
+    for capability in ("duplication", "complexity"):
+        result = payload["project_analyses"][f"rust:{capability}"]["result"]
+        assert result["available"] is False
+        assert "cqa-analyzer[deep]" in result["install"]
+        assert result["engine"]["tree-sitter-rust"] is None
 
 
-@needs_rust
-def test_rust_availability_is_reported():
-    versions = deep.availability()
-    assert versions["tree-sitter-rust"] is not None
+def test_rust_availability_key_exists():
+    assert "tree-sitter-rust" in deep.availability()
+
+
+# ---- 2.43.0 rules -------------------------------------------------------------------
+
+
+def test_dynamic_sql_via_format_macro_and_concatenation():
+    src = (
+        "fn q(id: i32, t: &str) -> Vec<String> {\n"
+        '    let a = format!("SELECT * FROM users WHERE id = {}", id);\n'
+        '    let b = format!("SELECT * FROM users WHERE id = {id}");\n'
+        '    let c = "SELECT * FROM users WHERE id = ".to_string() + &id.to_string();\n'
+        '    let d = format!("DELETE FROM {t} WHERE id = {id}");\n'
+        '    let mut e = String::new(); write!(e, "UPDATE t SET a = {} WHERE b = 1", id).ok();\n'
+        '    let ok1 = sqlx::query("SELECT * FROM users WHERE id = $1").bind(id);\n'
+        "    let ok2 = r#\"SELECT * FROM users WHERE name = 'x'\"#;\n"
+        '    let ok3 = format!("Select {} items from the cart", id);\n'
+        "    vec![a, b, c, d, e]\n"
+        "}\n"
+    )
+    found = [f for f in RustRulePack().evaluate(parse_rs(src)) if f.rule_id == "RS-COR-002"]
+    assert [f.location.line for f in found] == [2, 3, 4, 5, 6]
+    assert found[0].message == "SQL statement is assembled with string formatting."
+    assert found[2].message == "SQL statement is assembled with string concatenation."
+
+
+def test_blocking_in_async_fn_respects_closures_and_async_fs_imports():
+    src = (
+        "async fn a(p: &str) {\n"
+        "    std::thread::sleep(std::time::Duration::from_secs(1));\n"
+        "    let s = std::fs::read_to_string(p).unwrap();\n"
+        "    let t = fs::read(p);\n"
+        "    let h = tokio::task::spawn_blocking(move || { std::fs::read(p) });\n"
+        "    rt.block_on(fut);\n"
+        "}\n"
+        "fn sync_fn() { std::thread::sleep(d); std::fs::read(p); }\n"
+        "async fn b() -> Result<()> { let x = tokio::fs::read(p).await?; Ok(()) }\n"
+    )
+    found = [f for f in RustRulePack().evaluate(parse_rs(src)) if f.rule_id == "RS-COR-003"]
+    assert [f.location.line for f in found] == [2, 3, 4, 6]
+    assert found[0].message == "A blocking call blocks inside an asynchronous body."
+
+    with_tokio_fs = (
+        "use tokio::fs;\nasync fn a(p: &str) { let t = fs::read(p).await; std::fs::read(p); }\n"
+    )
+    found = [
+        f for f in RustRulePack().evaluate(parse_rs(with_tokio_fs)) if f.rule_id == "RS-COR-003"
+    ]
+    assert len(found) == 1 and "std::fs::read" in parse_rs(with_tokio_fs).facts.code_text
+
+
+def test_crate_wide_allow_without_reason():
+    src = (
+        "#![allow(dead_code)]\n"
+        "#![allow(unused_imports, clippy::all)]\n"
+        '#![allow(dead_code, reason = "generated bindings are pruned at link time")]\n'
+        "#![allow(non_snake_case)]\n"  # not one of the broad lints
+        "#[allow(dead_code)]\nfn f() {}\n"  # item-scoped: fine
+    )
+    found = [f for f in RustRulePack().evaluate(parse_rs(src)) if f.rule_id == "RS-COR-004"]
+    assert [f.location.line for f in found] == [1, 2]
+    assert (
+        found[0].message
+        == "Crate-wide #![allow(dead_code)] silences the compiler without a reason."
+    )
+    assert found[1].message.startswith("Crate-wide #![allow(unused_imports, clippy::all)]")
+    assert all(f.severity == "warning" and f.confidence == "high" for f in found)
 
 
 # ---- calibration-driven fixes (ripgrep, sqlx) ---------------------------------------
+
 
 def test_use_inside_string_literals_is_not_an_import():
     # ripgrep: `const CODE: &str = "extern crate snap;\nuse std::io;"` and long
@@ -244,7 +310,6 @@ def test_use_inside_string_literals_is_not_an_import():
     assert "snap" not in facts.imports and "the" not in facts.imports
 
 
-@needs_rust
 def test_hyphenated_package_matches_its_lib_name(project):
     # sqlx-postgres declares `md-5` and imports `md5::Md5`.
     root = project(

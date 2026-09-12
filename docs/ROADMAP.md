@@ -161,7 +161,7 @@ and rescaled the curves, closing the review's recall finding. Round 1 of
 the fairness calibration (`docs/CALIBRATION.md`, reproducible with
 `scripts/calibration_corpus.py`) then asked whether the score depends on
 language rather than on what a project does, using the same two domains
-— a Redis client and a web framework — in all seven languages.
+— a Redis client and a web framework — in all seven languages (eight since Rust joined in 2.43.0).
 
 Findings: the curve is not the constraint (full marks need a fraction
 of any catalog); catalog reach was unequal (Go lacked `hash_map`, TS
@@ -273,17 +273,30 @@ duplication and complexity metrics for C/C++, tied to item 3.
 - New languages beyond the pilots above until an existing pilot has
   architecture signals and at least one user-validated release.
 
-## 10. Rust (✅ decided: experimental pilot gated on `[deep]`, 2.42.0)
+## 10. Rust (✅ pilot in 2.42.0, promoted to a full language in 2.43.0)
 
 The 2025 Stack Overflow survey put Rust at 14.8 % usage and "most admired"
 for the third year; its own note reads "Python developers aspire to use
 Rust and Go". Against that, `rustc` and `clippy` already catch most of
 what a linter finds in other languages, so the value-add is narrower.
-**Decision: an experimental pilot registered only when `tree-sitter-rust`
-is present**, for one structural reason — without the deep providers a
-Rust project would have no duplication or complexity dimension and would
-be capped below every other language. Gating the whole pilot on the extra
-is more honest than shipping a half-scored language.
+
+**2.42.0 decision: an experimental pilot registered only when
+`tree-sitter-rust` is present**, on the argument that without the deep
+providers a Rust project would have no duplication or complexity dimension.
+**2.43.0 reversal:** that argument applies equally to Go and C/C++, which
+have always shipped in the default install with `available: false` for the
+deep metrics. Gating one language on it was inconsistent, so Rust is now
+registered like every other language and its deep providers self-report.
+
+Promotion also closed the parity gap with the 2.41.0 rules: `RS-COR-002`
+dynamic SQL (`format!`/`write!`/`+`), `RS-COR-003` blocking call in
+`async fn` (closures excluded, `tokio::fs` aware), `RS-COR-004` crate-wide
+`#![allow(dead_code | unused | warnings)]` without `reason`, alongside
+`RS-COR-001` `.unwrap()` density and `RS-PKG-001/002` Cargo intelligence.
+Rust rows (redis-rs, axum, ripgrep) joined the calibration corpus; the first
+run ranked Rust first in every domain, which exposed two Rust-specific
+catalog defects (substring import matching on short crate names; universal
+syntax as evidence) — fixed and recorded in `docs/CALIBRATION.md`.
 
 Scope: lexer (nested block comments, `r#"…"#` raw strings, byte strings,
 char-vs-lifetime disambiguation, `r#ident` raw identifiers); `use` roots

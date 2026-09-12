@@ -4,7 +4,7 @@
 
 Code Quality Analyzer is a privacy-first static analysis tool for Python
 packages, with bounded Go, TypeScript/JavaScript, Java, Kotlin, C#/.NET,
-and C/C++ pilots, built for
+C/C++ and Rust pilots, built for
 environments where source code
 cannot leave the trusted development boundary: regulated industries,
 air-gapped networks, client codebases under NDA, and anyone who refuses to
@@ -44,9 +44,9 @@ See [`docs/PRIVACY.md`](docs/PRIVACY.md) for the exact data boundary.
   (`PY-DUP-001`) detected by exact AST structure, so renamed copies still
   report and docstring changes cannot hide one
 - **Data Structures & Algorithms (DSA)** patterns in Python, Go,
-  TypeScript/JavaScript, Java, Kotlin, C#, and C/C++
+  TypeScript/JavaScript, Java, Kotlin, C#, C/C++, and Rust
 - **System Design** principles implemented in Python, Go,
-  TypeScript/JavaScript, Java, Kotlin, C#, and C/C++
+  TypeScript/JavaScript, Java, Kotlin, C#, C/C++, and Rust
 - A compatibility **architecture signal score from 1-10**
 
 Reports render as text, versioned JSON, or SARIF 2.1.0, and gate CI through
@@ -150,18 +150,9 @@ reporting Python already has. Without the extra, the report says so
 (`"available": false` with the install hint) instead of inventing a
 number. See [`docs/RULES.md`](docs/RULES.md).
 
-The extra also enables the **Rust pilot** (experimental). Rust is the only
-language gated on `[deep]`: without duplication and complexity a Rust
-project would be scored on fewer dimensions than every other language, so
-the whole pilot — `.rs` discovery, `RS-COR-001` (`.unwrap()` density outside
-test code), `RS-PKG-001`/`RS-PKG-002` (Cargo drift and unreadable
-`Cargo.toml`), the 56-pattern signal catalog anchored on std collections and
-crates, and `RS-DUP-001`/`RS-MAINT-001`/`RS-MAINT-002` via tree-sitter —
-appears only when `tree-sitter-rust` is installed. A plain install neither
-registers nor mentions Rust. Calibrated on axum (300 files, 9.0), ripgrep
-(110 files, 8.6) and sqlx (456 files, 9.3): 866 files, zero lexer failures,
-8,843 functions through the grammar, and every remaining package finding
-verified against upstream.
+For Rust the extra unlocks `RS-DUP-001`, `RS-MAINT-001` and `RS-MAINT-002`
+through `tree-sitter-rust` in the same way; Rust itself (discovery, rules,
+signals, Cargo intelligence) is part of the default install since 2.43.0.
 
 ### Recommended: pipx (isolated, always on PATH)
 
@@ -211,8 +202,8 @@ python3 -m pip install --upgrade cqa-analyzer
 python3 -m pip install --upgrade 'cqa-analyzer[deep]'   # with the optional extra
 
 # a specific version
-pipx install --force 'cqa-analyzer==2.42.0'
-python3 -m pip install 'cqa-analyzer==2.42.0'
+pipx install --force 'cqa-analyzer==2.43.0'
+python3 -m pip install 'cqa-analyzer==2.43.0'
 ```
 
 Check with `code-quality-analyzer --version`. If the number does not
@@ -932,16 +923,59 @@ sqlite3/libpq/pqxx/RocksDB, librdkafka/ZeroMQ/NATS, OpenSSL/libsodium,
 yaml-cpp/toml++/cxxopts, OpenTelemetry/prometheus-cpp, libuv/libevent/
 Asio/TBB/liburing). Calibrated on drogon and hiredis.
 
+### Rust (bounded pilot)
+
+The Rust pilot (`.rs`) blanks comments (nested `/* */` included), `"…"`,
+raw `r#"…"#` and byte `b"…"` strings and char literals while keeping
+lifetimes (`'a`, `'static`) as code; `r#ident` raw identifiers resolve to
+their keyword name. `use`/`extern crate` roots and paths are the imports
+(read from blanked text, so an `extern crate` inside a string literal is
+never one), and bounded identifiers cover declarations, `let` bindings,
+calls, method calls, type uses and attributes. It never invokes `cargo`
+or `rustc`.
+
+- **Rules.** `RS-COR-001` `.unwrap()` density outside test code
+  (`#[cfg(test)]` blocks, `#[test]`/`#[tokio::test]`/`#[rstest]`
+  functions, `tests/`, `benches/`, `examples/` excluded; `.expect("why")`
+  is documented intent and not counted); `RS-COR-002` SQL assembled with
+  `format!`/`write!` or `+`; `RS-COR-003` `thread::sleep`, `std::fs`,
+  `block_on` or a blocking connect inside an `async fn` (closures are
+  excluded because `spawn_blocking(|| …)` is the fix, and a file that
+  imports `tokio::fs`/`async_std::fs` keeps its unqualified `fs::` calls);
+  `RS-COR-004` crate-wide `#![allow(dead_code | unused | warnings |
+  clippy::all)]` without a `reason = "…"` — Stack Overflow's 4th
+  most-voted Rust question is how to do exactly this.
+- **Cargo.** The nearest `Cargo.toml` chain governs: every dependency
+  table, `[workspace.dependencies]`, `[target.*]` tables and `package =`
+  renames count, names compare with `-`/`_` removed (`md-5` provides
+  `md5`), declared modules and the crate's own name are never drift.
+  `RS-PKG-001` reports a crate root no manifest declares; `RS-PKG-002` an
+  unreadable manifest (stdlib `tomllib`, no drift claims under it).
+- **Signals.** The full shared catalog, anchored on std collections
+  (`BinaryHeap`, `VecDeque`, `BTreeMap`, `HashMap`) and the crate ecosystem
+  (tokio/async-std/rayon, serde, sqlx/diesel/sea-orm, tracing/log,
+  axum/actix/tonic, anyhow/thiserror, proptest/mockall/criterion …).
+  Import anchors match whole `::` segments, not substrings — calibration
+  on ripgrep showed `hyper` matching a local `hyperlink` module — and
+  universal Rust syntax (`dyn`, `impl From<`, `new`, `default`) is not
+  evidence for any pattern.
+- **`[deep]`.** `RS-DUP-001`, `RS-MAINT-001`, `RS-MAINT-002` via
+  `tree-sitter-rust`; without the extra they report `available: false`.
+
+Calibrated on redis-rs (8.7), axum (8.6) and ripgrep (6.8); the
+recalibration that produced those numbers removed 16 phantom patterns
+from ripgrep and is recorded in [`docs/CALIBRATION.md`](docs/CALIBRATION.md).
+
 The architecture signal score covers Python, Go, TypeScript/JavaScript,
-Java, Kotlin, C#, and C/C++ signals. A project where
+Java, Kotlin, C#, C/C++, and Rust signals. A project where
 no signal-capable source was successfully analyzed reports the score as
 **not applicable** — `null` in JSON with an explicit
 `architecture_signal_scope` field — rather than a misleading floor value,
 and `--fail-under` exits with code 5 instead of silently passing or failing.
 
 Is the score fair across languages? [`docs/CALIBRATION.md`](docs/CALIBRATION.md)
-scans the same two domains — a Redis client and a web framework — in all
-seven languages and root-causes every gap; comparably sized projects score
+scans the same three domains — a Redis client, a web framework and a
+command-line tool — in all eight languages and root-causes every gap; comparably sized projects score
 within about a point of each other regardless of language, and the
 remaining spread tracks project scope. The corpus is reproducible with
 `scripts/calibration_corpus.py`. [`docs/ROADMAP.md`](docs/ROADMAP.md)
