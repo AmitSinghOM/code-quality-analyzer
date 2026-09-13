@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
-from click.testing import CliRunner
+from clirunner import CliRunner
 
 from cqa_analyzer import SCORING_POLICY_VERSION
 from cqa_analyzer.__main__ import main

@@ -3,7 +3,7 @@
 import json
 
 import pytest
-from click.testing import CliRunner
+from clirunner import CliRunner
 
 from cqa_analyzer.__main__ import EXIT_FINDINGS, EXIT_OK, main
 from cqa_analyzer.reporters import AnalysisReport, SarifReporter, SarifRun

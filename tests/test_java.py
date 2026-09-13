@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from click.testing import CliRunner
+from clirunner import CliRunner
 
 from cqa_analyzer.__main__ import main
 from cqa_analyzer.java_patterns import JAVA_DESIGN_PATTERNS, JAVA_DSA_PATTERNS

@@ -23,13 +23,11 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Quality Assurance",
 ]
-dependencies = [
-    # Compatible ranges, not exact pins (docs/adr/004): an exact pin in a tool
-    # that is installed into a project's own environment guarantees resolver
-    # conflicts within a year. The click floor is the PYSEC-2026-2132 fix.
-    "click>=8.3.3,<9",
-    "rich>=13.0,<16",
-]
+# 3.0: no runtime dependencies (docs/adr/004, ROADMAP item 12 Phase 2). The
+# CLI is argparse, text rendering is cqa_analyzer/text_render.py, and the
+# optional [deep] extra is the only third-party code the package can load.
+# A pure-stdlib core has nothing left to rot.
+dependencies = []
 
 [project.urls]
 Homepage = "https://github.com/AmitSinghOM/code-quality-analyzer"

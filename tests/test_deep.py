@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from click.testing import CliRunner
+from clirunner import CliRunner
 
 import cqa_analyzer.deep as deep
 from cqa_analyzer.__main__ import main
