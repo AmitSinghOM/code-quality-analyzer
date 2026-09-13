@@ -83,8 +83,9 @@ and [`docs/adr/003-scoring-policy-2-1-locking-hardening-labuladong.md`](docs/adr
 code-quality-analyzer/
 ├── cqa_analyzer/
 │   ├── __init__.py
-│   ├── __main__.py      # CLI entry point
+│   ├── __main__.py      # CLI entry point (argparse; no third-party dependencies)
 │   ├── mcp_server.py    # MCP server for coding agents (stdio, stdlib only)
+│   ├── text_render.py   # Deterministic plain-text panels and tables (stdlib)
 │   ├── baseline.py      # Hashed finding baselines and comparison
 │   ├── cache.py         # Bounded local parse-artifact cache
 │   ├── changed_lines.py # Bounded changed-line finding selection
@@ -208,8 +209,8 @@ python3 -m pip install --upgrade cqa-analyzer
 python3 -m pip install --upgrade 'cqa-analyzer[deep]'   # with the optional extra
 
 # a specific version
-pipx install --force 'cqa-analyzer==2.45.0'
-python3 -m pip install 'cqa-analyzer==2.45.0'
+pipx install --force 'cqa-analyzer==3.0.0'
+python3 -m pip install 'cqa-analyzer==3.0.0'
 ```
 
 Check with `code-quality-analyzer --version`. If the number does not

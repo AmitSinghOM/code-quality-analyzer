@@ -3,7 +3,7 @@
 import re
 from pathlib import Path
 
-from click.testing import CliRunner
+from clirunner import CliRunner
 
 from cqa_analyzer.__main__ import EXIT_OK, main
 

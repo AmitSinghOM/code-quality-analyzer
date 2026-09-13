@@ -4,6 +4,56 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 3.0.0 - 2026-09-13
+
+The stdlib core (ADR 004, ROADMAP item 12 Phase 2). **No runtime
+dependencies.** The CLI is `argparse`, text rendering is
+`cqa_analyzer/text_render.py`, and the optional `[deep]` extra is the only
+third-party code the package can load. A pure-stdlib core has nothing left
+to rot; that is the whole reason for the major version.
+
+Analysis output is unchanged: ruleset 2.24.0, scoring policy 2.1.0, report
+schema 1.12.0, identical JSON and SARIF, identical exit codes.
+
+### Removed
+
+- `click` and `rich` as dependencies. `pip install cqa-analyzer` installs
+  one package.
+
+### Changed
+
+- CLI parsing on `argparse`. Every flag, short option, default and exit code
+  is the same as 2.x (`tests/test_stdlib_core.py` locks the surface). Usage
+  errors still exit 2 with the same messages (`--new-findings-only requires
+  --baseline`, `Unknown output format …`, `Invalid value: …`); fatal errors
+  still exit 1 with `Error: <message>` on stderr.
+- Text output is plain and deterministic everywhere — terminal, pipe, CI
+  log, test — with no colour codes and no terminal-width wrapping. Panels
+  and tables use light box-drawing characters; inline style tags are
+  stripped; user-controlled text is escaped exactly as before. Whole lines
+  of the text-authority golden are unchanged.
+- `--version` prints `code-quality-analyzer, version 3.0.0` (same shape).
+- Package metadata: a test proves a fresh interpreter importing the CLI and
+  the MCP server loads nothing outside `sys.stdlib_module_names`.
+
+### Migration
+
+- Nothing to change for CLI users, CI, the GitHub Action or the MCP server.
+- Test suites that drove the CLI through `click.testing.CliRunner` can use
+  `tests/clirunner.py`, a stdlib stand-in with the same `Result` shape
+  (`exit_code`, `output`, `stdout`, `stderr`, `exception`). This suite
+  changed one import line in 18 files and no assertions.
+- Colour on interactive terminals is gone by design. If demand appears it
+  returns as a reporter plugin, never as a dependency of the core.
+
+### Tests
+
+- `tests/test_stdlib_core.py` (9): zero declared dependencies, no
+  third-party imports in a fresh interpreter, the full 2.x flag surface,
+  exit-code and message shapes, and the renderer (tag stripping, rich-
+  compatible `escape`, deterministic panels and tables, nested capture).
+  656 total.
+
 ## 2.45.0 - 2026-09-13
 
 Positioning and longevity release (ADR 004). No analysis output changes:

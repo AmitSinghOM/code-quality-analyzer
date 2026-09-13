@@ -6,11 +6,8 @@ import re
 import sys
 from pathlib import Path
 
-import click
-from rich.console import Console
-from rich.markup import escape
-from rich.panel import Panel
-from rich.table import Table
+import argparse
+import os
 
 from . import (
     REPORT_SCHEMA_VERSION,
@@ -35,8 +32,9 @@ from .plugins import create_default_registry
 from .rater import QualityRater, coverage_gap_ratio
 from .reporters import AnalysisReport, SarifRun
 from .scanner import CodeScanner
+from .text_render import Panel, Table, escape, get_console
 
-console = Console()
+console = get_console()
 
 _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
@@ -51,6 +49,7 @@ def _safe(value: object) -> str:
     """
     return escape(_CONTROL_CHARS.sub("", str(value)))
 
+
 EXIT_OK = 0
 EXIT_BELOW_THRESHOLD = 1
 EXIT_NOTHING_ANALYZED = 2
@@ -60,204 +59,253 @@ EXIT_SCORE_NOT_APPLICABLE = 5
 EXIT_CONFIG_MISMATCH = 6
 
 
-@click.command()
-@click.version_option(version=__version__, prog_name="code-quality-analyzer")
-@click.argument(
-    "project_path",
-    type=click.Path(
-        exists=True,
-        file_okay=False,
-        dir_okay=True,
-        readable=True,
-    ),
-)
-@click.option(
-    "--verbose",
-    "-v",
-    is_flag=True,
-    help="Show detailed file matches",
-)
-@click.option(
-    "--output-format",
-    "-f",
-    "output_format",
-    type=str,
-    default="text",
-    show_default=True,
-    help="Registered output format",
-)
-@click.option(
-    "--complexity",
-    "-c",
-    is_flag=True,
-    help="Include experimental time/space complexity estimates",
-)
-@click.option(
-    "--max-file-size",
-    type=click.IntRange(min=1),
-    default=DEFAULT_MAX_FILE_SIZE,
-    show_default=True,
-    help="Skip files larger than this many bytes",
-)
-@click.option(
-    "--max-files",
-    type=click.IntRange(min=1),
-    default=DEFAULT_MAX_FILES,
-    show_default=True,
-    help="Stop after discovering this many Python files",
-)
-@click.option(
-    "--redact-paths",
-    is_flag=True,
-    help="Report file names only, no directory structure",
-)
-@click.option(
-    "--anonymize",
-    is_flag=True,
-    help="Remove project paths, metadata, and source identifiers from reports",
-)
-@click.option(
-    "--offline",
-    is_flag=True,
-    help="Deny socket operations while analysis is running",
-)
-@click.option(
-    "--cache-dir",
-    type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
-    default=None,
-    help="Cache bounded parse artifacts in this local directory",
-)
-@click.option(
-    "--fail-under",
-    type=click.FloatRange(min=1.0, max=10.0),
-    default=None,
-    help=(
-        "Exit non-zero if the compatibility architecture signal score is "
-        "below this value (for CI)"
-    ),
-)
-@click.option(
-    "--fail-on",
-    type=click.Choice(["warning", "error"]),
-    default=None,
-    help="Exit 4 when a reported finding meets this severity",
-)
-@click.option(
-    "--baseline",
-    "baseline_path",
-    type=click.Path(
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        readable=True,
-        path_type=Path,
-    ),
-    default=None,
-    help="Compare findings with a hashed baseline",
-)
-@click.option(
-    "--write-baseline",
-    "write_baseline_path",
-    type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
-    default=None,
-    help="Write current finding fingerprints atomically",
-)
-@click.option(
-    "--new-findings-only",
-    is_flag=True,
-    help="Report and gate only findings absent from --baseline",
-)
-@click.option(
-    "--changed-lines-manifest",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Report and gate findings overlapping a bounded line manifest",
-)
-@click.option(
-    "--strict",
-    is_flag=True,
-    help="Exit non-zero if any requested analysis is incomplete",
-)
-@click.option(
-    "--config",
-    "config_path",
-    type=click.Path(path_type=Path),
-    default=None,
-    help=(
-        "Use this configuration file and ignore the project's own "
-        ".code-quality.toml (pin the gate outside the tree being gated)"
-    ),
-)
-@click.option(
-    "--no-project-config",
-    is_flag=True,
-    help="Ignore the project's .code-quality.toml and run with defaults",
-)
-@click.option(
-    "--expect-config-fingerprint",
-    default=None,
-    metavar="SHA256",
-    help=(
-        "Exit with code 6 unless the effective configuration fingerprint "
-        "equals this value (detects a PR that edits the gate's configuration)"
-    ),
-)
-def main(
-    project_path: str,
-    verbose: bool,
-    output_format: str,
-    complexity: bool,
-    max_file_size: int,
-    max_files: int,
-    redact_paths: bool,
-    anonymize: bool,
-    offline: bool,
-    cache_dir: Path | None,
-    fail_under: float | None,
-    fail_on: str | None,
-    baseline_path: Path | None,
-    write_baseline_path: Path | None,
-    new_findings_only: bool,
-    changed_lines_manifest: Path | None,
-    strict: bool,
-    config_path: Path | None,
-    no_project_config: bool,
-    expect_config_fingerprint: str | None,
-):
-    """Analyze a project without sending source outside the machine."""
-    if new_findings_only and baseline_path is None:
-        raise click.UsageError("--new-findings-only requires --baseline")
-    if config_path is not None and no_project_config:
-        raise click.UsageError("--config and --no-project-config are mutually exclusive")
+class CliError(Exception):
+    """A fatal, expected error: printed as ``Error: <message>`` and exit 1.
+
+    3.0 (docs/adr/004) replaced click with argparse. This class keeps the exit
+    code and the message shape click's ``ClickException`` had, so gates and
+    scripts that match on either keep working.
+    """
+
+
+def _existing_directory(value: str) -> str:
+    path = Path(value)
+    if not path.exists():
+        raise argparse.ArgumentTypeError(f"Directory {value!r} does not exist.")
+    if not path.is_dir():
+        raise argparse.ArgumentTypeError(f"Directory {value!r} is a file.")
+    if not os.access(path, os.R_OK):
+        raise argparse.ArgumentTypeError(f"Directory {value!r} is not readable.")
+    return value
+
+
+def _existing_file(value: str) -> Path:
+    path = Path(value)
+    if not path.exists():
+        raise argparse.ArgumentTypeError(f"File {value!r} does not exist.")
+    if path.is_dir():
+        raise argparse.ArgumentTypeError(f"File {value!r} is a directory.")
+    return path
+
+
+def _positive_int(value: str) -> int:
+    try:
+        number = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            f"Invalid value: {value!r} is not a valid integer."
+        ) from error
+    if number < 1:
+        raise argparse.ArgumentTypeError(f"Invalid value: {number} is not in the range x>=1.")
+    return number
+
+
+def _score(value: str) -> float:
+    try:
+        number = float(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            f"Invalid value: {value!r} is not a valid float."
+        ) from error
+    if not 1.0 <= number <= 10.0:
+        raise argparse.ArgumentTypeError(
+            f"Invalid value: {number} is not in the range 1.0<=x<=10.0."
+        )
+    return number
+
+
+def _add_analysis_options(parser: argparse.ArgumentParser) -> None:
+    group = parser.add_argument_group("analysis")
+    group.add_argument("--verbose", "-v", action="store_true", help="Show detailed file matches")
+    group.add_argument(
+        "--output-format",
+        "-f",
+        dest="output_format",
+        default="text",
+        help="Registered output format (default: text)",
+    )
+    group.add_argument(
+        "--complexity",
+        "-c",
+        action="store_true",
+        help="Include experimental time/space complexity estimates",
+    )
+    group.add_argument(
+        "--max-file-size",
+        type=_positive_int,
+        default=DEFAULT_MAX_FILE_SIZE,
+        help=f"Skip files larger than this many bytes (default: {DEFAULT_MAX_FILE_SIZE})",
+    )
+    group.add_argument(
+        "--max-files",
+        type=_positive_int,
+        default=DEFAULT_MAX_FILES,
+        help=f"Stop after discovering this many source files (default: {DEFAULT_MAX_FILES})",
+    )
+    group.add_argument(
+        "--cache-dir",
+        type=Path,
+        default=None,
+        help="Cache bounded parse artifacts in this local directory",
+    )
+
+
+def _add_privacy_options(parser: argparse.ArgumentParser) -> None:
+    group = parser.add_argument_group("privacy")
+    group.add_argument(
+        "--redact-paths",
+        action="store_true",
+        help="Report file names only, no directory structure",
+    )
+    group.add_argument(
+        "--anonymize",
+        action="store_true",
+        help="Remove project paths, metadata, and source identifiers from reports",
+    )
+    group.add_argument(
+        "--offline",
+        action="store_true",
+        help="Deny socket operations while analysis is running",
+    )
+
+
+def _add_gate_options(parser: argparse.ArgumentParser) -> None:
+    group = parser.add_argument_group("gating (CI)")
+    group.add_argument(
+        "--fail-under",
+        type=_score,
+        default=None,
+        help="Exit non-zero if the compatibility architecture signal score is "
+        "below this value (for CI)",
+    )
+    group.add_argument(
+        "--fail-on",
+        choices=["warning", "error"],
+        default=None,
+        help="Exit 4 when a reported finding meets this severity",
+    )
+    group.add_argument(
+        "--baseline",
+        dest="baseline_path",
+        type=_existing_file,
+        default=None,
+        help="Compare findings with a hashed baseline",
+    )
+    group.add_argument(
+        "--write-baseline",
+        dest="write_baseline_path",
+        type=Path,
+        default=None,
+        help="Write current finding fingerprints atomically",
+    )
+    group.add_argument(
+        "--new-findings-only",
+        action="store_true",
+        help="Report and gate only findings absent from --baseline",
+    )
+    group.add_argument(
+        "--changed-lines-manifest",
+        type=Path,
+        default=None,
+        help="Report and gate findings overlapping a bounded line manifest",
+    )
+    group.add_argument(
+        "--strict",
+        action="store_true",
+        help="Exit non-zero if any requested analysis is incomplete",
+    )
+
+
+def _add_config_options(parser: argparse.ArgumentParser) -> None:
+    group = parser.add_argument_group("configuration")
+    group.add_argument(
+        "--config",
+        dest="config_path",
+        type=Path,
+        default=None,
+        help="Use this configuration file and ignore the project's own "
+        ".code-quality.toml (pin the gate outside the tree being gated)",
+    )
+    group.add_argument(
+        "--no-project-config",
+        action="store_true",
+        help="Ignore the project's .code-quality.toml and run with defaults",
+    )
+    group.add_argument(
+        "--expect-config-fingerprint",
+        default=None,
+        metavar="SHA256",
+        help="Exit with code 6 unless the effective configuration fingerprint "
+        "equals this value (detects a PR that edits the gate's configuration)",
+    )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """The CLI contract. Flags, defaults and exit codes are unchanged from 2.x."""
+    parser = argparse.ArgumentParser(
+        prog="code-quality-analyzer",
+        description="Analyze a project without sending source outside the machine.",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"code-quality-analyzer, version {__version__}",
+    )
+    parser.add_argument("project_path", type=_existing_directory, metavar="PROJECT_PATH")
+    for add in (
+        _add_analysis_options,
+        _add_privacy_options,
+        _add_gate_options,
+        _add_config_options,
+    ):
+        add(parser)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Parse arguments, run the analysis, and exit with the gate's code."""
+    parser = build_parser()
+    options = parser.parse_args(argv)
+    if options.new_findings_only and options.baseline_path is None:
+        parser.error("--new-findings-only requires --baseline")
+    if options.config_path is not None and options.no_project_config:
+        parser.error("--config and --no-project-config are mutually exclusive")
 
     try:
-        with enforce_offline(offline):
+        with enforce_offline(options.offline):
             exit_code = _run_analysis(
-                project_path=project_path,
-                verbose=verbose,
-                output_format=output_format,
-                complexity=complexity,
-                max_file_size=max_file_size,
-                max_files=max_files,
-                redact_paths=redact_paths,
-                anonymize=anonymize,
-                offline=offline,
-                cache_dir=cache_dir,
-                fail_under=fail_under,
-                fail_on=fail_on,
-                baseline_path=baseline_path,
-                write_baseline_path=write_baseline_path,
-                new_findings_only=new_findings_only,
-                changed_lines_manifest=changed_lines_manifest,
-                strict=strict,
-                config_path=config_path,
-                no_project_config=no_project_config,
-                expect_config_fingerprint=expect_config_fingerprint,
+                project_path=options.project_path,
+                verbose=options.verbose,
+                output_format=options.output_format,
+                complexity=options.complexity,
+                max_file_size=options.max_file_size,
+                max_files=options.max_files,
+                redact_paths=options.redact_paths,
+                anonymize=options.anonymize,
+                offline=options.offline,
+                cache_dir=options.cache_dir,
+                fail_under=options.fail_under,
+                fail_on=options.fail_on,
+                baseline_path=options.baseline_path,
+                write_baseline_path=options.write_baseline_path,
+                new_findings_only=options.new_findings_only,
+                changed_lines_manifest=options.changed_lines_manifest,
+                strict=options.strict,
+                config_path=options.config_path,
+                no_project_config=options.no_project_config,
+                expect_config_fingerprint=options.expect_config_fingerprint,
             )
-    except OfflineViolationError as error:
-        raise click.ClickException(str(error)) from error
+    except UsageError as error:
+        parser.error(str(error))
+    except (OfflineViolationError, CliError) as error:
+        sys.stderr.write(f"Error: {error}\n")
+        sys.exit(1)
 
     sys.exit(exit_code)
+
+
+class UsageError(Exception):
+    """A usage problem detected after parsing (exit 2 through the parser)."""
 
 
 def _run_analysis(
@@ -291,7 +339,7 @@ def _run_analysis(
             use_project_config=not no_project_config,
         )
     except ConfigError as error:
-        raise click.ClickException(str(error)) from error
+        raise CliError(str(error)) from error
     if (
         expect_config_fingerprint is not None
         and configuration.fingerprint != expect_config_fingerprint.strip().lower()
@@ -309,18 +357,16 @@ def _run_analysis(
     changed_line_selection = None
     if changed_lines_manifest is not None:
         try:
-            changed_line_selection = load_changed_lines(
-                changed_lines_manifest
-            )
+            changed_line_selection = load_changed_lines(changed_lines_manifest)
         except ChangedLinesError as error:
-            raise click.ClickException(str(error)) from error
+            raise CliError(str(error)) from error
 
     known_fingerprints = None
     if baseline_path is not None:
         try:
             known_fingerprints = load_baseline(baseline_path)
         except BaselineError as error:
-            raise click.ClickException(str(error)) from error
+            raise CliError(str(error)) from error
 
     anonymizer = ReportAnonymizer() if anonymize else None
     project_label = ANONYMIZED_PROJECT if anonymize else root.name
@@ -329,11 +375,8 @@ def _run_analysis(
     try:
         reporter = registry.negotiate_reporter(output_format)
     except LookupError as error:
-        available = ", ".join(
-            item["format_name"]
-            for item in registry.capabilities()["reporters"]
-        )
-        raise click.UsageError(
+        available = ", ".join(item["format_name"] for item in registry.capabilities()["reporters"])
+        raise UsageError(
             f"Unknown output format {output_format!r}; choose from {available}"
         ) from error
 
@@ -342,7 +385,7 @@ def _run_analysis(
         try:
             cache_store = CacheStore(cache_dir)
         except CacheError as error:
-            raise click.ClickException(str(error)) from error
+            raise CliError(str(error)) from error
 
     scanner = CodeScanner(
         root,
@@ -376,7 +419,7 @@ def _run_analysis(
         try:
             write_baseline(write_baseline_path, scanner.findings)
         except BaselineError as error:
-            raise click.ClickException(str(error)) from error
+            raise CliError(str(error)) from error
         baseline_written = True
 
     comparison = compare_findings(
@@ -385,20 +428,16 @@ def _run_analysis(
         written=baseline_written,
     )
     baseline_selected_findings = (
-        list(comparison.new_findings)
-        if new_findings_only
-        else scanner.findings
+        list(comparison.new_findings) if new_findings_only else scanner.findings
     )
     changed_lines_summary = None
     if changed_line_selection is None:
         reported_findings = baseline_selected_findings
     else:
         try:
-            reported_findings = list(
-                changed_line_selection.select(baseline_selected_findings)
-            )
+            reported_findings = list(changed_line_selection.select(baseline_selected_findings))
         except ChangedLinesError as error:
-            raise click.ClickException(str(error)) from error
+            raise CliError(str(error)) from error
         changed_lines_summary = changed_line_selection.summary(
             input_findings=len(baseline_selected_findings),
             selected_findings=len(reported_findings),
@@ -421,39 +460,43 @@ def _run_analysis(
     analysis_health = scanner.analysis_authority()
 
     if output_format == "json":
-        report = AnalysisReport(structured=_build_json_report(
-            project_label,
-            rating,
-            signal_scope,
-            rater,
-            breakdown,
-            dsa_found,
-            design_found,
-            scanner,
-            scan_health,
-            analysis_health,
-            complexity_data,
-            complexity_health,
-            verbose,
-            reported_findings,
-            baseline_summary,
-            changed_lines_summary,
-            anonymizer,
-            offline,
-            redact_paths,
-        ))
+        report = AnalysisReport(
+            structured=_build_json_report(
+                project_label,
+                rating,
+                signal_scope,
+                rater,
+                breakdown,
+                dsa_found,
+                design_found,
+                scanner,
+                scan_health,
+                analysis_health,
+                complexity_data,
+                complexity_health,
+                verbose,
+                reported_findings,
+                baseline_summary,
+                changed_lines_summary,
+                anonymizer,
+                offline,
+                redact_paths,
+            )
+        )
     elif output_format == "sarif":
-        report = AnalysisReport(sarif=_build_sarif_run(
-            scanner,
-            analysis_health,
-            reported_findings,
-            baseline_summary,
-            changed_lines_summary,
-            anonymizer,
-            offline,
-            redact_paths,
-            new_findings_only,
-        ))
+        report = AnalysisReport(
+            sarif=_build_sarif_run(
+                scanner,
+                analysis_health,
+                reported_findings,
+                baseline_summary,
+                changed_lines_summary,
+                anonymizer,
+                offline,
+                redact_paths,
+                new_findings_only,
+            )
+        )
     else:
         with console.capture() as capture:
             _emit_text(
@@ -478,7 +521,7 @@ def _run_analysis(
             )
         report = AnalysisReport(text=capture.get())
     rendered = reporter.render(report).decode("utf-8")
-    click.echo(rendered, nl=not rendered.endswith("\n"))
+    sys.stdout.write(rendered if rendered.endswith("\n") else rendered + "\n")
 
     return _exit_code(
         scanner,
@@ -506,18 +549,13 @@ def _exit_code(
         return EXIT_NOTHING_ANALYZED
     if scanner.files_successfully_analyzed == 0:
         return EXIT_COVERAGE_GAP
-    if strict and (
-        scanner.has_coverage_gaps or _health_has_gaps(complexity_health)
-    ):
+    if strict and (scanner.has_coverage_gaps or _health_has_gaps(complexity_health)):
         return EXIT_COVERAGE_GAP
     if fail_under is not None and not signal_scope["applicable"]:
         return EXIT_SCORE_NOT_APPLICABLE
     if fail_under is not None and rating < fail_under:
         return EXIT_BELOW_THRESHOLD
-    if (
-        fail_on is not None
-        and _findings_reach_severity(findings or [], fail_on)
-    ):
+    if fail_on is not None and _findings_reach_severity(findings or [], fail_on):
         return EXIT_FINDINGS
     return EXIT_OK
 
@@ -525,10 +563,7 @@ def _exit_code(
 def _findings_reach_severity(findings, threshold: str) -> bool:
     severity_rank = {"warning": 1, "error": 2}
     minimum = severity_rank[threshold]
-    return any(
-        severity_rank.get(finding.severity, 0) >= minimum
-        for finding in findings
-    )
+    return any(severity_rank.get(finding.severity, 0) >= minimum for finding in findings)
 
 
 def _health_has_gaps(health: dict | None) -> bool:
@@ -575,8 +610,7 @@ def _pattern_payload(
         }
         if verbose:
             entry["evidence"] = [
-                {"file": hit.file, "signals": hit.signals}
-                for hit in evidence.get(name, [])
+                {"file": hit.file, "signals": hit.signals} for hit in evidence.get(name, [])
             ]
         payload[name] = entry
     return payload
@@ -586,12 +620,8 @@ def _finding_summary(findings):
     by_severity = {}
     by_category = {}
     for finding in findings:
-        by_severity[finding.severity] = (
-            by_severity.get(finding.severity, 0) + 1
-        )
-        by_category[finding.category] = (
-            by_category.get(finding.category, 0) + 1
-        )
+        by_severity[finding.severity] = by_severity.get(finding.severity, 0) + 1
+        by_category[finding.category] = by_category.get(finding.category, 0) + 1
     return {
         "total": len(findings),
         "by_severity": dict(sorted(by_severity.items())),
@@ -625,19 +655,17 @@ def _build_sarif_run(
     new_findings_only,
 ) -> SarifRun:
     if anonymizer is None:
-        findings = tuple(
-            finding.as_dict() for finding in reported_findings
-        )
+        findings = tuple(finding.as_dict() for finding in reported_findings)
     else:
-        identities = sorted({
-            finding.location.identity_path or finding.location.path
-            for finding in reported_findings
-        })
+        identities = sorted(
+            {
+                finding.location.identity_path or finding.location.path
+                for finding in reported_findings
+            }
+        )
         for identity in identities:
             anonymizer.file(identity)
-        findings = tuple(
-            anonymizer.finding(finding) for finding in reported_findings
-        )
+        findings = tuple(anonymizer.finding(finding) for finding in reported_findings)
 
     baseline_selection = {"newFindingsOnly": new_findings_only}
     if baseline_summary is not None:
@@ -660,9 +688,7 @@ def _build_sarif_run(
 
 def _project_analysis_payload(scanner, anonymized: bool) -> dict:
     payload = {}
-    for (language_id, capability), result in sorted(
-        scanner.project_results.items()
-    ):
+    for (language_id, capability), result in sorted(scanner.project_results.items()):
         key = f"{language_id}:{capability}"
         entry = {"health": dict(result.health)}
         if not anonymized:
@@ -704,18 +730,12 @@ def _build_json_report(
     else:
         health_payload = anonymizer.scan_health(scan_health)
         package_payload = anonymizer.package(scanner.package_intelligence)
-        finding_payload = [
-            anonymizer.finding(finding) for finding in reported_findings
-        ]
+        finding_payload = [anonymizer.finding(finding) for finding in reported_findings]
         complexity_payload = anonymizer.complexity(complexity_data)
 
     score_applicable = signal_scope["applicable"]
     score_value = rating if score_applicable else None
-    score_label = (
-        rater.get_rating_label(rating)
-        if score_applicable
-        else "Not applicable"
-    )
+    score_label = rater.get_rating_label(rating) if score_applicable else "Not applicable"
     output = {
         "schema_version": REPORT_SCHEMA_VERSION,
         "analyzer_version": __version__,
@@ -815,9 +835,7 @@ def _emit_text(
         "[/dim]\n"
     )
 
-    console.print(
-        f"[dim]Configuration: {scanner.configuration.fingerprint}[/dim]\n"
-    )
+    console.print(f"[dim]Configuration: {scanner.configuration.fingerprint}[/dim]\n")
 
     authority_label = "yes" if analysis_health["authoritative"] else "no"
     complete_label = "yes" if analysis_health["complete"] else "no"
@@ -835,28 +853,29 @@ def _emit_text(
         )
 
     if signal_scope["applicable"]:
-        rating_color = (
-            "red" if rating < 4 else "yellow" if rating < 7 else "green"
+        rating_color = "red" if rating < 4 else "yellow" if rating < 7 else "green"
+        console.print(
+            Panel(
+                f"[bold {rating_color}]{rating}/10[/bold {rating_color}]\n"
+                f"{rater.get_rating_label(rating)}",
+                title="[bold]Architecture Signal Score[/bold]",
+                expand=False,
+            )
         )
-        console.print(Panel(
-            f"[bold {rating_color}]{rating}/10[/bold {rating_color}]\n"
-            f"{rater.get_rating_label(rating)}",
-            title="[bold]Architecture Signal Score[/bold]",
-            expand=False,
-        ))
     else:
         scope_languages = ", ".join(signal_scope["languages"])
-        console.print(Panel(
-            "[bold]Not applicable[/bold]\n"
-            f"No source from a signal-capable language ({scope_languages}) "
-            "was analyzed",
-            title="[bold]Architecture Signal Score[/bold]",
-            expand=False,
-        ))
+        console.print(
+            Panel(
+                "[bold]Not applicable[/bold]\n"
+                f"No source from a signal-capable language ({scope_languages}) "
+                "was analyzed",
+                title="[bold]Architecture Signal Score[/bold]",
+                expand=False,
+            )
+        )
 
     languages = ", ".join(
-        f"{language}={count}"
-        for language, count in sorted(scanner.language_counts.items())
+        f"{language}={count}" for language, count in sorted(scanner.language_counts.items())
     )
     console.print(
         f"\n[dim]Files scanned: {breakdown['files_scanned']} | "
@@ -870,11 +889,7 @@ def _emit_text(
 
     for warning in breakdown.get("warnings", []):
         console.print(f"[yellow]![/yellow] {warning}")
-    health_payload = (
-        anonymizer.scan_health(scan_health)
-        if anonymizer is not None
-        else scan_health
-    )
+    health_payload = anonymizer.scan_health(scan_health) if anonymizer is not None else scan_health
     _print_scan_health(health_payload, scanner)
     if breakdown.get("warnings") or scanner.has_coverage_gaps:
         console.print()
@@ -921,9 +936,7 @@ def _emit_text(
 
     if complexity_data:
         projected_complexity = (
-            anonymizer.complexity(complexity_data)
-            if anonymizer is not None
-            else complexity_data
+            anonymizer.complexity(complexity_data) if anonymizer is not None else complexity_data
         )
         _print_complexity(projected_complexity, verbose)
 
@@ -931,8 +944,7 @@ def _emit_text(
 def _print_scan_health(scan_health, scanner):
     if scan_health["total_skipped"]:
         reasons = ", ".join(
-            f"{reason}={count}"
-            for reason, count in scan_health["skipped_by_reason"].items()
+            f"{reason}={count}" for reason, count in scan_health["skipped_by_reason"].items()
         )
         console.print(
             f"[yellow]![/yellow] {scan_health['total_skipped']} "
@@ -950,8 +962,7 @@ def _print_scan_health(scan_health, scanner):
         remaining = scanner.unparsed_files - len(examples)
         if remaining > 0:
             console.print(
-                f"    ... and {remaining} more (see unparsed_files in "
-                "the JSON report)"
+                f"    ... and {remaining} more (see unparsed_files in " "the JSON report)"
             )
     if scan_health["truncated"]:
         console.print(
@@ -963,28 +974,32 @@ def _print_scan_health(scan_health, scanner):
 def _print_baseline_summary(summary):
     if summary is None:
         return
-    console.print(Panel(
-        f"[bold]Loaded:[/bold] {summary['loaded']}\n"
-        f"[bold]Written:[/bold] {summary['written']}\n"
-        f"[bold]Current findings:[/bold] {summary['current_findings']}\n"
-        f"[bold]New findings:[/bold] {summary['new_findings']}",
-        title="[bold]Finding Baseline[/bold]",
-        expand=False,
-    ))
+    console.print(
+        Panel(
+            f"[bold]Loaded:[/bold] {summary['loaded']}\n"
+            f"[bold]Written:[/bold] {summary['written']}\n"
+            f"[bold]Current findings:[/bold] {summary['current_findings']}\n"
+            f"[bold]New findings:[/bold] {summary['new_findings']}",
+            title="[bold]Finding Baseline[/bold]",
+            expand=False,
+        )
+    )
     console.print()
 
 
 def _print_changed_lines_summary(summary):
     if summary is None:
         return
-    console.print(Panel(
-        f"[bold]Files:[/bold] {summary['file_count']}\n"
-        f"[bold]Canonical ranges:[/bold] {summary['range_count']}\n"
-        f"[bold]Input findings:[/bold] {summary['input_findings']}\n"
-        f"[bold]Selected findings:[/bold] {summary['selected_findings']}",
-        title="[bold]Changed-Line Selection[/bold]",
-        expand=False,
-    ))
+    console.print(
+        Panel(
+            f"[bold]Files:[/bold] {summary['file_count']}\n"
+            f"[bold]Canonical ranges:[/bold] {summary['range_count']}\n"
+            f"[bold]Input findings:[/bold] {summary['input_findings']}\n"
+            f"[bold]Selected findings:[/bold] {summary['selected_findings']}",
+            title="[bold]Changed-Line Selection[/bold]",
+            expand=False,
+        )
+    )
     console.print()
 
 
@@ -992,18 +1007,20 @@ def _print_package_intelligence(package):
     if isinstance(package, dict):
         if not package["pyproject_present"] and not package["module_count"]:
             return
-        console.print(Panel(
-            "[bold]Project metadata declared:[/bold] "
-            f"{_safe(package['project_name_declared'])}\n"
-            f"[bold]Layout:[/bold] {_safe(package['layout'])}\n"
-            f"[bold]Modules:[/bold] {package['module_count']}\n"
-            f"[bold]Declared dependencies:[/bold] "
-            f"{package['dependency_count']}\n"
-            f"[bold]Circular import groups:[/bold] "
-            f"{package['circular_import_group_count']}",
-            title="[bold]Package Intelligence (Anonymized)[/bold]",
-            expand=False,
-        ))
+        console.print(
+            Panel(
+                "[bold]Project metadata declared:[/bold] "
+                f"{_safe(package['project_name_declared'])}\n"
+                f"[bold]Layout:[/bold] {_safe(package['layout'])}\n"
+                f"[bold]Modules:[/bold] {package['module_count']}\n"
+                f"[bold]Declared dependencies:[/bold] "
+                f"{package['dependency_count']}\n"
+                f"[bold]Circular import groups:[/bold] "
+                f"{package['circular_import_group_count']}",
+                title="[bold]Package Intelligence (Anonymized)[/bold]",
+                expand=False,
+            )
+        )
         console.print()
         return
 
@@ -1011,17 +1028,19 @@ def _print_package_intelligence(package):
         return
     name = package.project_name or "not declared"
     source_roots = ", ".join(package.source_roots) or "none"
-    console.print(Panel(
-        f"[bold]Project:[/bold] {_safe(name)}\n"
-        f"[bold]Layout:[/bold] {_safe(package.layout)} ({_safe(source_roots)})\n"
-        f"[bold]Modules:[/bold] {len(package.modules)}\n"
-        f"[bold]Declared dependencies:[/bold] "
-        f"{len(package.dependencies)}\n"
-        f"[bold]Circular import groups:[/bold] "
-        f"{len(package.circular_imports)}",
-        title="[bold]Package Intelligence[/bold]",
-        expand=False,
-    ))
+    console.print(
+        Panel(
+            f"[bold]Project:[/bold] {_safe(name)}\n"
+            f"[bold]Layout:[/bold] {_safe(package.layout)} ({_safe(source_roots)})\n"
+            f"[bold]Modules:[/bold] {len(package.modules)}\n"
+            f"[bold]Declared dependencies:[/bold] "
+            f"{len(package.dependencies)}\n"
+            f"[bold]Circular import groups:[/bold] "
+            f"{len(package.circular_imports)}",
+            title="[bold]Package Intelligence[/bold]",
+            expand=False,
+        )
+    )
     console.print()
 
 
@@ -1094,8 +1113,7 @@ def _print_pattern_table(
                     detail = _safe(f"{hit.file} ({', '.join(hit.signals[:4])})")
                 else:
                     detail = (
-                        f"{anonymizer.file(hit.file)} "
-                        f"({len(hit.signals)} signal(s) redacted)"
+                        f"{anonymizer.file(hit.file)} " f"({len(hit.signals)} signal(s) redacted)"
                     )
                 table.add_row("", f"  └─ {detail}", "")
     console.print(table)
@@ -1104,13 +1122,15 @@ def _print_pattern_table(
 
 def _print_complexity(complexity_data, verbose):
     avg_confidence = complexity_data.get("average_confidence", 0)
-    console.print(Panel(
-        f"[bold]Functions analyzed:[/bold] "
-        f"{complexity_data['total_functions']}\n"
-        f"[bold]Avg confidence:[/bold] {avg_confidence * 100:.0f}%",
-        title="[bold]Complexity Analysis[/bold]",
-        expand=False,
-    ))
+    console.print(
+        Panel(
+            f"[bold]Functions analyzed:[/bold] "
+            f"{complexity_data['total_functions']}\n"
+            f"[bold]Avg confidence:[/bold] {avg_confidence * 100:.0f}%",
+            title="[bold]Complexity Analysis[/bold]",
+            expand=False,
+        )
+    )
 
     for label, key, style in (
         (
@@ -1139,10 +1159,7 @@ def _print_complexity(complexity_data, verbose):
     if not high_count:
         return
 
-    console.print(
-        f"[bold yellow]! {high_count} high-complexity "
-        "function(s):[/bold yellow]"
-    )
+    console.print(f"[bold yellow]! {high_count} high-complexity " "function(s):[/bold yellow]")
     table = Table(show_header=True)
     table.add_column("Function", style="red")
     table.add_column("File")
@@ -1169,9 +1186,7 @@ def _print_complexity(complexity_data, verbose):
             [],
         )
         for function in high_complexity[:5]:
-            console.print(
-                f"\n[cyan]{function['name']}[/cyan] ({function['file']})"
-            )
+            console.print(f"\n[cyan]{function['name']}[/cyan] ({function['file']})")
             for reason in function.get("reasoning", []):
                 console.print(f"  • {reason}")
 

@@ -26,7 +26,7 @@ make an installed copy keep working long after release.
 |---|---|---|
 | Supported Pythons | CPython versions reach end-of-life yearly | Drop an EOL Python in the first release after its EOL date; add the new stable within two releases |
 | Architecture patterns | Design patterns name today's frameworks; new frameworks go unrecognized (under-reporting, never breakage) | Review `patterns.py`, `go_patterns.py`, `ts_patterns.py` yearly against current ecosystem defaults |
-| Runtime dependency ranges | `click`/`rich` ranges (never exact pins, ADR 004) drift toward their ceilings; a new major breaks the install | The monthly **canary** (`.github/workflows/canary.yml`) installs the newest versions the ranges allow and the newest tree-sitter grammars with bounds ignored; a failure files one `canary` issue. Widen or cap a range in the next release |
+| Runtime dependencies | None since 3.0 (ADR 004). Only the optional `[deep]` grammars can drift | The monthly **canary** (`.github/workflows/canary.yml`) installs the newest versions the ranges allow and the newest tree-sitter grammars with bounds ignored; a failure files one `canary` issue. Widen or cap a range in the next release |
 | Dev pins | `pytest`, `ruff`, `build`, `pip-audit` accumulate CVEs and staleness | CI runs `pip-audit` on every push; act on findings immediately, review pins yearly |
 | Next Python | A pre-release CPython deprecates or removes something the package relies on | The canary runs the suite on the next `3.x-dev`; fix forward before that Python ships |
 | CI infrastructure | Pinned action SHAs and runner images deprecate | Refresh action pins (real SHAs only, fetched from the GitHub API) and runner labels yearly |

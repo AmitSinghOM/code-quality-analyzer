@@ -382,12 +382,16 @@ frozen at 62 IDs, and no longer marketed as a grade.
 - Machine-readable remediation in rule metadata, so an agent fixes a
   finding from `explain_rule` without a human.
 
-### Phase 2 — 3.0: the stdlib core
+### Phase 2 — 3.0: the stdlib core (✅ 3.0.0)
 
-- Replace click and rich with `argparse` and plain text; `rich` becomes an
-  optional `[pretty]` extra. A pure-stdlib core has nothing left to rot.
-- Same flags, same exit codes, same JSON; the 56 `CliRunner` test files
-  move to `subprocess`-level tests that also cover the MCP transport.
+- Replace click and rich with `argparse` and plain text. A pure-stdlib core
+  has nothing left to rot. (Decided against a `[pretty]` extra: the text
+  report is rendered once, deterministically, for every destination; colour
+  can return as a reporter plugin if anyone asks.)
+- Same flags, same exit codes, same JSON; the test suite kept every
+  assertion and swapped one import for a stdlib `CliRunner` stand-in
+  (`tests/clirunner.py`); a fresh-interpreter test proves no third-party
+  module is imported.
 - Twelve-month deprecation notice on any flag that must change.
 
 ### Phase 3 — maintenance mode by design (year 2 onward)
