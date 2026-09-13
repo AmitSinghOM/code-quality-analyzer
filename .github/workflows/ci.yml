@@ -16,6 +16,7 @@ on:
       - "LICENSE"
       - "SECURITY.md"
       - ".github/workflows/ci.yml"
+      - ".code-quality-baseline.json"
   pull_request:
     paths:
       - "cqa_analyzer/**"
@@ -285,3 +286,25 @@ jobs:
       # never lower it to hide a regression.
       - name: Rate this repository
         run: code-quality-analyzer . --fail-under 4.5 --strict -c
+
+  gate-action:
+    # Dogfood the published GitHub Action against this repository, the way a
+    # consumer would: released cqa-analyzer from PyPI, changed-lines gating on
+    # pull requests, SARIF emitted. Pinned to a commit SHA like every other
+    # third-party action here. This is also the first external CI install the
+    # seven-year plan (docs/ROADMAP.md, item 12) counts.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Ratchet: existing debt is fingerprinted in .code-quality-baseline.json
+      # (151 maintainability warnings, mostly __main__.py, which 3.0 rewrites);
+      # any *new* warning fails the job. Regenerate the baseline only after a
+      # deliberate review: code-quality-analyzer . --write-baseline .code-quality-baseline.json
+      - uses: AmitSinghOM/cqa-action@c0ad6718aa4b88d9b88c5e056304d054304dbffc # v1.0.0
+        with:
+          baseline: .code-quality-baseline.json
+          fail-on: warning
+          strict: "true"
