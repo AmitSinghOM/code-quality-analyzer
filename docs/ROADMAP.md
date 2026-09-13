@@ -337,3 +337,77 @@ maturity target 28 → 31, curves unchanged. Specs live once in
 `production_patterns.py` so every language inherits them. Calibrated on
 the full 24-project corpus before release; four anchors removed from the
 evidence (`docs/CALIBRATION.md`, "Scoring policy 2.1.0").
+
+## 12. The seven-year plan (ADR 004, from 2.45.0)
+
+Everything above was about *breadth*: which languages, which rules, which
+patterns. This section is about *staying alive*. Its premise (ADR 004) is
+that models will do code judgment better than any heuristic, and that
+deterministic, reproducible, zero-egress verification becomes more valuable
+as they do — because gates run on every push, must be auditable, and must
+run where code cannot leave the machine. The primary user from here on is a
+coding agent.
+
+### Positioning
+
+The deterministic, zero-egress verification layer for model-written code.
+Gates, baselines, changed-line manifests, configuration fingerprints, SARIF
+and the versioned contracts lead. The architecture score is retained as a
+reproducible *inventory* of patterns (structured evidence for an agent),
+frozen at 62 IDs, and no longer marketed as a grade.
+
+### Phase 0 — remove the rot vectors (✅ 2.45.0)
+
+- Runtime dependencies as compatible ranges, never exact pins.
+- `cqa-mcp`: MCP server over stdio, stdlib only, four tools (`scan`,
+  `gate`, `explain_rule`, `list_rules`), a transport over the CLI so agents
+  see exactly what CI sees.
+- Canary workflow, monthly: newest compatible deps, newest grammars with
+  bounds ignored, next Python pre-release; failure files one issue.
+- Compatibility promise (below) written down.
+
+### Phase 1 — distribution and the quality flywheel (to 2.x end of life)
+
+- A GitHub Action (`uses: AmitSinghOM/cqa-action@v1`) so adoption is one
+  YAML line; pre-commit hook already exists.
+- Survival metrics, watched quarterly: external repositories running the
+  gate in CI (target: three within twelve months), PyPI downloads, issues.
+  Not rule or language counts.
+- False-positive corpus beside the calibration corpus; a scheduled run
+  diffs findings across the 24 projects so precision drift is caught
+  without a release. Every reported false positive becomes a fixture.
+- `GOVERNANCE.md` (decision rules, how a second maintainer is added,
+  account-loss recovery), OpenSSF Scorecard. `SECURITY.md` and Trusted
+  Publishing already exist.
+- Machine-readable remediation in rule metadata, so an agent fixes a
+  finding from `explain_rule` without a human.
+
+### Phase 2 — 3.0: the stdlib core
+
+- Replace click and rich with `argparse` and plain text; `rich` becomes an
+  optional `[pretty]` extra. A pure-stdlib core has nothing left to rot.
+- Same flags, same exit codes, same JSON; the 56 `CliRunner` test files
+  move to `subprocess`-level tests that also cover the MCP transport.
+- Twelve-month deprecation notice on any flag that must change.
+
+### Phase 3 — maintenance mode by design (year 2 onward)
+
+- Quarterly releases driven by canaries and issues, not by feature ideas;
+  a release should take an hour.
+- Models as contributors, never as dependencies: they review anchors,
+  draft rules and map vocabularies offline; a scan never calls one.
+- Breadth freeze holds: no ninth language, no new pattern ID without
+  corpus evidence of a false negative.
+
+### Compatibility promise
+
+- The JSON report schema is additive-only within a major version; every
+  archived `docs/report-schema-*.json` stays readable and the authority
+  contract test validates against each.
+- Rule IDs, exit codes and CLI flags carry a twelve-month deprecation
+  window announced in the CHANGELOG before removal.
+- `RULESET_VERSION`, `SCORING_POLICY_VERSION`, `REPORT_SCHEMA_VERSION` and
+  the plugin API version are the only things a consumer needs to pin
+  against; each changes only when its contract does.
+- Python support: the four newest minor releases; a release is dropped no
+  sooner than its upstream end of life, announced one release ahead.

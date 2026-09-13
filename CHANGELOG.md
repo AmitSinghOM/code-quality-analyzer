@@ -4,6 +4,56 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 2.45.0 - 2026-09-13
+
+Positioning and longevity release (ADR 004). No analysis output changes:
+ruleset 2.24.0, scoring policy 2.1.0 and schema 1.12.0 are unchanged.
+
+### Added
+
+- **MCP server for coding agents.** `cqa-mcp` (also
+  `python -m cqa_analyzer.mcp_server`) serves the analyzer over the Model
+  Context Protocol stdio transport with four tools: `gate` (pass/fail,
+  reason, exit code, flat findings with remediation, score, configuration
+  fingerprint), `scan` (the full JSON report verbatim), `explain_rule` and
+  `list_rules`. Stdlib only — no SDK dependency. A transport, not a second
+  analysis path: `scan` and `gate` run the installed CLI with
+  `--output-format json --offline`, so an agent sees byte-for-byte what CI
+  sees. README section "For coding agents (MCP)".
+- **Canary workflow** (`.github/workflows/canary.yml`), monthly: newest
+  compatible runtime dependencies on Python 3.11 and 3.14, newest
+  tree-sitter grammars with the `[deep]` bounds deliberately ignored, and
+  the next Python pre-release. Failure opens or refreshes one `canary`
+  issue so ecosystem drift is learned before a user reports it.
+- ADR 004 (`docs/adr/004-positioning-and-longevity.md`): the judgment /
+  verification distinction, why deterministic offline gates gain value as
+  models improve, the repositioning debate, and the decisions below.
+  ROADMAP item 12: the seven-year plan and the compatibility promise.
+
+### Changed
+
+- Runtime dependencies are compatible ranges, not exact pins:
+  `click>=8.3.3,<9` (floor is the PYSEC-2026-2132 fix), `rich>=13,<16`.
+  Exact pins in a tool installed into a project's own environment
+  guarantee resolver conflicts. Dev and CI pins are unchanged.
+- The architecture score is retained as a reproducible pattern inventory
+  and frozen at 62 IDs; the README leads with the gate and the agent
+  workflow. `docs/MAINTENANCE.md` gains the canary as the response
+  mechanism for dependency, grammar and interpreter drift.
+- README sweep: catalog headings 31 DSA / 31 design with the six 2.44.0 IDs
+  listed; Rust is no longer described as a pilot; `[deep]` names Rust.
+
+### Deferred, by decision
+
+- Stdlib core (argparse instead of click, `rich` as an optional `[pretty]`
+  extra) is scheduled as 3.0 with a deprecation path, not bundled here.
+
+### Tests
+
+- `tests/test_mcp_server.py` (16): protocol negotiation, notifications,
+  JSON-RPC errors, newline-delimited transport, each tool, the CLI-parity
+  guarantee, and the option mapping. 647 total.
+
 ## 2.44.0 - 2026-09-12
 
 Scoring policy **2.1.0** (ADR 003). Two reviews found the 56-pattern catalog

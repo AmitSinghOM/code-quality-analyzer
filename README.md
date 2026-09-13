@@ -84,6 +84,7 @@ code-quality-analyzer/
 ├── cqa_analyzer/
 │   ├── __init__.py
 │   ├── __main__.py      # CLI entry point
+│   ├── mcp_server.py    # MCP server for coding agents (stdio, stdlib only)
 │   ├── baseline.py      # Hashed finding baselines and comparison
 │   ├── cache.py         # Bounded local parse-artifact cache
 │   ├── changed_lines.py # Bounded changed-line finding selection
@@ -141,7 +142,7 @@ will not give you this tool.
 **Requirements:** Python 3.11 or newer (`python3 --version`). The default
 install is pure Python with no native dependencies.
 
-### Optional: `[deep]` — duplication and complexity for Go and C/C++
+### Optional: `[deep]` — duplication and complexity for Go, C/C++, and Rust
 
 ```bash
 pipx install 'cqa-analyzer[deep]'      # or: pip install 'cqa-analyzer[deep]'
@@ -207,8 +208,8 @@ python3 -m pip install --upgrade cqa-analyzer
 python3 -m pip install --upgrade 'cqa-analyzer[deep]'   # with the optional extra
 
 # a specific version
-pipx install --force 'cqa-analyzer==2.44.0'
-python3 -m pip install 'cqa-analyzer==2.44.0'
+pipx install --force 'cqa-analyzer==2.45.0'
+python3 -m pip install 'cqa-analyzer==2.45.0'
 ```
 
 Check with `code-quality-analyzer --version`. If the number does not
@@ -531,6 +532,37 @@ pass as a green build.
 See `.github/workflows/ci.yml` for a working example that also runs the test
 suite, lint, and a dependency vulnerability scan.
 
+## For coding agents (MCP)
+
+The analyzer is a deterministic, offline gate that coding agents (Claude
+Code, Kiro, Codex, Cursor, …) can call in their edit loop. `cqa-mcp` serves
+it over the [Model Context Protocol](https://modelcontextprotocol.io) stdio
+transport with no additional dependencies:
+
+```json
+{
+  "mcpServers": {
+    "cqa-analyzer": { "command": "cqa-mcp" }
+  }
+}
+```
+
+| Tool | What it returns |
+|---|---|
+| `gate` | `pass`/`fail`, the reason, the CLI exit code, a flat list of findings with remediation, the score, and the configuration fingerprint. Accepts `fail_on`, `fail_under`, `changed_lines_manifest`, `baseline`, `new_findings_only`, `strict`, `expect_config_fingerprint`. |
+| `scan` | The full JSON report (schema `REPORT_SCHEMA_VERSION`), verbatim. |
+| `explain_rule` | Title, description, severity, confidence and remediation for one rule ID. |
+| `list_rules` | The built-in catalog, optionally filtered by language. |
+
+The server is a transport, not a second analysis path: `scan` and `gate`
+run the installed CLI with `--output-format json --offline` and return its
+report, so an agent sees byte-for-byte what CI sees under the same ruleset
+version, scoring policy and configuration fingerprint. Pass the
+`changed_lines_manifest` the Agent Skill generates to gate only the lines the
+agent touched, and `expect_config_fingerprint` so a change to the gate's own
+configuration cannot pass silently. Rationale and the longevity plan behind
+this interface: [`docs/adr/004-positioning-and-longevity.md`](docs/adr/004-positioning-and-longevity.md).
+
 ## Paths
 
 Absolute paths are never written into reports. The project is identified by its
@@ -751,7 +783,7 @@ The confidence score indicates how reliable the complexity estimate is.
 
 ## What It Detects
 
-### DSA Patterns (29 patterns)
+### DSA Patterns (31 patterns)
 
 **Data Structures:**
 - Hash maps (Counter, defaultdict)
@@ -787,8 +819,10 @@ The confidence score indicates how reliable the complexity estimate is.
 - Prefix sums
 - String matching (KMP, Rabin-Karp, Z, Aho-Corasick)
 - Consistent hashing
+- Ring buffers (circular buffers)
+- Randomized sampling (weighted choice, reservoir, Fisher-Yates)
 
-### System Design Patterns (27 patterns)
+### System Design Patterns (31 patterns)
 - API design (FastAPI, Flask, Django, Starlette)
 - Database access (ORMs and raw drivers)
 - Caching layers
@@ -810,6 +844,10 @@ The confidence score indicates how reliable the complexity estimate is.
 - Observability: tracing, metrics, health checks
 - Concurrency and parallelism primitives
 - Pagination
+- Distributed locking (leases, fencing tokens, `SKIP LOCKED`, advisory locks)
+- Optimistic concurrency (expected-version writes, version conflicts)
+- Security hardening (SSRF/egress control, HMAC signing, constant-time compares)
+- Scheduling (cron, periodic and background jobs)
 
 Production-systems patterns are recognized primarily through naming
 conventions (`CircuitBreaker`, `RetryPolicy`, `DeadLetterQueue`,
@@ -938,9 +976,9 @@ sqlite3/libpq/pqxx/RocksDB, librdkafka/ZeroMQ/NATS, OpenSSL/libsodium,
 yaml-cpp/toml++/cxxopts, OpenTelemetry/prometheus-cpp, libuv/libevent/
 Asio/TBB/liburing). Calibrated on drogon and hiredis.
 
-### Rust (bounded pilot)
+### Rust
 
-The Rust pilot (`.rs`) blanks comments (nested `/* */` included), `"…"`,
+The Rust adapter (`.rs`) blanks comments (nested `/* */` included), `"…"`,
 raw `r#"…"#` and byte `b"…"` strings and char literals while keeping
 lifetimes (`'a`, `'static`) as code; `r#ident` raw identifiers resolve to
 their keyword name. `use`/`extern crate` roots and paths are the imports
