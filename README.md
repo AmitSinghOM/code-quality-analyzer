@@ -1,10 +1,19 @@
 # Code Quality Analyzer
 
+[![PyPI](https://img.shields.io/pypi/v/cqa-analyzer?label=PyPI)](https://pypi.org/project/cqa-analyzer/)
+[![Python](https://img.shields.io/pypi/pyversions/cqa-analyzer)](https://pypi.org/project/cqa-analyzer/)
+[![CI](https://github.com/AmitSinghOM/code-quality-analyzer/actions/workflows/ci.yml/badge.svg)](https://github.com/AmitSinghOM/code-quality-analyzer/actions/workflows/ci.yml)
+[![Canary](https://github.com/AmitSinghOM/code-quality-analyzer/actions/workflows/canary.yml/badge.svg)](https://github.com/AmitSinghOM/code-quality-analyzer/actions/workflows/canary.yml)
+[![GitHub Action](https://img.shields.io/badge/GitHub%20Action-cqa--action%40v1-2088FF?logo=githubactions&logoColor=white)](https://github.com/AmitSinghOM/cqa-action)
+[![MCP](https://img.shields.io/badge/MCP-cqa--mcp-4B32C3)](#for-coding-agents-mcp)
+[![Dependencies](https://img.shields.io/badge/runtime%20deps-0-brightgreen)](docs/adr/004-positioning-and-longevity.md)
+[![License](https://img.shields.io/github/license/AmitSinghOM/code-quality-analyzer)](LICENSE)
+
 **Prove the health of a codebase without a single byte leaving the machine.**
 
-Code Quality Analyzer is a privacy-first static analysis tool for Python
-packages, with bounded Go, TypeScript/JavaScript, Java, Kotlin, C#/.NET,
-C/C++ and Rust pilots, built for
+Code Quality Analyzer is a privacy-first static analysis tool for eight
+languages — Python in depth, with bounded Go, TypeScript/JavaScript, Java,
+Kotlin, C#/.NET, C/C++ and Rust support — built for
 environments where source code
 cannot leave the trusted development boundary: regulated industries,
 air-gapped networks, client codebases under NDA, and anyone who refuses to
