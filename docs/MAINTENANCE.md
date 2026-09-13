@@ -26,12 +26,14 @@ make an installed copy keep working long after release.
 |---|---|---|
 | Supported Pythons | CPython versions reach end-of-life yearly | Drop an EOL Python in the first release after its EOL date; add the new stable within two releases |
 | Architecture patterns | Design patterns name today's frameworks; new frameworks go unrecognized (under-reporting, never breakage) | Review `patterns.py`, `go_patterns.py`, `ts_patterns.py` yearly against current ecosystem defaults |
-| Dependency pins | Runtime pins (`click`, `rich`) and dev pins (`pytest`, `ruff`, `build`, `twine`, `pip-audit`) accumulate CVEs and staleness | CI runs `pip-audit` on every push; act on findings immediately, review pins yearly |
+| Runtime dependency ranges | `click`/`rich` ranges (never exact pins, ADR 004) drift toward their ceilings; a new major breaks the install | The monthly **canary** (`.github/workflows/canary.yml`) installs the newest versions the ranges allow and the newest tree-sitter grammars with bounds ignored; a failure files one `canary` issue. Widen or cap a range in the next release |
+| Dev pins | `pytest`, `ruff`, `build`, `pip-audit` accumulate CVEs and staleness | CI runs `pip-audit` on every push; act on findings immediately, review pins yearly |
+| Next Python | A pre-release CPython deprecates or removes something the package relies on | The canary runs the suite on the next `3.x-dev`; fix forward before that Python ships |
 | CI infrastructure | Pinned action SHAs and runner images deprecate | Refresh action pins (real SHAs only, fetched from the GitHub API) and runner labels yearly |
 | Release pipeline | PyPI/GitHub policy changes (2FA, Trusted Publishing claims) | Verify one end-to-end publish per year at minimum |
 
 **Minimum viable maintenance: one small release per year** covering the
-table above. The automated pipeline (green CI matrix, publish-on-release
+table above, plus acting on any `canary` issue the month it opens. The automated pipeline (green CI matrix, publish-on-release
 via Trusted Publishing with attestations, no tokens) is designed to make
 that release a sub-hour task.
 

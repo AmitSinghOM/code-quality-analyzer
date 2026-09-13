@@ -24,9 +24,11 @@ classifiers = [
     "Topic :: Software Development :: Quality Assurance",
 ]
 dependencies = [
-    # click <8.3.3 carries PYSEC-2026-2132; keep this at or above the fix.
-    "click==8.5.0",
-    "rich==15.0.0",
+    # Compatible ranges, not exact pins (docs/adr/004): an exact pin in a tool
+    # that is installed into a project's own environment guarantees resolver
+    # conflicts within a year. The click floor is the PYSEC-2026-2132 fix.
+    "click>=8.3.3,<9",
+    "rich>=13.0,<16",
 ]
 
 [project.urls]
@@ -57,6 +59,8 @@ dev = [
 
 [project.scripts]
 code-quality-analyzer = "cqa_analyzer.__main__:main"
+# MCP server for coding agents (stdio transport, stdlib only).
+cqa-mcp = "cqa_analyzer.mcp_server:main"
 
 [tool.setuptools.packages.find]
 include = ["cqa_analyzer*"]
