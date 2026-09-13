@@ -303,7 +303,7 @@ jobs:
       # (151 maintainability warnings, mostly __main__.py, which 3.0 rewrites);
       # any *new* warning fails the job. Regenerate the baseline only after a
       # deliberate review: code-quality-analyzer . --write-baseline .code-quality-baseline.json
-      - uses: AmitSinghOM/cqa-action@c0ad6718aa4b88d9b88c5e056304d054304dbffc # v1.0.0
+      - uses: AmitSinghOM/cqa-action@a4cc8a8dbb09c1cbeaa189413ffb9487bb77253c # v1.1.0
         with:
           baseline: .code-quality-baseline.json
           fail-on: warning
