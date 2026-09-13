@@ -489,7 +489,19 @@ record in
 
 ## Use in CI
 
-Create a baseline once after reviewing existing findings:
+The quickest path is the GitHub Action, one line in a workflow:
+
+```yaml
+- uses: AmitSinghOM/cqa-action@v1
+```
+
+It installs a pinned release, gates on `warning`-or-higher findings with
+`--strict`, restricts gating to the lines a pull request changed, writes a
+job summary and emits SARIF. Inputs and outputs:
+[AmitSinghOM/cqa-action](https://github.com/AmitSinghOM/cqa-action). This
+repository gates itself with it (`gate-action` in `.github/workflows/ci.yml`).
+
+Or by hand — create a baseline once after reviewing existing findings:
 
 ```bash
 code-quality-analyzer . --write-baseline .code-quality-baseline.json
