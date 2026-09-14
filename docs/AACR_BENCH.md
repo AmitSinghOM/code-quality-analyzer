@@ -1,6 +1,44 @@
 # AACR-Bench as an external calibration corpus
 
-Status: feasibility assessed 2026-09-14. No harness built yet.
+Status: harness available as `scripts/aacr_bench_slice.py` (a development
+tool, not part of the published package). First measured datapoint below;
+no headline number is quotable yet.
+
+## Running the harness
+
+```bash
+.venv/bin/python scripts/aacr_bench_slice.py --language Python --limit 5
+GITHUB_TOKEN=... .venv/bin/python scripts/aacr_bench_slice.py --all --output slice.json
+```
+
+Development tool only: it downloads the dataset and GitHub tarballs (cached
+under `~/.cache/cqa-aacr-bench`), which the analyzer itself never does.
+Tarballs above `--max-tarball-mb` (default 150) are skipped and listed, never
+partially processed. Smallest PRs run first. Unauthenticated GitHub allows 60
+tarball requests an hour; set `GITHUB_TOKEN` for a full run. On a python.org
+macOS build without a CA bundle, prefix `SSL_CERT_FILE=/etc/ssl/cert.pem`.
+
+Matching: a finding is credited to an annotation when it is in the same
+file, its rule belongs to the annotation's family, and the line spans
+overlap within `--slack` lines (default 2). Left-side (pre-change)
+annotations are excluded because the analyzer scans the post-change tree.
+Findings in files with no annotation at all are ignored; findings in
+annotated files that overlap nothing are reported as `unannotated` — they
+are candidate true positives nobody wrote down, so the precision column is a
+floor, not a measurement.
+
+## First datapoint (2026-09-14, two smallest Python PRs)
+
+| PR | Files scanned | Slice annotations | Matched | Unannotated hits in annotated files |
+|----|---------------|-------------------|---------|--------------------------------------|
+| infiniflow/ragflow#6691 | 902 | 1 (duplication) | 0 | 1 (PY-MAINT-001) |
+| vllm-project/vllm#24425 | 1,888 | 1 (duplication) | 0 | 3 (PY-COR-002, PY-MAINT-001/002) |
+
+Both annotations describe duplicated *logic* that the structural duplicate
+detector (PY-DUP-001, normalised-AST identity) does not consider identical.
+That is the expected gap between a reviewer's "this repeats that" and a
+lexical tool's definition, and exactly the kind of result the slice exists
+to surface. Two PRs prove the pipeline; they prove nothing about recall.
 
 ## What it is
 
@@ -89,11 +127,3 @@ on nothing.
    must stream, cache by `target_commit`, and honour the unauthenticated
    GitHub rate limit (60 requests/hour) or use a token.
 
-## What a harness would produce
-
-For each PR: fetch tarball at `target_commit`, run `code-quality-analyzer
---output-format json`, keep findings whose `(path, line)` overlaps an
-annotation in the slice above, and report per rule: annotated-slice recall,
-precision-against-annotated-set, and the count of unannotated hits for
-manual review. The headline claim this supports is narrow and honest:
-"on the 261-comment deterministic slice of AACR-Bench, rule X recalls Y%".
