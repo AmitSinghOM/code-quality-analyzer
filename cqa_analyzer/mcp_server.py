@@ -22,7 +22,9 @@ Run with ``cqa-mcp`` or ``python -m cqa_analyzer.mcp_server``.
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -191,6 +193,103 @@ TOOLS: list[dict[str, Any]] = [
             "additionalProperties": False,
         },
     },
+    {
+        "name": "rules_for_files",
+        "title": "Resolve rules for files (delegate mode)",
+        "description": (
+            "Deterministic review planning for a host agent that will do the reasoning "
+            "itself. For each project-relative path, decide whether the analyzer would "
+            "consider it (built-in skip directories, configured include/exclude and "
+            "gitignore, adapter ownership by extension, size cap) and return the enabled "
+            "rules with severity, confidence, remediation and not_when clauses, grouped so "
+            "files sharing the same rule set list each rule once. Pure: no scan, no "
+            "subprocess, no git. Unselected files carry the reason."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Project root directory."},
+                "files": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Project-relative file paths (forward slashes).",
+                },
+                "config": {
+                    "type": "string",
+                    "description": "Explicit analyzer configuration file to apply.",
+                },
+                "check_disk": {
+                    "type": "boolean",
+                    "description": (
+                        "Also check that each file exists inside the project and is "
+                        "within the size cap (default true). Set false to plan for "
+                        "paths that are not on disk yet."
+                    ),
+                },
+            },
+            "required": ["path", "files"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "preview",
+        "title": "Preview the scan plan (delegate mode)",
+        "description": (
+            "List what a scan of the project would consider, without scanning: every "
+            "source file an adapter owns ends up either planned (with its language) or "
+            "counted under an exclusion reason (configuration, gitignore, size cap, file "
+            "limit, unreadable), plus pruned directories and a coverage_rate. Never reads "
+            "file contents, so it is cheap enough to call before every review."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Project root directory."},
+                "config": {
+                    "type": "string",
+                    "description": "Explicit analyzer configuration file to apply.",
+                },
+                "max_files": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Stop planning after this many files (default 20000).",
+                },
+            },
+            "required": ["path"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "diff_to_manifest",
+        "title": "Convert a unified diff to a changed-lines manifest",
+        "description": (
+            "Turn unified diff text (the output of `git diff`, which the host agent runs; "
+            "the analyzer itself never runs git) into the changed-lines manifest schema "
+            "1.0.0 that scan and gate accept via changed_lines_manifest. Line numbers are "
+            "post-change. Pure deletions are anchored to the line that now follows them "
+            "unless include_deletions is false. Optionally writes the manifest to a file "
+            "so it can be passed straight to gate."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "diff": {"type": "string", "description": "Unified diff text (max 5 MB)."},
+                "include_deletions": {
+                    "type": "boolean",
+                    "description": "Anchor pure deletions to the following line (default true).",
+                },
+                "write_to": {
+                    "type": "string",
+                    "description": (
+                        "Optional file path to write the manifest JSON to; the parent "
+                        "directory must exist. Returned as manifest_path."
+                    ),
+                },
+            },
+            "required": ["diff"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 
@@ -236,7 +335,12 @@ def _run_cli(params: dict[str, Any]) -> tuple[int, dict[str, Any] | None, str]:
             command, capture_output=True, text=True, timeout=timeout, check=False
         )
     except subprocess.TimeoutExpired as exc:
-        raise ToolError(f"analyzer timed out after {timeout}s") from exc
+        raise ToolError(
+            f"analyzer timed out after {timeout}s before producing a report. The scan is "
+            "all-or-nothing: raise timeout_seconds, or bound the tree first (call preview to "
+            "see how many files are planned, then pass max_files or a config with "
+            "analysis.exclude)."
+        ) from exc
     report: dict[str, Any] | None
     try:
         report = json.loads(completed.stdout) if completed.stdout.strip() else None
@@ -301,6 +405,7 @@ def tool_explain_rule(params: dict[str, Any]) -> dict[str, Any]:
         "confidence": meta.confidence,
         "language": meta.language,
         "remediation": meta.remediation,
+        "not_when": list(meta.not_when),
         "ruleset_version": RULESET_VERSION,
     }
 
@@ -324,11 +429,103 @@ def tool_list_rules(params: dict[str, Any]) -> dict[str, Any]:
     return {"ruleset_version": RULESET_VERSION, "count": len(rules), "rules": rules}
 
 
+def _project_root(params: dict[str, Any]) -> Path:
+    path = Path(str(params.get("path", ""))).expanduser()
+    if not path.is_dir():
+        raise ToolError(f"path is not a directory: {path}")
+    return path.resolve()
+
+
+def tool_rules_for_files(params: dict[str, Any]) -> dict[str, Any]:
+    from cqa_analyzer.delegate import DelegateError, rules_for_files
+
+    root = _project_root(params)
+    files = params.get("files")
+    if not isinstance(files, list) or not all(isinstance(item, str) for item in files):
+        raise ToolError("files must be a list of project-relative path strings")
+    config = params.get("config")
+    try:
+        result = rules_for_files(
+            root,
+            files,
+            config_path=Path(str(config)).expanduser() if config else None,
+            check_disk=bool(params.get("check_disk", True)),
+        )
+    except DelegateError as error:
+        raise ToolError(str(error)) from error
+    except ValueError as error:  # ConfigError and friends: report, never crash the server
+        raise ToolError(f"configuration rejected: {error}") from error
+    result["ruleset_version"] = RULESET_VERSION
+    return result
+
+
+def tool_preview(params: dict[str, Any]) -> dict[str, Any]:
+    from cqa_analyzer.delegate import MAX_DELEGATE_FILES, DelegateError, preview
+
+    root = _project_root(params)
+    config = params.get("config")
+    max_files = params.get("max_files")
+    if max_files is not None and (not isinstance(max_files, int) or max_files < 1):
+        raise ToolError("max_files must be a positive integer")
+    try:
+        result = preview(
+            root,
+            config_path=Path(str(config)).expanduser() if config else None,
+            max_files=min(int(max_files or MAX_DELEGATE_FILES), MAX_DELEGATE_FILES),
+        )
+    except DelegateError as error:
+        raise ToolError(str(error)) from error
+    except ValueError as error:
+        raise ToolError(f"configuration rejected: {error}") from error
+    result["ruleset_version"] = RULESET_VERSION
+    return result
+
+
+def tool_diff_to_manifest(params: dict[str, Any]) -> dict[str, Any]:
+    from cqa_analyzer.changed_lines import ChangedLinesError, diff_to_manifest
+
+    diff = params.get("diff")
+    if not isinstance(diff, str):
+        raise ToolError("diff must be a string of unified diff text")
+    try:
+        manifest = diff_to_manifest(
+            diff, include_deletions=bool(params.get("include_deletions", True))
+        )
+    except ChangedLinesError as error:
+        raise ToolError(str(error)) from error
+    result: dict[str, Any] = {
+        "manifest": manifest,
+        "file_count": len(manifest["files"]),
+        "range_count": sum(len(entry["ranges"]) for entry in manifest["files"]),
+    }
+    write_to = params.get("write_to")
+    if write_to:
+        target = Path(str(write_to)).expanduser()
+        if target.is_dir() or target.is_symlink():
+            raise ToolError("write_to must be a regular file path, not a directory or symlink")
+        if not target.parent.is_dir():
+            raise ToolError(f"write_to parent directory does not exist: {target.parent}")
+        encoded = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+        temporary = target.with_name(f".{target.name}.{os.getpid()}.tmp")
+        try:
+            temporary.write_text(encoded, encoding="utf-8")
+            os.replace(temporary, target)
+        except OSError as error:
+            with contextlib.suppress(OSError):  # best-effort cleanup of the temp file
+                temporary.unlink()
+            raise ToolError(f"could not write manifest: {error}") from error
+        result["manifest_path"] = str(target.resolve())
+    return result
+
+
 TOOL_HANDLERS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "scan": tool_scan,
     "gate": tool_gate,
     "explain_rule": tool_explain_rule,
     "list_rules": tool_list_rules,
+    "rules_for_files": tool_rules_for_files,
+    "preview": tool_preview,
+    "diff_to_manifest": tool_diff_to_manifest,
 }
 
 
