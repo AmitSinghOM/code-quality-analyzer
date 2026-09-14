@@ -27,6 +27,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import IO, Any
 from collections.abc import Callable
@@ -500,22 +501,54 @@ def tool_diff_to_manifest(params: dict[str, Any]) -> dict[str, Any]:
     }
     write_to = params.get("write_to")
     if write_to:
-        target = Path(str(write_to)).expanduser()
-        if target.is_dir() or target.is_symlink():
-            raise ToolError("write_to must be a regular file path, not a directory or symlink")
-        if not target.parent.is_dir():
-            raise ToolError(f"write_to parent directory does not exist: {target.parent}")
-        encoded = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
-        temporary = target.with_name(f".{target.name}.{os.getpid()}.tmp")
-        try:
-            temporary.write_text(encoded, encoding="utf-8")
-            os.replace(temporary, target)
-        except OSError as error:
-            with contextlib.suppress(OSError):  # best-effort cleanup of the temp file
-                temporary.unlink()
-            raise ToolError(f"could not write manifest: {error}") from error
-        result["manifest_path"] = str(target.resolve())
+        result["manifest_path"] = _write_manifest(Path(str(write_to)).expanduser(), manifest)
     return result
+
+
+def _write_manifest(target: Path, manifest: dict[str, Any]) -> str:
+    """Atomically write ``manifest`` to ``target`` with a bounded blast radius.
+
+    An MCP client can name any path the user can write, so the tool refuses to
+    become a generic file writer: the name must end in ``.json``, the parent
+    must be a real directory (resolved, so a symlinked directory cannot redirect
+    the write), and an existing file is replaced only if it already parses as a
+    changed-lines manifest — the tool can create or refresh its own artifact,
+    never clobber something else.
+    """
+    from cqa_analyzer.changed_lines import ChangedLinesError, load_changed_lines
+
+    if target.suffix.lower() != ".json":
+        raise ToolError("write_to must end in .json")
+    try:
+        parent = target.parent.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise ToolError(f"write_to parent directory does not exist: {target.parent}") from error
+    if not parent.is_dir():
+        raise ToolError(f"write_to parent is not a directory: {parent}")
+    final = parent / target.name
+    if final.is_symlink() or (final.exists() and not final.is_file()):
+        raise ToolError("write_to must be a regular file path, not a directory or symlink")
+    if final.exists():
+        try:
+            load_changed_lines(final)
+        except ChangedLinesError as error:
+            raise ToolError(
+                "write_to names an existing file that is not a changed-lines manifest; "
+                "refusing to overwrite it"
+            ) from error
+
+    encoded = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+    descriptor, temporary_name = tempfile.mkstemp(prefix=".manifest-", suffix=".tmp", dir=parent)
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(encoded)
+        os.replace(temporary, final)
+    except OSError as error:
+        with contextlib.suppress(OSError):  # best-effort cleanup of the temp file
+            temporary.unlink()
+        raise ToolError(f"could not write manifest: {error}") from error
+    return str(final)
 
 
 TOOL_HANDLERS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {

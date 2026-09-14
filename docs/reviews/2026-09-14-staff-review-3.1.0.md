@@ -96,6 +96,28 @@ exactly.
 - An AACR-Bench harness: feasibility in `docs/AACR_BENCH.md`; the 17.3%
   keyword slice is an upper bound and must not be cited until measured.
 
+## Production readiness (would a FAANG platform team take this?)
+
+Re-reviewed after the bar was raised from "correct" to "acceptable in a
+production package at a large company". The questions a platform-security
+reviewer asks, and what was found:
+
+| Question | Finding | Action |
+|----------|---------|--------|
+| Does any new tool let a client write arbitrary files? | Yes — `diff_to_manifest --write_to` accepted any path, checked only the leaf for symlinks, and used a pid-named temp file. | **Fixed.** `.json` names only; parent resolved (`strict=True`) so a symlinked directory cannot redirect the write; an existing file is replaced only if it already parses as a changed-lines manifest; temp file via `mkstemp` (unpredictable name, `O_EXCL`, 0600). Five new assertions in `test_diff_to_manifest_write_to_has_a_bounded_blast_radius`. |
+| Can a client exhaust memory or CPU through the new tools? | No. 6 MB diff refused in 9 ms before parsing; 20,001-file diff refused by the shared manifest bounds in 50 ms; 20,001 paths to `rules_for_files` refused; `preview` bounded by `max_files` and never reads content. | None. |
+| Do error messages disclose anything the caller did not already know? | Tool errors echo the caller-supplied path string. No resolved paths, environment or stack traces are returned. | None; consistent with `docs/PRIVACY.md`. |
+| Is the tool surface what it claims? | `TOOLS` and `TOOL_HANDLERS` are asserted equal in tests (7 = 7); every schema is `additionalProperties: false`. | None. |
+| Does the release path meet supply-chain expectations? | All actions SHA-pinned with version comments; PyPI via OIDC Trusted Publishing, `id-token: write` scoped to the publish job only; `pip-audit --strict` in CI; no long-lived tokens anywhere. | None. |
+| Is behaviour deterministic and reproducible? | Delegate outputs carry `config_fingerprint`; identical inputs yield identical plans (no timestamps, no host paths). | None. |
+| Is the new code held to the same bar as the rest? | Self-scan of the analyzer's own tree: 0 findings in files this release adds. | None. |
+
+What a FAANG reviewer would still ask for, recorded as follow-ups rather
+than blockers: an explicit allow-list root for `write_to` (today the bound
+is "own artifact only", not "inside the project"), and structured audit
+logging of MCP tool calls for fleet deployment. Neither changes the verdict
+for a CLI-scoped developer tool.
+
 ## Residual risk
 
 - `not_when` clauses that cannot be fixtured (e.g. "confirm before acting"

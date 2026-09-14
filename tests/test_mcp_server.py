@@ -211,6 +211,49 @@ def test_diff_to_manifest_fails_closed(tmp_path: Path):
     ]
 
 
+def test_diff_to_manifest_write_to_has_a_bounded_blast_radius(tmp_path: Path):
+    good = "--- a/x.py\n+++ b/x.py\n@@ -1 +1 @@\n-a\n+b\n"
+
+    # Only .json names: the tool must not become a generic file writer.
+    result = _call("diff_to_manifest", {"diff": good, "write_to": str(tmp_path / "rc")})
+    assert result["isError"] and ".json" in _structured(result)["error"]
+
+    # Never clobber an existing file that is not already a manifest.
+    precious = tmp_path / "settings.json"
+    precious.write_text('{"keep": "me"}')
+    result = _call("diff_to_manifest", {"diff": good, "write_to": str(precious)})
+    assert result["isError"] and "refusing to overwrite" in _structured(result)["error"]
+    assert precious.read_text() == '{"keep": "me"}'
+
+    # Refreshing the tool's own artifact is allowed.
+    own = tmp_path / "changed.json"
+    first = _structured(_call("diff_to_manifest", {"diff": good, "write_to": str(own)}))
+    assert first["manifest_path"] == str(own.resolve())
+    again = "--- a/y.py\n+++ b/y.py\n@@ -5 +5 @@\n-a\n+b\n"
+    second = _structured(_call("diff_to_manifest", {"diff": again, "write_to": str(own)}))
+    assert second["manifest_path"] == str(own.resolve())
+    assert json.loads(own.read_text())["files"][0]["path"] == "y.py"
+
+    # A symlinked parent cannot redirect the write outside the intended directory.
+    real_dir = tmp_path / "real"
+    real_dir.mkdir()
+    link_dir = tmp_path / "link"
+    link_dir.symlink_to(real_dir, target_is_directory=True)
+    written = _structured(
+        _call("diff_to_manifest", {"diff": good, "write_to": str(link_dir / "m.json")})
+    )
+    assert written["manifest_path"] == str((real_dir / "m.json").resolve())
+
+    # A symlinked target file is refused; no temp files are left behind anywhere.
+    (tmp_path / "victim.json").write_text("{}")
+    (tmp_path / "alias.json").symlink_to(tmp_path / "victim.json")
+    assert _call("diff_to_manifest", {"diff": good, "write_to": str(tmp_path / "alias.json")})[
+        "isError"
+    ]
+    assert (tmp_path / "victim.json").read_text() == "{}"
+    assert not list(tmp_path.rglob(".manifest-*.tmp"))
+
+
 def _preview_project(tmp_path: Path) -> Path:
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "a.py").write_text("x = 1\n")
