@@ -710,7 +710,8 @@ _RULES = (
 _TEST_PATH_DOWNGRADE = (
     "The file is on a conventional test path (tests/, __tests__/, spec/, *_test.go, "
     "*.spec.ts, *Test.kt, test_*.py): the finding is downgraded to informational, "
-    "not dropped (languages/_parity.py: downgrade_in_tests)."
+    "not dropped (languages/_parity.py: downgrade_in_tests; applied by the density "
+    "and unchecked-assertion rules only)."
 )
 _SQL_NOT_WHEN = (
     "The literal is not the head of a SQL statement: only literals whose leading "
@@ -726,14 +727,12 @@ _SQL_NOT_WHEN = (
 _EMPTY_CATCH_NOT_WHEN = (
     "The handler body contains at least one statement; only a body with no "
     "statements after blanking comments and literals is empty.",
-    _TEST_PATH_DOWNGRADE,
 )
 _BROAD_HANDLER_NOT_WHEN = (
     "The handler names a specific exception type rather than the language's root "
     "exception or a bare catch-all.",
     "The broad handler re-raises or logs: this rule flags the breadth of the catch, "
     "not silent discard (see the language's empty-catch rule for that).",
-    _TEST_PATH_DOWNGRADE,
 )
 _DUP_NOT_WHEN = (
     "The optional [deep] extra is not installed: the rule is reported as an "
@@ -764,7 +763,6 @@ _BLOCKING_ASYNC_NOT_WHEN = (
     "synchronous code calling synchronous APIs is not flagged.",
     "The call is one of the language's recognised blocking APIs; the rule uses a "
     "fixed allowlist of call names, not type inference.",
-    _TEST_PATH_DOWNGRADE,
 )
 _DENSITY_NOT_WHEN = (
     "The per-file count is below the density threshold; a single occurrence is "
@@ -776,9 +774,10 @@ _DENSITY_NOT_WHEN = (
 _NOT_WHEN: dict[str, tuple[str, ...]] = {
     # Python
     "PY-COR-001": (
-        "The default is an immutable literal (None, numbers, strings, tuples) or a "
-        "call expression; only list, dict and set displays are treated as mutable "
-        "(python_rules._MUTABLE_LITERALS).",
+        "The default is an immutable literal (None, numbers, strings, tuples) or a call "
+        "to anything other than list/dict/set/bytearray; list, dict and set displays, "
+        "their comprehensions, and those four factory calls are what is flagged "
+        "(python_rules._MUTABLE_LITERALS / _MUTABLE_FACTORIES).",
         "The parameter is intentionally a shared, documented cache or sentinel: the "
         "rule cannot see intent, so confirm before rewriting.",
     ),
@@ -822,8 +821,9 @@ _NOT_WHEN: dict[str, tuple[str, ...]] = {
         "Fewer than the threshold number of parameters default to a boolean literal.",
     ),
     "PY-PKG-001": (
-        "The import cycle is between a package and a third-party module, or the "
-        "import is local (inside a function) and therefore deferred.",
+        "The cycle involves a third-party module rather than two project modules. Note "
+        "that imports inside function bodies are counted (the graph uses ast.walk), so "
+        "a deliberately deferred import still closes a cycle.",
     ),
     "PY-PKG-002": (
         "The console-script entry in pyproject resolves to an importable module and "
@@ -843,7 +843,6 @@ _NOT_WHEN: dict[str, tuple[str, ...]] = {
     "GO-COR-001": (
         "The error value is assigned, returned, or checked; only a standard-library "
         "call whose error result is discarded with `_` or dropped is flagged.",
-        _TEST_PATH_DOWNGRADE,
     ),
     "GO-COR-002": _SQL_NOT_WHEN,
     "GO-COR-003": (
@@ -854,7 +853,6 @@ _NOT_WHEN: dict[str, tuple[str, ...]] = {
         "The `defer` is inside a function literal within the loop body (the literal "
         "is stripped before matching: languages/go.py _FUNC_LITERAL), so the defer "
         "runs per iteration.",
-        _TEST_PATH_DOWNGRADE,
     ),
     "GO-DUP-001": _DUP_NOT_WHEN,
     "GO-MAINT-001": _COMPLEXITY_NOT_WHEN,
@@ -865,7 +863,6 @@ _NOT_WHEN: dict[str, tuple[str, ...]] = {
     "TS-COR-003": (
         "The call is not a recognised `*Sync` file-system API inside an async "
         "function or a function returning a Promise.",
-        _TEST_PATH_DOWNGRADE,
     ),
     "TS-COR-004": (
         "The `@ts-ignore` / `@ts-expect-error` / `eslint-disable` directive carries "
