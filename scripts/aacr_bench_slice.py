@@ -170,8 +170,8 @@ def _overlaps(a_start: int, a_end: int, b_start: int, b_end: int, slack: int) ->
     return not (a_end + slack < b_start or b_end + slack < a_start)
 
 
-def evaluate_pr(pr: dict, findings: list[dict], slack: int) -> dict:
-    """Match one PR's findings to its slice annotations."""
+def _slice_annotations(pr: dict) -> list[tuple[str, int, int, list[str]]]:
+    """Post-change-side comments whose note names a rule family."""
     annotations = []
     for comment in pr["comments"]:
         fams = families_for_note(comment.get("note", ""))
@@ -179,36 +179,63 @@ def evaluate_pr(pr: dict, findings: list[dict], slack: int) -> dict:
             annotations.append(
                 (comment["path"], int(comment["from_line"]), int(comment["to_line"]), fams)
             )
-    annotated_paths = {path for path, *_ in annotations}
+    return annotations
 
+
+def _finding_span(finding: dict) -> tuple[str, int, int]:
+    location = finding["location"]
+    start = int(location.get("line") or 0)
+    return location.get("path", ""), start, int(location.get("end_line") or start)
+
+
+def _matching_annotations(
+    annotations: list[tuple[str, int, int, list[str]]],
+    path: str,
+    start: int,
+    end: int,
+    family: str,
+    slack: int,
+) -> list[int]:
+    return [
+        index
+        for index, (a_path, a_start, a_end, fams) in enumerate(annotations)
+        if a_path == path and family in fams and _overlaps(start, end, a_start, a_end, slack)
+    ]
+
+
+def _family_counts(
+    annotations: list[tuple[str, int, int, list[str]]], matched: set[int]
+) -> tuple[collections.Counter, collections.Counter]:
+    all_families = collections.Counter(f for *_, fams in annotations for f in fams)
+    matched_families = collections.Counter(
+        f for i, (*_, fams) in enumerate(annotations) if i in matched for f in fams
+    )
+    return all_families, matched_families
+
+
+def evaluate_pr(pr: dict, findings: list[dict], slack: int) -> dict:
+    """Match one PR's findings to its slice annotations."""
+    annotations = _slice_annotations(pr)
+    annotated_paths = {path for path, *_ in annotations}
     matched_annotations: set[int] = set()
     credited: list[dict] = []
     unannotated: list[dict] = []
     for finding in findings:
         family = family_for_rule(finding["rule_id"])
-        if family is None:
+        path, start, end = _finding_span(finding)
+        if family is None or path not in annotated_paths:
             continue
-        location = finding["location"]
-        path = location.get("path", "")
-        if path not in annotated_paths:
-            continue
-        start = int(location.get("line") or 0)
-        end = int(location.get("end_line") or start)
-        hit = False
-        for index, (a_path, a_start, a_end, fams) in enumerate(annotations):
-            if a_path == path and family in fams and _overlaps(start, end, a_start, a_end, slack):
-                matched_annotations.add(index)
-                hit = True
-        (credited if hit else unannotated).append(
+        hits = _matching_annotations(annotations, path, start, end, family, slack)
+        matched_annotations.update(hits)
+        (credited if hits else unannotated).append(
             {"rule_id": finding["rule_id"], "path": path, "line": start, "family": family}
         )
+    annotation_families, matched_families = _family_counts(annotations, matched_annotations)
     return {
         "slice_annotations": len(annotations),
         "matched_annotations": len(matched_annotations),
-        "annotation_families": collections.Counter(f for *_, fams in annotations for f in fams),
-        "matched_families": collections.Counter(
-            f for i, (*_, fams) in enumerate(annotations) if i in matched_annotations for f in fams
-        ),
+        "annotation_families": annotation_families,
+        "matched_families": matched_families,
         "credited_findings": credited,
         "unannotated_findings": unannotated,
     }
@@ -264,7 +291,7 @@ def select_prs(dataset: list[dict], language: str | None, limit: int | None) -> 
     return chosen[:limit] if limit else chosen
 
 
-def main(argv: list[str] | None = None) -> int:
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -282,9 +309,56 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--cache", type=Path, default=DEFAULT_CACHE)
     parser.add_argument("--output", type=Path, help="write the full JSON result here")
-    args = parser.parse_args(argv)
+    return parser
+
+
+def _evaluate_one(
+    pr: dict, args: argparse.Namespace, token: str | None
+) -> tuple[dict | None, str | None]:
+    """Fetch, scan and evaluate one PR. Returns (result, None) or (None, skip reason)."""
+    owner, repo = _parse_pr_url(pr["githubPrUrl"])
+    sha = pr["target_commit"]
+    try:
+        tarball = _fetch(
+            TARBALL_URL.format(owner=owner, repo=repo, sha=sha),
+            args.cache,
+            token=token,
+            max_bytes=args.max_tarball_mb * 1024 * 1024,
+        )
+    except urllib.error.HTTPError as error:
+        return None, f"http {error.code}"
+    if tarball is None:
+        return None, f"tarball over {args.max_tarball_mb} MB"
+    with tempfile.TemporaryDirectory(prefix="aacr-") as scratch:
+        root = _extract(tarball, Path(scratch))
+        try:
+            findings, health = run_analyzer(root, args.timeout)
+        except (subprocess.TimeoutExpired, RuntimeError) as error:
+            return None, str(error)[:120]
+    evaluation = evaluate_pr(pr, findings, args.slack)
+    evaluation.update(
+        pr=pr["githubPrUrl"],
+        language=pr["project_main_language"],
+        target_commit=sha,
+        total_findings=len(findings),
+        scan_health=health,
+    )
+    return evaluation, None
+
+
+def _progress(pr: dict, evaluation: dict) -> str:
+    owner, repo = _parse_pr_url(pr["githubPrUrl"])
+    return (
+        f"{owner}/{repo}@{pr['target_commit'][:8]} [{pr['project_main_language']}]: "
+        f"annotations={evaluation['slice_annotations']} matched={evaluation['matched_annotations']} "
+        f"credited={len(evaluation['credited_findings'])} "
+        f"unannotated={len(evaluation['unannotated_findings'])} findings={evaluation['total_findings']}"
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _build_parser().parse_args(argv)
     token = os.environ.get("GITHUB_TOKEN")
-    max_bytes = args.max_tarball_mb * 1024 * 1024
 
     dataset_path = _fetch(DATASET_URL, args.cache, token=None, max_bytes=50 * 1024 * 1024)
     dataset = json.loads(dataset_path.read_text(encoding="utf-8"))
@@ -294,49 +368,13 @@ def main(argv: list[str] | None = None) -> int:
     results = []
     skipped = []
     for pr in prs:
-        owner, repo = _parse_pr_url(pr["githubPrUrl"])
-        sha = pr["target_commit"]
-        label = f"{owner}/{repo}@{sha[:8]}"
-        try:
-            tarball = _fetch(
-                TARBALL_URL.format(owner=owner, repo=repo, sha=sha),
-                args.cache,
-                token=token,
-                max_bytes=max_bytes,
-            )
-        except urllib.error.HTTPError as error:
-            skipped.append({"pr": pr["githubPrUrl"], "reason": f"http {error.code}"})
-            print(f"skip {label}: http {error.code}", file=sys.stderr)
+        evaluation, reason = _evaluate_one(pr, args, token)
+        if evaluation is None:
+            skipped.append({"pr": pr["githubPrUrl"], "reason": reason})
+            print(f"skip {pr['githubPrUrl']}: {reason}", file=sys.stderr)
             continue
-        if tarball is None:
-            skipped.append(
-                {"pr": pr["githubPrUrl"], "reason": f"tarball over {args.max_tarball_mb} MB"}
-            )
-            print(f"skip {label}: over size cap", file=sys.stderr)
-            continue
-        with tempfile.TemporaryDirectory(prefix="aacr-") as scratch:
-            root = _extract(tarball, Path(scratch))
-            try:
-                findings, health = run_analyzer(root, args.timeout)
-            except (subprocess.TimeoutExpired, RuntimeError) as error:
-                skipped.append({"pr": pr["githubPrUrl"], "reason": str(error)[:120]})
-                print(f"skip {label}: {error}", file=sys.stderr)
-                continue
-        evaluation = evaluate_pr(pr, findings, args.slack)
-        evaluation.update(
-            pr=pr["githubPrUrl"],
-            language=pr["project_main_language"],
-            target_commit=pr["target_commit"],
-            total_findings=len(findings),
-            scan_health=health,
-        )
         results.append(evaluation)
-        print(
-            f"{label} [{pr['project_main_language']}]: annotations={evaluation['slice_annotations']} "
-            f"matched={evaluation['matched_annotations']} credited={len(evaluation['credited_findings'])} "
-            f"unannotated={len(evaluation['unannotated_findings'])} findings={len(findings)}",
-            file=sys.stderr,
-        )
+        print(_progress(pr, evaluation), file=sys.stderr)
 
     summary = summarise(results)
     print(render_markdown(summary, results, skipped))
