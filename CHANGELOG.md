@@ -4,6 +4,63 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 3.1.0 - 2026-09-14
+
+Delegate mode for the MCP server. A host agent that does its own review
+reasoning can now borrow the analyzer's deterministic half — which files
+count, which rules apply, what those rules deliberately ignore — without the
+analyzer ever calling a model, running git, or reading source text. The
+split follows the design Alibaba published with open-code-review
+(deterministic file selection and rule matching; agent judgment on top).
+
+Analysis output is unchanged: ruleset 2.24.0, scoring policy 2.1.0, report
+schema 1.12.0, identical JSON and SARIF, identical exit codes.
+
+### Added
+
+- `RuleMetadata.not_when`: every one of the 68 built-in rules now carries the
+  conditions under which its detector deliberately stays silent, or under
+  which a reported finding should not be forwarded (test-path downgrade,
+  literal blanking, density thresholds, allowlists, manifest ancestry).
+  Written from the detector code, not from intent. Exposed by
+  `explain_rule` and `rules_for_files`. `tests/test_mcp_server.py` locks
+  68/68 coverage.
+- MCP tool `preview`: the scan plan without a scan. Walks the tree with the
+  same skip directories, include/exclude, gitignore, adapter ownership and
+  size cap as discovery, never reads contents, and accounts for every
+  source file as planned or excluded-with-reason, with a `coverage_rate`.
+  A parity test asserts its planned set equals `iter_source_files`.
+- MCP tool `rules_for_files`: for project-relative paths, the analyzer's
+  selection verdict per file and the enabled rules (configured severity
+  applied, disabled rules omitted), grouped by identical rule set so shared
+  rules appear once. Hostile paths (absolute, `..`, URL scheme, drive
+  letter, NUL) are rejected as tool errors.
+- MCP tool `diff_to_manifest`: pure-Python unified-diff parser producing
+  the changed-lines manifest (schema 1.0.0). Post-change line numbers;
+  pure deletions anchored to the following line (`include_deletions`);
+  new, deleted, renamed, binary and git-C-quoted paths handled; hunk counts
+  drive parsing so content lines beginning `+++`/`---` are never mistaken
+  for headers. Output is validated by the same code that validates
+  manifests on disk, so it is accepted by construction. Verified against a
+  real 771-line diff with an independent `git diff -U0` oracle: 0 uncovered.
+- `changed_lines.parse_changed_lines(payload)`: the manifest validator
+  split from file loading so producers and consumers share it.
+- `docs/AACR_BENCH.md`: feasibility of Alibaba's AACR-Bench (Apache-2.0,
+  196 PRs, 1,506 annotations) as an external calibration corpus; a keyword
+  pass puts ~17% of annotations within reach of deterministic rules.
+
+### Changed
+
+- The MCP `timeout_seconds` error now says the scan is all-or-nothing and
+  points to `preview` and `max_files` for bounding the tree.
+
+### Not changed, on purpose
+
+- Per-glob rule policies (`rules."PY-MAINT-003"` under `tests/**` only) and
+  a wall-clock scan deadline with partial results are recorded in
+  `docs/ROADMAP.md`, not shipped: both need scanner-level changes and
+  deserve their own release.
+
 ## 3.0.0 - 2026-09-13
 
 The stdlib core (ADR 004, ROADMAP item 12 Phase 2). **No runtime

@@ -415,3 +415,30 @@ frozen at 62 IDs, and no longer marketed as a grade.
   against; each changes only when its contract does.
 - Python support: the four newest minor releases; a release is dropped no
   sooner than its upstream end of life, announced one release ahead.
+
+## 13. Delegate mode follow-ups (from 3.1.0)
+
+Two gaps the open-code-review comparison surfaced were checked against the
+code and deliberately left out of 3.1.0 because each is a scanner-level
+change rather than an MCP-surface one.
+
+### Glob-scoped rule policies
+
+`config.py` supports project-wide `analysis.include`/`analysis.exclude` and
+per-rule `rules."<ID>".enabled`/`severity`. It cannot express "PY-MAINT-003
+is disabled under `tests/**`" or "PY-COR-007 is an error under `db/**`".
+Design constraints when this ships: policies must fold into the
+configuration fingerprint; `rules_for_files` must resolve them per path
+(its grouping already keys on the resolved rule set, so groups will simply
+split); the report must record which policy applied to each finding so a
+baseline cannot be silently weakened by a path rule.
+
+### Wall-clock deadline with partial results
+
+Discovery has byte and file budgets that truncate honestly (`truncated`,
+`truncated_reasons`), but no time budget. The MCP `timeout_seconds` is
+therefore a hard kill with no report. A deadline should stop dispatching new
+files, finish the file in flight, and emit the normal report with the
+skipped files listed under `scan_health` as `skipped(deadline)` so the
+partial result is never mistaken for a full one. Exit code semantics: a
+deadline-truncated scan must fail `--strict`.

@@ -218,8 +218,8 @@ python3 -m pip install --upgrade cqa-analyzer
 python3 -m pip install --upgrade 'cqa-analyzer[deep]'   # with the optional extra
 
 # a specific version
-pipx install --force 'cqa-analyzer==3.0.0'
-python3 -m pip install 'cqa-analyzer==3.0.0'
+pipx install --force 'cqa-analyzer==3.1.0'
+python3 -m pip install 'cqa-analyzer==3.1.0'
 ```
 
 Check with `code-quality-analyzer --version`. If the number does not
@@ -573,8 +573,11 @@ transport with no additional dependencies:
 |---|---|
 | `gate` | `pass`/`fail`, the reason, the CLI exit code, a flat list of findings with remediation, the score, and the configuration fingerprint. Accepts `fail_on`, `fail_under`, `changed_lines_manifest`, `baseline`, `new_findings_only`, `strict`, `expect_config_fingerprint`. |
 | `scan` | The full JSON report (schema `REPORT_SCHEMA_VERSION`), verbatim. |
-| `explain_rule` | Title, description, severity, confidence and remediation for one rule ID. |
+| `explain_rule` | Title, description, severity, confidence, remediation and `not_when` (the conditions under which the detector deliberately stays silent) for one rule ID. |
 | `list_rules` | The built-in catalog, optionally filtered by language. |
+| `preview` | The scan plan without a scan: every source file an adapter owns is either planned (with its language) or counted under an exclusion reason, plus pruned directories and a `coverage_rate`. Never reads file contents. |
+| `rules_for_files` | For a list of project-relative paths: whether each would be analyzed (and why not), and the enabled rules with severity, confidence, remediation and `not_when`, grouped so files sharing a rule set list each rule once. |
+| `diff_to_manifest` | Unified diff text (from `git diff`, which the agent runs) converted to the changed-lines manifest `scan`/`gate` accept, optionally written to a file. |
 
 The server is a transport, not a second analysis path: `scan` and `gate`
 run the installed CLI with `--output-format json --offline` and return its
@@ -584,6 +587,44 @@ version, scoring policy and configuration fingerprint. Pass the
 agent touched, and `expect_config_fingerprint` so a change to the gate's own
 configuration cannot pass silently. Rationale and the longevity plan behind
 this interface: [`docs/adr/004-positioning-and-longevity.md`](docs/adr/004-positioning-and-longevity.md).
+
+### Delegate mode
+
+`preview`, `rules_for_files` and `diff_to_manifest` let a host agent that
+does its own reasoning borrow only the analyzer's deterministic half. The
+split follows the design Alibaba published with
+[open-code-review](https://github.com/alibaba/open-code-review): engineering
+decides *which files* and *which rules*, the agent decides *what is wrong*.
+Nothing in delegate mode calls an LLM, runs git, or reads source text.
+
+A review loop that guarantees coverage:
+
+1. `diff_to_manifest` on the agent's `git diff` output → a changed-lines
+   manifest (write it with `write_to`).
+2. `preview` → the planned file list and `coverage_rate`; anything excluded
+   comes with its reason, so nothing is silently skipped.
+3. `rules_for_files` on the changed paths → rule groups. The `not_when`
+   clauses tell the agent when a candidate finding is a known
+   false-positive class and should not be reported.
+4. `gate` with `changed_lines_manifest` for the deterministic verdict; the
+   agent reviews the same files for what a lexical tool cannot see.
+
+`not_when` describes implemented detector behaviour (test-path downgrades,
+literal blanking, thresholds, allowlists), not aspirations. When a detector
+changes, its clauses change with it; `tests/test_not_when_claims.py` runs a
+should-fire and a should-stay-silent fixture for each clause through the
+real CLI, so the prose cannot drift from the code.
+
+Paths must be project-relative. If the project lives inside a larger git
+repository (a monorepo, or a `~/projects` directory that is itself a repo),
+`git show --name-only` and `git diff` return paths relative to the git
+toplevel, and `rules_for_files` will honestly report them as `missing`
+rather than guess. Run git from the project directory with `--relative`:
+
+```bash
+git diff --relative main...HEAD          # for diff_to_manifest
+git show --name-only --relative HEAD     # for rules_for_files
+```
 
 ## Paths
 

@@ -19,6 +19,11 @@ class RuleMetadata:
     confidence: str
     remediation: str
     language: str
+    not_when: tuple[str, ...] = ()
+    """Conditions under which the rule deliberately stays silent, or a finding
+    should not be reported onward. Describes what the detector actually does
+    (path downgrades, literal blanking, thresholds), so a consumer can judge a
+    finding's precision without reading the detector source."""
 
 
 def _rule(
@@ -108,8 +113,7 @@ _RULES = (
         "function in the project.",
         "duplication",
         "warning",
-        "Extract the shared implementation into one function and call it "
-        "from each location.",
+        "Extract the shared implementation into one function and call it " "from each location.",
     ),
     _rule(
         "PY-MAINT-001",
@@ -230,8 +234,7 @@ _RULES = (
         "function in the project. Requires the optional [deep] extra.",
         "duplication",
         "warning",
-        "Extract the shared implementation into one function and call it "
-        "from each location.",
+        "Extract the shared implementation into one function and call it " "from each location.",
         language="go",
     ),
     _rule(
@@ -339,8 +342,7 @@ _RULES = (
         "function in the project. Requires the optional [deep] extra.",
         "duplication",
         "warning",
-        "Extract the shared implementation into one function and call it "
-        "from each location.",
+        "Extract the shared implementation into one function and call it " "from each location.",
         language="c_cpp",
     ),
     _rule(
@@ -493,8 +495,7 @@ _RULES = (
         "runBlocking or Thread.sleep is called inside a suspend function.",
         "correctness",
         "warning",
-        "Await the asynchronous form of the call, or move the blocking work "
-        "off the async path.",
+        "Await the asynchronous form of the call, or move the blocking work " "off the async path.",
         language="kotlin",
         confidence="medium",
     ),
@@ -502,8 +503,7 @@ _RULES = (
         "KT-COR-005",
         "non-null-assertion-density",
         "Non-null assertion density",
-        "A file uses more !! operators than the limit, disabling null safety "
-        "at each site.",
+        "A file uses more !! operators than the limit, disabling null safety " "at each site.",
         "correctness",
         "warning",
         "Narrow the type with a check or early return instead of asserting.",
@@ -514,12 +514,10 @@ _RULES = (
         "CS-COR-004",
         "blocking-wait-in-async-method",
         "Blocking wait in async method",
-        ".Result, .Wait() or GetAwaiter().GetResult() is used inside an async "
-        "body.",
+        ".Result, .Wait() or GetAwaiter().GetResult() is used inside an async " "body.",
         "correctness",
         "warning",
-        "Await the asynchronous form of the call, or move the blocking work "
-        "off the async path.",
+        "Await the asynchronous form of the call, or move the blocking work " "off the async path.",
         language="csharp",
         confidence="medium",
     ),
@@ -530,8 +528,7 @@ _RULES = (
         "A *Sync call (fs, child_process) is used inside an async function.",
         "correctness",
         "warning",
-        "Await the asynchronous form of the call, or move the blocking work "
-        "off the async path.",
+        "Await the asynchronous form of the call, or move the blocking work " "off the async path.",
         language="typescript",
         confidence="medium",
     ),
@@ -562,8 +559,7 @@ _RULES = (
         "GO-COR-003",
         "unchecked-type-assertion",
         "Unchecked type assertion",
-        "A single-value type assertion x.(T) panics when the dynamic type "
-        "differs.",
+        "A single-value type assertion x.(T) panics when the dynamic type " "differs.",
         "correctness",
         "warning",
         "Use the two-value form `v, ok := x.(T)` and handle !ok.",
@@ -604,7 +600,7 @@ _RULES = (
         "correctness",
         "warning",
         "Propagate with `?`, match on the Option/Result, or use "
-        "`.expect(\"why this cannot fail\")` to document the invariant.",
+        '`.expect("why this cannot fail")` to document the invariant.',
         language="rust",
         confidence="medium",
     ),
@@ -676,8 +672,7 @@ _RULES = (
         "function in the project. Requires the optional [deep] extra.",
         "duplication",
         "warning",
-        "Extract the shared implementation into one function and call it "
-        "from each location.",
+        "Extract the shared implementation into one function and call it " "from each location.",
         language="rust",
     ),
     _rule(
@@ -705,6 +700,269 @@ _RULES = (
     ),
 )
 
+# --- negative conditions ----------------------------------------------------------
+#
+# Each clause states when the detector deliberately stays silent, or when a
+# reported finding should not be forwarded. Clauses describe implemented
+# behaviour (see the referenced modules), not aspirations: keep them honest when
+# a detector changes.
+
+_TEST_PATH_DOWNGRADE = (
+    "The file is on a conventional test path (tests/, __tests__/, spec/, *_test.go, "
+    "*.spec.ts, *Test.kt, test_*.py): the finding is downgraded to informational, "
+    "not dropped (languages/_parity.py: downgrade_in_tests; applied by the density "
+    "and unchecked-assertion rules only)."
+)
+_SQL_NOT_WHEN = (
+    "The literal is not the head of a SQL statement: only literals whose leading "
+    "text reads as a SQL statement head are considered (sql_text).",
+    "The literal is complete and constant: no string interpolation, no `+` "
+    "concatenation with a non-literal operand on either side, and not an argument "
+    "of a formatting call (languages/_sql.py).",
+    "The dynamic part is a bound-parameter placeholder rather than a runtime value; "
+    "placeholders are constant text and are not assembly.",
+    "The literal sits inside a comment: comments are blanked before literals are "
+    "located, so they are never evidence.",
+)
+_EMPTY_CATCH_NOT_WHEN = (
+    "The handler body contains at least one statement; only a body with no "
+    "statements after blanking comments and literals is empty.",
+)
+_BROAD_HANDLER_NOT_WHEN = (
+    "The handler names a specific exception type rather than the language's root "
+    "exception or a bare catch-all.",
+    "The broad handler re-raises or logs: this rule flags the breadth of the catch, "
+    "not silent discard (see the language's empty-catch rule for that).",
+)
+_DUP_NOT_WHEN = (
+    "The optional [deep] extra is not installed: the rule is reported as an "
+    "unavailable analyzer in scan health rather than producing findings.",
+    "The function body is below the minimum significant size, or the two bodies "
+    "differ structurally once identifiers are normalised.",
+)
+_COMPLEXITY_NOT_WHEN = (
+    "The optional [deep] extra is not installed: the rule is reported as an "
+    "unavailable analyzer in scan health rather than producing findings.",
+    "The function is at or below the configured complexity limit.",
+)
+_UNDECLARED_DEP_NOT_WHEN = (
+    "The import resolves to the standard library, the project's own modules, or "
+    "a name declared in the nearest governing manifest or any manifest up the "
+    "ancestor chain (nested-manifest discovery: manifests.py).",
+    "The chain contains a workspace-style manifest or an unreadable manifest: drift "
+    "is skipped for that chain and an invalid-manifest finding is raised instead.",
+    "Reported at medium confidence: transitive dependencies provided through starter "
+    "bundles or split vendor namespaces can appear undeclared; confirm before acting.",
+)
+_INVALID_MANIFEST_NOT_WHEN = (
+    "The manifest parses: this rule only fires when the file cannot be read as its "
+    "declared format, never on semantic content.",
+)
+_BLOCKING_ASYNC_NOT_WHEN = (
+    "The blocking call is not inside a function declared async (or suspend): "
+    "synchronous code calling synchronous APIs is not flagged.",
+    "The call is one of the language's recognised blocking APIs; the rule uses a "
+    "fixed allowlist of call names, not type inference.",
+)
+_DENSITY_NOT_WHEN = (
+    "The per-file count is below the density threshold; a single occurrence is "
+    "never reported (languages/_parity.py: non_null_density_findings).",
+    "Occurrences appear inside string literals or comments: both are blanked before " "counting.",
+    _TEST_PATH_DOWNGRADE,
+)
+
+_NOT_WHEN: dict[str, tuple[str, ...]] = {
+    # Python
+    "PY-COR-001": (
+        "The default is an immutable literal (None, numbers, strings, tuples) or a call "
+        "to anything other than list/dict/set/bytearray; list, dict and set displays, "
+        "their comprehensions, and those four factory calls are what is flagged "
+        "(python_rules._MUTABLE_LITERALS / _MUTABLE_FACTORIES).",
+        "The parameter is intentionally a shared, documented cache or sentinel: the "
+        "rule cannot see intent, so confirm before rewriting.",
+    ),
+    "PY-COR-002": (
+        "The handler catches a specific exception class rather than Exception or "
+        "BaseException, or is a bare `except:` handled by PY-COR-003.",
+        "The handler re-raises or logs: breadth is the finding, not silence.",
+    ),
+    "PY-COR-003": (
+        "The handler body contains any statement other than `pass` or `...`; a "
+        "logged or re-raised failure is not swallowed.",
+        "The suppression is a deliberate `contextlib.suppress` or carries a "
+        "recognised inline suppression (python_suppressions.py).",
+    ),
+    "PY-COR-004": (
+        "The statement after return/raise/break/continue is in a different block "
+        "(else/finally/except) or the transfer is conditional.",
+    ),
+    "PY-COR-005": (
+        "The call is not inside an `async def` body.",
+        "The call is not in the fixed blocking-call allowlist "
+        "(python_resources._BLOCKING_CALLS); `await`ed coroutines are never flagged.",
+        "The call is dispatched through run_in_executor / to_thread.",
+    ),
+    "PY-COR-006": (
+        "The resource is opened inside a `with` statement or returned to a caller "
+        "that manages its lifetime.",
+        "The call is not in the fixed resource-call allowlist "
+        "(python_resources._RESOURCE_CALLS).",
+        "Cleanup is guaranteed by an enclosing try/finally.",
+    ),
+    "PY-COR-007": _SQL_NOT_WHEN,
+    "PY-DUP-001": _DUP_NOT_WHEN,
+    "PY-MAINT-001": _COMPLEXITY_NOT_WHEN,
+    "PY-MAINT-002": _COMPLEXITY_NOT_WHEN,
+    "PY-MAINT-003": ("The function is at or below the configured length limit.",),
+    "PY-MAINT-004": (
+        "The parameter count is at or below the configured limit; `self`/`cls` " "are not counted.",
+    ),
+    "PY-MAINT-005": (
+        "Fewer than the threshold number of parameters default to a boolean literal.",
+    ),
+    "PY-PKG-001": (
+        "The cycle involves a third-party module rather than two project modules. Note "
+        "that imports inside function bodies are counted (the graph uses ast.walk), so "
+        "a deliberately deferred import still closes a cycle.",
+    ),
+    "PY-PKG-002": (
+        "The console-script entry in pyproject resolves to an importable module and "
+        "attribute in the project tree.",
+    ),
+    "PY-PKG-003": _INVALID_MANIFEST_NOT_WHEN,
+    "PY-PKG-004": (
+        "Every name in the literal `__all__` is bound in the module; dynamic "
+        "`__all__` values are not evaluated and are not flagged.",
+    ),
+    "PY-PKG-005": ("Each name appears once in the literal `__all__`.",),
+    "PY-PKG-006": (
+        "Each literal package-data glob matches at least one path in the project; "
+        "non-literal (computed) entries are not evaluated.",
+    ),
+    # Go
+    "GO-COR-001": (
+        "The error value is assigned, returned, or checked; only a standard-library "
+        "call whose error result is discarded with `_` or dropped is flagged.",
+    ),
+    "GO-COR-002": _SQL_NOT_WHEN,
+    "GO-COR-003": (
+        "The assertion uses the two-value form `v, ok := x.(T)` or is inside a type " "switch.",
+        _TEST_PATH_DOWNGRADE,
+    ),
+    "GO-COR-004": (
+        "The `defer` is inside a function literal within the loop body (the literal "
+        "is stripped before matching: languages/go.py _FUNC_LITERAL), so the defer "
+        "runs per iteration.",
+    ),
+    "GO-DUP-001": _DUP_NOT_WHEN,
+    "GO-MAINT-001": _COMPLEXITY_NOT_WHEN,
+    "GO-MAINT-002": _COMPLEXITY_NOT_WHEN,
+    # TypeScript / JavaScript
+    "TS-COR-001": _EMPTY_CATCH_NOT_WHEN,
+    "TS-COR-002": _SQL_NOT_WHEN,
+    "TS-COR-003": (
+        "The call is not a recognised `*Sync` file-system API inside an async "
+        "function or a function returning a Promise.",
+    ),
+    "TS-COR-004": (
+        "The `@ts-ignore` / `@ts-expect-error` / `eslint-disable` directive carries "
+        "an explanation on the same line.",
+    ),
+    "TS-COR-005": _DENSITY_NOT_WHEN,
+    "TS-PKG-001": _UNDECLARED_DEP_NOT_WHEN,
+    "TS-PKG-002": _INVALID_MANIFEST_NOT_WHEN,
+    # Java
+    "JAVA-COR-001": _EMPTY_CATCH_NOT_WHEN,
+    "JAVA-COR-002": _SQL_NOT_WHEN,
+    "JAVA-COR-003": _BROAD_HANDLER_NOT_WHEN,
+    "JAVA-PKG-001": _UNDECLARED_DEP_NOT_WHEN,
+    "JAVA-PKG-002": _INVALID_MANIFEST_NOT_WHEN,
+    # Kotlin
+    "KT-COR-001": _EMPTY_CATCH_NOT_WHEN,
+    "KT-COR-002": _SQL_NOT_WHEN,
+    "KT-COR-003": _BROAD_HANDLER_NOT_WHEN,
+    "KT-COR-004": _BLOCKING_ASYNC_NOT_WHEN,
+    "KT-COR-005": _DENSITY_NOT_WHEN,
+    "KT-PKG-001": _UNDECLARED_DEP_NOT_WHEN,
+    "KT-PKG-002": _INVALID_MANIFEST_NOT_WHEN,
+    # C#
+    "CS-COR-001": _EMPTY_CATCH_NOT_WHEN,
+    "CS-COR-002": _SQL_NOT_WHEN,
+    "CS-COR-003": _BROAD_HANDLER_NOT_WHEN,
+    "CS-COR-004": _BLOCKING_ASYNC_NOT_WHEN,
+    "CS-PKG-001": _UNDECLARED_DEP_NOT_WHEN,
+    "CS-PKG-002": _INVALID_MANIFEST_NOT_WHEN,
+    # C / C++
+    "C-COR-001": _EMPTY_CATCH_NOT_WHEN,
+    "C-COR-002": _SQL_NOT_WHEN,
+    "C-COR-003": _BROAD_HANDLER_NOT_WHEN,
+    "C-COR-004": (
+        "The `using namespace` directive is in a source file (.c/.cc/.cpp), not a "
+        "header; only headers are flagged.",
+        "The directive is scoped inside a function or namespace block rather than "
+        "at file scope.",
+    ),
+    "C-DUP-001": _DUP_NOT_WHEN,
+    "C-MAINT-001": _COMPLEXITY_NOT_WHEN,
+    "C-MAINT-002": _COMPLEXITY_NOT_WHEN,
+    "C-PKG-001": (
+        "The header is a system or standard header (angle-bracket include of a known "
+        "standard name) or resolves inside the project tree.",
+        "The build is not CMake: drift is only evaluated against CMake manifests, "
+        "so other build systems produce no findings.",
+        "Reported at medium confidence; confirm against the actual build graph.",
+    ),
+    # Rust
+    "RS-COR-001": (
+        "The `.unwrap()` calls are inside `#[cfg(test)]` modules or `#[test]` "
+        "functions: both are blanked before counting (languages/rust.py "
+        "_blank_test_code), and test-path files are downgraded.",
+        "The per-file count is below the density threshold; a single unwrap is " "never reported.",
+    ),
+    "RS-COR-002": _SQL_NOT_WHEN,
+    "RS-COR-003": _BLOCKING_ASYNC_NOT_WHEN,
+    "RS-COR-004": (
+        'The `#![allow(...)]` carries a `reason = "..."` argument, or the allow is '
+        "item-scoped (`#[allow]`) rather than crate-wide (`#![allow]`).",
+        "The lint is not one of dead_code / unused / warnings / clippy::all.",
+    ),
+    "RS-DUP-001": _DUP_NOT_WHEN,
+    "RS-MAINT-001": _COMPLEXITY_NOT_WHEN,
+    "RS-MAINT-002": _COMPLEXITY_NOT_WHEN,
+    "RS-PKG-001": (
+        "The `use` root is std/core/alloc/crate/self/super/proc_macro/test "
+        "(languages/rust.py _STD_ROOTS) or a local module.",
+        "The crate is declared in [dependencies], [dev-dependencies] or "
+        "[build-dependencies] of the nearest governing Cargo.toml or any ancestor.",
+        "Reported at medium confidence: renamed dependencies (`package = ...`) and "
+        "workspace inheritance can appear undeclared; confirm before acting.",
+    ),
+    "RS-PKG-002": _INVALID_MANIFEST_NOT_WHEN,
+}
+
+
+def _attach_not_when(rules: tuple[RuleMetadata, ...]) -> tuple[RuleMetadata, ...]:
+    attached = []
+    for rule in rules:
+        clauses = _NOT_WHEN.get(rule.rule_id, ())
+        attached.append(
+            RuleMetadata(
+                rule_id=rule.rule_id,
+                name=rule.name,
+                title=rule.title,
+                description=rule.description,
+                category=rule.category,
+                default_severity=rule.default_severity,
+                confidence=rule.confidence,
+                remediation=rule.remediation,
+                language=rule.language,
+                not_when=clauses,
+            )
+        )
+    return tuple(attached)
+
+
+_RULES = _attach_not_when(_RULES)
 _CATALOG = MappingProxyType({rule.rule_id: rule for rule in _RULES})
 
 
