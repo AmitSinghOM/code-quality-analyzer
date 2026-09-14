@@ -611,8 +611,20 @@ A review loop that guarantees coverage:
 
 `not_when` describes implemented detector behaviour (test-path downgrades,
 literal blanking, thresholds, allowlists), not aspirations. When a detector
-changes, its clauses change with it; `tests/test_mcp_server.py` locks that
-every rule has them.
+changes, its clauses change with it; `tests/test_not_when_claims.py` runs a
+should-fire and a should-stay-silent fixture for each clause through the
+real CLI, so the prose cannot drift from the code.
+
+Paths must be project-relative. If the project lives inside a larger git
+repository (a monorepo, or a `~/projects` directory that is itself a repo),
+`git show --name-only` and `git diff` return paths relative to the git
+toplevel, and `rules_for_files` will honestly report them as `missing`
+rather than guess. Run git from the project directory with `--relative`:
+
+```bash
+git diff --relative main...HEAD          # for diff_to_manifest
+git show --name-only --relative HEAD     # for rules_for_files
+```
 
 ## Paths
 
