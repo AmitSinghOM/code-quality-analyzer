@@ -48,7 +48,7 @@ deep = [
     "tree-sitter-rust>=0.23,<0.25",
 ]
 dev = [
-    "build==1.6.0",
+    "build==1.6.1",
     # pytest <9.0.3 carries PYSEC-2026-1845; keep this at or above the fix.
     "pytest==9.1.1",
     "pip-audit==2.10.1",
