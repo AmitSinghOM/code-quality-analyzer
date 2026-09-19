@@ -43,6 +43,13 @@ from ..safe_io import SafeReadError, read_bounded_text
 from ..signals import FileSignals, pattern_is_present
 from ._shared import RegexRulePackBase, empty_catch_finding
 from ._parity import broad_catch_findings
+from ._security import (
+    SHELL_BINARIES,
+    SHELL_COMMAND_FLAGS,
+    DynamicCall,
+    dynamic_call_findings,
+    marker_findings,
+)
 from ._sql import JAVA_SQL, dynamic_sql_findings
 
 JAVA_ADAPTER_VERSION = "1.0.0"
@@ -444,16 +451,110 @@ class JavaBroadCatchRule:
         yield from broad_catch_findings(self.rule_id, parsed, _BROAD_CATCH)
 
 
+# ---- security (JAVA-SEC / KT-SEC share these JVM shapes) --------------------
+
+JVM_UNSAFE_DESERIALIZATION = re.compile(
+    r"\b(?:new\s+)?(?:ObjectInputStream|XMLDecoder)\s*\(|\.readObject\s*\(\s*\)"
+)
+# ``Runtime.getRuntime().exec(cmd)`` with a non-literal ``cmd``.
+JVM_RUNTIME_EXEC = DynamicCall(
+    call=re.compile(r"\bRuntime\s*\.\s*getRuntime\s*\(\s*\)\s*\.\s*exec(?=\()"),
+    dynamic=0,
+)
+# ``new ProcessBuilder("sh", "-c", cmd)`` (Kotlin: no ``new``).
+JVM_PROCESS_BUILDER = DynamicCall(
+    call=re.compile(r"\bProcessBuilder(?=\()"),
+    dynamic=2,
+    pinned={0: SHELL_BINARIES, 1: SHELL_COMMAND_FLAGS},
+)
+JVM_TLS_DISABLED = re.compile(
+    r"\b(?:NoopHostnameVerifier|ALLOW_ALL_HOSTNAME_VERIFIER|TrustAllStrategy|"
+    r"INSTANCE_ALLOW_ALL)\b|"
+    # ``checkServerTrusted(...) {}`` — an empty body (comments are blanked)
+    # accepts every certificate.
+    r"\bcheck(?:Server|Client)Trusted\s*\([^)]*\)\s*(?:throws\s+[\w.,\s]+)?(?::\s*\w+\s*)?\{\s*\}|"
+    # ``verify(String hostname, SSLSession session) { return true; }``.
+    r"\bverify\s*\([^)]*SSLSession[^)]*\)\s*(?::\s*Boolean\s*)?(?:\{\s*return\s+true\s*;?\s*\}|=\s*true\b)"
+)
+
+JVM_SEC_MESSAGES = {
+    "deserialization": (
+        "Java native deserialization instantiates arbitrary classes from the stream (CWE-502).",
+        "Deserialize with a schema-bound format (JSON, protobuf) or install an "
+        "ObjectInputFilter allowlist.",
+    ),
+    "shell": (
+        "A shell runs a command string assembled at runtime (CWE-78).",
+        "Pass the program and each argument separately to ProcessBuilder so no "
+        "shell re-parses them.",
+    ),
+    "tls": (
+        "TLS certificate or hostname verification is disabled (CWE-295).",
+        "Keep the default TrustManager and HostnameVerifier; add a private CA "
+        "to a truststore instead.",
+    ),
+}
+
+
+class JavaUnsafeDeserializationRule:
+    """Detect ``ObjectInputStream`` / ``XMLDecoder`` / ``readObject()``."""
+
+    rule_id = "JAVA-SEC-001"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, JavaFacts):
+            return
+        yield from marker_findings(
+            self.rule_id,
+            parsed,
+            JVM_UNSAFE_DESERIALIZATION,
+            *JVM_SEC_MESSAGES["deserialization"],
+            in_tests="note",
+        )
+
+
+class JavaShellCommandRule:
+    """Detect ``Runtime.exec(cmd)`` / ``new ProcessBuilder("sh", "-c", cmd)``, dynamic ``cmd``."""
+
+    rule_id = "JAVA-SEC-002"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, JavaFacts):
+            return
+        for spec in (JVM_RUNTIME_EXEC, JVM_PROCESS_BUILDER):
+            yield from dynamic_call_findings(self.rule_id, parsed, spec, *JVM_SEC_MESSAGES["shell"])
+
+
+class JavaTlsVerificationDisabledRule:
+    """Detect trust-all managers and no-op hostname verifiers."""
+
+    rule_id = "JAVA-SEC-003"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, JavaFacts):
+            return
+        yield from marker_findings(
+            self.rule_id, parsed, JVM_TLS_DISABLED, *JVM_SEC_MESSAGES["tls"], in_tests="note"
+        )
+
+
 class JavaRulePack(RegexRulePackBase):
     """Run the bounded built-in Java pilot rules."""
 
     rule_pack_id = JAVA_RULE_PACK_ID
     language_id = "java"
-    ruleset_version = "1.1.0"
+    ruleset_version = "1.2.0"
     plugin_api_version = PLUGIN_API_VERSION
 
     def __init__(self) -> None:
-        self.rules = (JavaEmptyCatchRule(), JavaDynamicSqlRule(), JavaBroadCatchRule())
+        self.rules = (
+            JavaEmptyCatchRule(),
+            JavaDynamicSqlRule(),
+            JavaBroadCatchRule(),
+            JavaUnsafeDeserializationRule(),
+            JavaShellCommandRule(),
+            JavaTlsVerificationDisabledRule(),
+        )
 
 
 class JavaArchitectureSignalProvider:

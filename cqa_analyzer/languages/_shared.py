@@ -7,6 +7,7 @@ from collections.abc import Iterable
 from ..findings import Finding, Location
 from ..protocols import ParsedFile, SignalObservation
 from ..signals import FileSignals, pattern_is_present
+from ._suppressions import apply_comment_suppressions
 
 
 def line_column(source: str, offset: int) -> tuple[int, int]:
@@ -100,4 +101,4 @@ class RegexRulePackBase:
         findings: list[Finding] = []
         for rule in self.rules:
             findings.extend(rule.evaluate(parsed))
-        return findings
+        return list(apply_comment_suppressions(parsed, findings))

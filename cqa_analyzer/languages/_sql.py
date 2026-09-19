@@ -101,6 +101,10 @@ def _find_closer(source: str, start: int, limit: int, delimiter: str) -> int | N
     return None
 
 
+find_closer = _find_closer
+PREFIXED_QUOTE = _PREFIXED_QUOTE
+
+
 def literal_spans(source: str, code_text: str) -> Iterable[tuple[int, int]]:
     """Yield ``(start, end)`` of string literals as offsets into ``source``.
 

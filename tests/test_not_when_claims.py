@@ -286,7 +286,17 @@ def test_every_downgrade_clause_belongs_to_a_rule_that_downgrades() -> None:
     """The test-path downgrade clause may only appear on rules that call it."""
     from cqa_analyzer.rule_metadata import builtin_rule_ids, rule_metadata
 
-    downgrading = {"GO-COR-003", "TS-COR-005", "KT-COR-005", "RS-COR-001"}
+    downgrading = {
+        "GO-COR-003", "TS-COR-005", "KT-COR-005", "RS-COR-001",
+        # security rules whose fixtures legitimately live in tests (trust-all
+        # certificates, disabled TLS, pickle round-trips)
+        "PY-SEC-001", "PY-SEC-004",
+        "GO-SEC-001",
+        "JAVA-SEC-001", "JAVA-SEC-003", "KT-SEC-001", "KT-SEC-003",
+        "CS-SEC-001", "CS-SEC-003",
+        "TS-SEC-003", "TS-SEC-004",
+        "RS-SEC-001", "RS-SEC-003",
+    }
     for rule_id in builtin_rule_ids():
         claims = any(
             "downgraded to informational" in c or "downgraded" in c

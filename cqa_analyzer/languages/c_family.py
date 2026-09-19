@@ -46,6 +46,13 @@ from ..protocols import (
 from ..registry import PluginRegistry
 from ..safe_io import SafeReadError, read_bounded_text
 from ._parity import broad_catch_findings
+from ._security import (
+    DynamicCall,
+    classify_argument,
+    dynamic_call_findings,
+    security_finding,
+    split_arguments,
+)
 from ._shared import RegexRulePackBase, empty_catch_finding, line_column, signal_observations
 from ._sql import C_SQL, dynamic_sql_findings
 
@@ -614,12 +621,125 @@ class CUsingNamespaceInHeaderRule:
             )
 
 
+# ---- security (C-SEC) -------------------------------------------------------
+
+# Functions with no bound on the bytes they write (CERT STR31-C, MSVC banned).
+_BANNED_COPY = re.compile(
+    r"(?<![\w.>])(?:std\s*::\s*)?(?P<name>gets|strcpy|strcat|stpcpy|sprintf|vsprintf|wcscpy|wcscat)\s*\("
+)
+_C_KEYWORDS_BEFORE_CALL = frozenset({
+    "return", "if", "else", "case", "do", "while", "for", "switch", "sizeof",
+    "throw", "co_return", "co_yield",
+})
+_C_SYSTEM = DynamicCall(call=re.compile(r"(?<![\w.>])(?:std\s*::\s*)?system(?=\()"), dynamic=0)
+_C_POPEN = DynamicCall(call=re.compile(r"(?<![\w.>])_?popen(?=\()"), dynamic=0)
+# ``printf(fmt)``-shaped calls: the format is the last argument.
+_C_FORMAT_CALLS = {
+    "printf": 0, "vprintf": 0, "puts": None,
+    "fprintf": 1, "dprintf": 1, "sprintf": 1, "vfprintf": 1,
+    "snprintf": 2, "vsnprintf": 2, "syslog": 1, "err": 1, "warn": 0, "errx": 1, "warnx": 0,
+}
+_C_FORMAT_CALL = re.compile(
+    r"(?<![\w.>])(?:std\s*::\s*)?(?P<name>" + "|".join(
+        sorted(name for name, index in _C_FORMAT_CALLS.items() if index is not None)
+    ) + r")(?=\()"
+)
+_MACRO_CONSTANT = re.compile(r"^\s*[A-Z][A-Z0-9_]*\s*$")
+
+
+def _is_declaration(code_text: str, offset: int) -> bool:
+    """True when the identifier at ``offset`` is being declared, not called:
+    ``char *strcpy(``, ``extern int system(``, ``#define strcpy``."""
+    head = code_text[:offset].rstrip()
+    if head.endswith("*") or head.endswith("&"):
+        return True
+    word = re.search(r"([A-Za-z_]\w*)\s*$", head)
+    if word is None:
+        return False
+    return word.group(1) not in _C_KEYWORDS_BEFORE_CALL
+
+
+class CUnboundedCopyRule:
+    """Detect ``gets``/``strcpy``/``strcat``/``sprintf`` and friends."""
+
+    rule_id = "C-SEC-001"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, CFacts):
+            return
+        code_text = parsed.facts.code_text
+        for match in _BANNED_COPY.finditer(code_text):
+            if _is_declaration(code_text, match.start()):
+                continue
+            name = match.group("name")
+            yield security_finding(
+                self.rule_id,
+                parsed,
+                match.start(),
+                f"{name}() writes without a length bound (CWE-120).",
+                "Use the bounded form (strncpy_s/strlcpy, snprintf, fgets) or "
+                "std::string / std::format.",
+            )
+
+
+class CShellCommandRule:
+    """Detect ``system(cmd)`` / ``popen(cmd, ...)`` with a non-literal ``cmd``."""
+
+    rule_id = "C-SEC-002"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, CFacts):
+            return
+        for spec in (_C_SYSTEM, _C_POPEN):
+            yield from dynamic_call_findings(
+                self.rule_id,
+                parsed,
+                spec,
+                "A shell runs a command string assembled at runtime (CWE-78).",
+                "Use execve/posix_spawn with an argument vector so no shell "
+                "re-parses the command.",
+                skip_at=_is_declaration,
+            )
+
+
+class CFormatStringRule:
+    """Detect ``printf(msg)``-shaped calls whose format is a non-literal and
+    the last argument (``-Wformat-security``)."""
+
+    rule_id = "C-SEC-003"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, CFacts):
+            return
+        code_text = parsed.facts.code_text
+        for match in _C_FORMAT_CALL.finditer(code_text):
+            if _is_declaration(code_text, match.start()):
+                continue
+            index = _C_FORMAT_CALLS[match.group("name")]
+            spans, _close = split_arguments(code_text, match.end())
+            if len(spans) != index + 1:
+                continue  # extra arguments: the format is (at least) intended
+            argument = classify_argument(parsed, spans[index])
+            if argument.kind != "dynamic":
+                continue
+            if _MACRO_CONSTANT.match(parsed.source.content[spans[index][0] : spans[index][1]]):
+                continue  # ``printf(BANNER)``: a macro standing for a literal
+            yield security_finding(
+                self.rule_id,
+                parsed,
+                match.start(),
+                f"{match.group('name')}() takes a runtime string as its format (CWE-134).",
+                'Pass a literal format and the string as an argument: printf("%s", msg).',
+                confidence="medium",
+            )
+
+
 class CRulePack(RegexRulePackBase):
     """Run the bounded built-in C/C++ pilot rules."""
 
     rule_pack_id = C_RULE_PACK_ID
     language_id = "c_cpp"
-    ruleset_version = "1.1.0"
+    ruleset_version = "1.2.0"
     plugin_api_version = PLUGIN_API_VERSION
 
     def __init__(self) -> None:
@@ -628,6 +748,9 @@ class CRulePack(RegexRulePackBase):
             CDynamicSqlRule(),
             CCatchAllRule(),
             CUsingNamespaceInHeaderRule(),
+            CUnboundedCopyRule(),
+            CShellCommandRule(),
+            CFormatStringRule(),
         )
 
 

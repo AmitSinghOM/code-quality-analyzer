@@ -15,6 +15,7 @@ from .maintainability import (
     LongFunctionRule,
 )
 from .python_resources import AsyncBlockingCallRule, UnmanagedResourceRule
+from .python_security import SECURITY_RULES
 from .python_sql import DynamicSqlRule
 
 
@@ -357,6 +358,7 @@ class PythonRuleAnalyzer:
                 AsyncBlockingCallRule(),
                 UnmanagedResourceRule(),
                 DynamicSqlRule(),
+                *(rule() for rule in SECURITY_RULES),
             )
         )
 

@@ -44,19 +44,27 @@ providers before reporting, baseline comparison, and CI gates. A syntactically
 valid rule ID with no loaded provider is inert, which permits shared
 configuration across analyzer/plugin versions.
 
-## Python inline suppressions
+## Inline suppressions
 
-Python source findings support explicit, same-line suppressions, including the
-literal `__all__` package rules `PY-PKG-004` and `PY-PKG-005`:
+Source findings support explicit, same-line suppressions. Python has had them
+since 2.x (including the literal `__all__` package rules `PY-PKG-004` and
+`PY-PKG-005`); 3.2.0 extends the identical directive to the other seven
+languages in `//`, `#`, `/* */` and `--` comments:
 
 ```python
 def legacy(cache={}):  # cqa: ignore=PY-COR-001 reason="public API compatibility"
     return cache
 ```
 
+```go
+cfg := &tls.Config{InsecureSkipVerify: true} // cqa: ignore=GO-SEC-001 reason="local test proxy"
+```
+
 The rule ID list may be comma-separated. A nonempty quoted reason is mandatory.
-The directive must be a real Python comment on the finding's reported line;
-text in strings or docstrings is ignored. Missing reasons, blank reasons,
+For Python the directive must be a real comment on the finding's reported line
+(text in strings or docstrings is ignored); for the regex languages the raw
+source line is matched by shape.
+Missing reasons, blank reasons,
 malformed directives, different rule IDs, and directives on other lines do not
 suppress a finding. Invalid directives do not add a second finding. Suppression
 reasons are intentionally excluded from reports and baselines to avoid leaking

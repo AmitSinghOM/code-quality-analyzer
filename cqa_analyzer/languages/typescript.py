@@ -40,6 +40,12 @@ from ._parity import (
     downgrade_in_tests,
     non_null_density_findings,
 )
+from ._security import (
+    DynamicCall,
+    classify_argument,
+    dynamic_call_findings,
+    security_finding,
+)
 from ._shared import RegexRulePackBase, empty_catch_finding, line_column
 from ._sql import TYPESCRIPT_SQL, dynamic_sql_findings
 
@@ -54,48 +60,144 @@ _MAX_MANIFESTS = 100
 
 _FROM_IMPORT = re.compile(r"""\bfrom\s+['"]([^'"\n]+)['"]""")
 _SIDE_EFFECT_IMPORT = re.compile(r"""(?m)^\s*import\s+['"]([^'"\n]+)['"]""")
-_CALL_IMPORT = re.compile(
-    r"""\b(?:require|import)\s*\(\s*['"]([^'"\n]+)['"]\s*\)"""
-)
+_CALL_IMPORT = re.compile(r"""\b(?:require|import)\s*\(\s*['"]([^'"\n]+)['"]\s*\)""")
 
 _TS_DECLARATION = re.compile(
-    r"\b(?:function|class|interface|enum|namespace|type)\s+"
-    r"([A-Za-z_$][\w$]*)"
+    r"\b(?:function|class|interface|enum|namespace|type)\s+" r"([A-Za-z_$][\w$]*)"
 )
-_TS_VALUE_DECLARATION = re.compile(
-    r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)"
+_TS_VALUE_DECLARATION = re.compile(r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)")
+_TS_SELECTOR_CALL = re.compile(r"\b([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\s*\(")
+_TS_KEYWORDS = frozenset(
+    {
+        "abstract",
+        "any",
+        "as",
+        "async",
+        "await",
+        "boolean",
+        "break",
+        "case",
+        "catch",
+        "class",
+        "const",
+        "continue",
+        "debugger",
+        "declare",
+        "default",
+        "delete",
+        "do",
+        "else",
+        "enum",
+        "export",
+        "extends",
+        "false",
+        "finally",
+        "for",
+        "from",
+        "function",
+        "if",
+        "implements",
+        "import",
+        "in",
+        "instanceof",
+        "interface",
+        "let",
+        "namespace",
+        "new",
+        "null",
+        "number",
+        "of",
+        "private",
+        "protected",
+        "public",
+        "readonly",
+        "return",
+        "static",
+        "string",
+        "super",
+        "switch",
+        "this",
+        "throw",
+        "true",
+        "try",
+        "type",
+        "typeof",
+        "undefined",
+        "unknown",
+        "var",
+        "void",
+        "while",
+        "with",
+        "yield",
+    }
 )
-_TS_SELECTOR_CALL = re.compile(
-    r"\b([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\s*\("
-)
-_TS_KEYWORDS = frozenset({
-    "abstract", "any", "as", "async", "await", "boolean", "break", "case",
-    "catch", "class", "const", "continue", "debugger", "declare", "default",
-    "delete", "do", "else", "enum", "export", "extends", "false", "finally",
-    "for", "from", "function", "if", "implements", "import", "in",
-    "instanceof", "interface", "let", "namespace", "new", "null", "number",
-    "of", "private", "protected", "public", "readonly", "return", "static",
-    "string", "super", "switch", "this", "throw", "true", "try", "type",
-    "typeof", "undefined", "unknown", "var", "void", "while", "with",
-    "yield",
-})
 
 _EMPTY_CATCH = re.compile(r"\bcatch\b\s*(?:\([^)]*\))?\s*\{\s*\}")
 
-_NODE_BUILTINS = frozenset({
-    "assert", "async_hooks", "buffer", "child_process", "cluster",
-    "console", "constants", "crypto", "dgram", "dns", "domain", "events",
-    "fs", "http", "http2", "https", "inspector", "module", "net", "os",
-    "path", "perf_hooks", "process", "punycode", "querystring", "readline",
-    "repl", "stream", "string_decoder", "sys", "timers", "tls", "trace_events",
-    "tty", "url", "util", "v8", "vm", "worker_threads", "zlib",
-})
+_NODE_BUILTINS = frozenset(
+    {
+        "assert",
+        "async_hooks",
+        "buffer",
+        "child_process",
+        "cluster",
+        "console",
+        "constants",
+        "crypto",
+        "dgram",
+        "dns",
+        "domain",
+        "events",
+        "fs",
+        "http",
+        "http2",
+        "https",
+        "inspector",
+        "module",
+        "net",
+        "os",
+        "path",
+        "perf_hooks",
+        "process",
+        "punycode",
+        "querystring",
+        "readline",
+        "repl",
+        "stream",
+        "string_decoder",
+        "sys",
+        "timers",
+        "tls",
+        "trace_events",
+        "tty",
+        "url",
+        "util",
+        "v8",
+        "vm",
+        "worker_threads",
+        "zlib",
+    }
+)
 
 
-_REGEX_PRECEDING_KEYWORDS = frozenset({
-    "return", "typeof", "case", "do", "else", "in", "of", "instanceof",
-    "new", "delete", "void", "throw", "yield", "await",
-})
+_REGEX_PRECEDING_KEYWORDS = frozenset(
+    {
+        "return",
+        "typeof",
+        "case",
+        "do",
+        "else",
+        "in",
+        "of",
+        "instanceof",
+        "new",
+        "delete",
+        "void",
+        "throw",
+        "yield",
+        "await",
+    }
+)
 # `<` and `>` are deliberately absent: in TSX `</p>` is a closing tag and
 # `<T>/x/` is vanishingly rare, so `<` before `/` is treated as JSX.
 _REGEX_PRECEDING_CHARS = frozenset("(,=:[!&|?{;+-*%~^")
@@ -364,9 +466,7 @@ class TypeScriptLanguageAdapter:
     cache_runtime_version = "portable"
 
     def parse(self, source: SourceFile) -> ParsedFile:
-        code_text, lexical_complete = _strip_ts_comments_and_strings(
-            source.content
-        )
+        code_text, lexical_complete = _strip_ts_comments_and_strings(source.content)
         metadata_text, metadata_complete = _strip_ts_comments_and_strings(
             source.content,
             blank_strings=False,
@@ -529,12 +629,243 @@ class TsNonNullDensityRule:
             yield downgrade_in_tests(parsed, finding)
 
 
+# ---- security (TS-SEC) ------------------------------------------------------
+
+_TS_EVAL = DynamicCall(call=re.compile(r"(?<![.\w$])eval(?=\()"), dynamic=0, confidence="high")
+_TS_NEW_FUNCTION = DynamicCall(
+    call=re.compile(r"\bnew\s+Function(?=\()"), dynamic=-1, confidence="high"
+)
+# How ``child_process`` is bound in this file — the import line is the only
+# thing separating ``exec(cmd)`` (a shell) from ``regex.exec(text)``.
+_CP_MODULE = r"""['"](?:node:)?child_process['"]"""
+_CP_NAMESPACE = re.compile(
+    rf"""(?:import\s+\*\s+as\s+(\w+)\s+from\s+{_CP_MODULE}|"""
+    rf"""import\s+(\w+)\s+from\s+{_CP_MODULE}|"""
+    rf"""(?:const|let|var)\s+(\w+)\s*=\s*require\s*\(\s*{_CP_MODULE}\s*\))"""
+)
+_CP_NAMED = re.compile(
+    rf"""(?:import\s*\{{([^}}]*)\}}\s*from\s+{_CP_MODULE}|"""
+    rf"""(?:const|let|var)\s*\{{([^}}]*)\}}\s*=\s*require\s*\(\s*{_CP_MODULE}\s*\))"""
+)
+_SHELL_FUNCTIONS = {"exec", "execSync"}
+_SPAWN_FUNCTIONS = {"spawn", "spawnSync", "execFile", "execFileSync"}
+_HTML_SINK_ASSIGN = re.compile(r"\.(?:innerHTML|outerHTML)\s*\+?=(?!=)")
+_HTML_SINK_CALL = DynamicCall(
+    call=re.compile(r"\.insertAdjacentHTML(?=\()"),
+    dynamic=1,
+    interpolates=TYPESCRIPT_SQL.interpolates,
+)
+_DOCUMENT_WRITE = DynamicCall(
+    call=re.compile(r"\bdocument\s*\.\s*write(?:ln)?(?=\()"),
+    dynamic=0,
+    interpolates=TYPESCRIPT_SQL.interpolates,
+)
+_DANGEROUSLY_SET = re.compile(r"dangerouslySetInnerHTML\s*=\s*\{\s*\{\s*__html\s*:")
+_SANITIZED = re.compile(
+    r"^\s*(?:DOMPurify\s*\.\s*sanitize|sanitizeHtml|sanitize|xss|purify|escapeHtml|"
+    r"escape|encodeURIComponent|marked\.parse|\w+\.sanitize)\s*\("
+)
+_TS_TLS_DISABLED = re.compile(
+    r"\brejectUnauthorized\s*:\s*false\b|\bNODE_TLS_REJECT_UNAUTHORIZED\s*\]?\s*=\s*"
+)
+
+
+def _binding_name(item: str) -> str | None:
+    """``exec as run`` -> ``run``; ``exec: run`` -> ``run``; ``exec`` -> ``exec``."""
+    parts = [p.strip() for p in re.split(r"\s+as\s+|\s*:\s*", item) if p.strip()]
+    return parts[-1] if parts else None
+
+
+def _child_process_bindings(source: str) -> tuple[set[str], set[str]]:
+    """``(namespace names, imported function names)`` bound to child_process."""
+    namespaces = {g for m in _CP_NAMESPACE.finditer(source) for g in m.groups() if g}
+    named = {
+        name
+        for match in _CP_NAMED.finditer(source)
+        for group in match.groups()
+        if group
+        for name in map(_binding_name, group.split(","))
+        if name
+    }
+    return namespaces, named
+
+
+class TsDynamicCodeExecutionRule:
+    """Detect ``eval(x)`` / ``new Function(..., x)`` with a non-literal ``x``."""
+
+    rule_id = "TS-SEC-001"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, TsFacts):
+            return
+        for spec in (_TS_EVAL, _TS_NEW_FUNCTION):
+            yield from dynamic_call_findings(
+                self.rule_id,
+                parsed,
+                spec,
+                "Code is compiled from a string built at runtime (CWE-95).",
+                "Use JSON.parse for data and a dispatch table or dynamic import for behaviour.",
+            )
+
+
+class TsShellCommandRule:
+    """Detect ``child_process.exec(cmd)`` with dynamic ``cmd`` and ``spawn(.., {shell: true})``."""
+
+    rule_id = "TS-SEC-002"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, TsFacts):
+            return
+        if not any(spec.endswith("child_process") for spec in parsed.facts.imports):
+            return
+        namespaces, named = _child_process_bindings(parsed.source.content)
+        specs: list[DynamicCall] = []
+        if namespaces:
+            ns = "|".join(re.escape(n) for n in sorted(namespaces))
+            specs.append(
+                DynamicCall(
+                    call=re.compile(rf"\b(?:{ns})\s*\.\s*(?:exec|execSync)(?=\()"),
+                    dynamic=0,
+                    interpolates=TYPESCRIPT_SQL.interpolates,
+                )
+            )
+            specs.append(
+                DynamicCall(
+                    call=re.compile(
+                        rf"\b(?:{ns})\s*\.\s*(?:spawn|spawnSync|execFile|execFileSync)(?=\()"
+                    ),
+                    dynamic=0,
+                    interpolates=TYPESCRIPT_SQL.interpolates,
+                    requires=r"\bshell\s*:\s*true\b",
+                )
+            )
+        shell_names = sorted(named & _SHELL_FUNCTIONS)
+        if shell_names:
+            specs.append(
+                DynamicCall(
+                    call=re.compile(
+                        r"(?<![.\w$])(?:" + "|".join(map(re.escape, shell_names)) + r")(?=\()"
+                    ),
+                    dynamic=0,
+                    interpolates=TYPESCRIPT_SQL.interpolates,
+                )
+            )
+        spawn_names = sorted(named & _SPAWN_FUNCTIONS)
+        if spawn_names:
+            specs.append(
+                DynamicCall(
+                    call=re.compile(
+                        r"(?<![.\w$])(?:" + "|".join(map(re.escape, spawn_names)) + r")(?=\()"
+                    ),
+                    dynamic=0,
+                    interpolates=TYPESCRIPT_SQL.interpolates,
+                    requires=r"\bshell\s*:\s*true\b",
+                )
+            )
+        for spec in specs:
+            yield from dynamic_call_findings(
+                self.rule_id,
+                parsed,
+                spec,
+                "A shell runs a command string assembled at runtime (CWE-78).",
+                "Use execFile/spawn with an argument array and no shell option.",
+            )
+
+
+class TsHtmlInjectionSinkRule:
+    """Detect ``innerHTML =``, ``insertAdjacentHTML``, ``document.write`` and
+    ``dangerouslySetInnerHTML`` fed a non-literal value."""
+
+    rule_id = "TS-SEC-003"
+    _message = "Unescaped markup is written to the DOM from a runtime value (CWE-79)."
+    _remediation = (
+        "Set textContent, build nodes with the DOM API, or sanitize with "
+        "DOMPurify before assigning HTML."
+    )
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, TsFacts):
+            return
+        code_text = parsed.facts.code_text
+        for match in _HTML_SINK_ASSIGN.finditer(code_text):
+            end = _expression_end(code_text, match.end())
+            yield from self._report_if_dynamic(parsed, match.start(), (match.end(), end))
+        for match in _DANGEROUSLY_SET.finditer(code_text):
+            end = _expression_end(code_text, match.end())
+            yield from self._report_if_dynamic(parsed, match.start(), (match.end(), end))
+        for spec in (_HTML_SINK_CALL, _DOCUMENT_WRITE):
+            for finding in dynamic_call_findings(
+                self.rule_id, parsed, spec, self._message, self._remediation
+            ):
+                yield downgrade_in_tests(parsed, finding)
+
+    def _report_if_dynamic(
+        self, parsed: ParsedFile, anchor: int, span: tuple[int, int]
+    ) -> Iterable[Finding]:
+        expression = parsed.source.content[span[0] : span[1]]
+        if _SANITIZED.match(expression):
+            return
+        if classify_argument(parsed, span, TYPESCRIPT_SQL.interpolates).kind != "dynamic":
+            return
+        yield security_finding(
+            self.rule_id,
+            parsed,
+            anchor,
+            self._message,
+            self._remediation,
+            confidence="medium",
+            in_tests="note",
+        )
+
+
+def _expression_end(code_text: str, start: int) -> int:
+    """Offset where the expression starting at ``start`` ends: ``;``, ``}`` or
+    a newline at depth 0."""
+    depth = 0
+    for index in range(start, len(code_text)):
+        char = code_text[index]
+        if char in "([{":
+            depth += 1
+        elif char in ")]}":
+            if depth == 0:
+                return index
+            depth -= 1
+        elif depth == 0 and char in ";\n":
+            return index
+    return len(code_text)
+
+
+class TsTlsVerificationDisabledRule:
+    """Detect ``rejectUnauthorized: false`` and ``NODE_TLS_REJECT_UNAUTHORIZED = '0'``."""
+
+    rule_id = "TS-SEC-004"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, TsFacts):
+            return
+        code_text = parsed.facts.code_text
+        for match in _TS_TLS_DISABLED.finditer(code_text):
+            if match.group().lstrip().startswith("NODE_TLS"):
+                end = _expression_end(code_text, match.end())
+                argument = classify_argument(parsed, (match.end(), end))
+                if argument.kind != "literal" or argument.text != "0":
+                    continue
+            yield security_finding(
+                self.rule_id,
+                parsed,
+                match.start(),
+                "TLS certificate verification is disabled (CWE-295).",
+                "Keep rejectUnauthorized on; pass a private CA through the ca option.",
+                in_tests="note",
+            )
+
+
 class TypeScriptRulePack(RegexRulePackBase):
     """Run the bounded built-in TypeScript/JavaScript pilot rules."""
 
     rule_pack_id = TS_RULE_PACK_ID
     language_id = "typescript"
-    ruleset_version = "1.1.0"
+    ruleset_version = "1.2.0"
     plugin_api_version = PLUGIN_API_VERSION
 
     def __init__(self) -> None:
@@ -544,6 +875,10 @@ class TypeScriptRulePack(RegexRulePackBase):
             TsBlockingInAsyncRule(),
             TsUnexplainedSuppressionRule(),
             TsNonNullDensityRule(),
+            TsDynamicCodeExecutionRule(),
+            TsShellCommandRule(),
+            TsHtmlInjectionSinkRule(),
+            TsTlsVerificationDisabledRule(),
         )
 
 
@@ -613,18 +948,19 @@ class TsPackageProvider:
             project.parsed_files,
         )
         manifests = {
-            directory: _load_manifest(project.root, directory)
-            for directory in manifest_dirs
+            directory: _load_manifest(project.root, directory) for directory in manifest_dirs
         }
         findings: list[Finding] = []
         errors = 0
         for directory in manifest_dirs:
             if manifests[directory]["invalid"]:
                 errors += 1
-                findings.append(_manifest_finding(
-                    _manifest_report_path(directory, project.redact_paths),
-                    _manifest_identity_path(directory),
-                ))
+                findings.append(
+                    _manifest_finding(
+                        _manifest_report_path(directory, project.redact_paths),
+                        _manifest_identity_path(directory),
+                    )
+                )
 
         undeclared = _undeclared_by_manifest(
             project.parsed_files,
@@ -637,38 +973,31 @@ class TsPackageProvider:
             )
             identity = _manifest_identity_path(directory)
             for module, example in undeclared[directory]:
-                findings.append(_undeclared_finding(
-                    module,
-                    example,
-                    report_path,
-                    identity,
-                ))
+                findings.append(
+                    _undeclared_finding(
+                        module,
+                        example,
+                        report_path,
+                        identity,
+                    )
+                )
 
         root_manifest = manifests.get("")
         payload = {
             "manifest_present": root_manifest is not None,
             "name": root_manifest["name"] if root_manifest else None,
-            "declared_dependencies": (
-                sorted(root_manifest["declared"]) if root_manifest else []
+            "declared_dependencies": (sorted(root_manifest["declared"]) if root_manifest else []),
+            "workspaces": (root_manifest["workspaces"] if root_manifest else False),
+            "undeclared_imports": sorted(
+                {module for entries in undeclared.values() for module, _ in entries}
             ),
-            "workspaces": (
-                root_manifest["workspaces"] if root_manifest else False
-            ),
-            "undeclared_imports": sorted({
-                module
-                for entries in undeclared.values()
-                for module, _ in entries
-            }),
             "manifests": [
                 {
                     "path": _manifest_identity_path(directory),
                     "name": manifests[directory]["name"],
                     "workspaces": manifests[directory]["workspaces"],
                     "invalid": manifests[directory]["invalid"],
-                    "undeclared_imports": [
-                        module
-                        for module, _ in undeclared.get(directory, [])
-                    ],
+                    "undeclared_imports": [module for module, _ in undeclared.get(directory, [])],
                 }
                 for directory in manifest_dirs
             ],
@@ -754,11 +1083,7 @@ def _manifest_identity_path(directory: str) -> str:
 
 
 def _manifest_report_path(directory: str, redact_paths: bool) -> str:
-    return (
-        "package.json"
-        if redact_paths
-        else _manifest_identity_path(directory)
-    )
+    return "package.json" if redact_paths else _manifest_identity_path(directory)
 
 
 def _undeclared_by_manifest(
@@ -787,29 +1112,24 @@ def _undeclared_by_manifest(
                     module,
                     parsed.source.display_path,
                 )
-    return {
-        directory: sorted(modules.items())
-        for directory, modules in first_seen.items()
-    }
+    return {directory: sorted(modules.items()) for directory, modules in first_seen.items()}
 
 
 def _declared_dependencies(manifest: dict) -> set[str]:
     declared: set[str] = set()
     for key in (
-        "dependencies", "devDependencies",
-        "peerDependencies", "optionalDependencies",
+        "dependencies",
+        "devDependencies",
+        "peerDependencies",
+        "optionalDependencies",
     ):
         section = manifest.get(key)
         if isinstance(section, dict):
-            declared.update(
-                name for name in section if isinstance(name, str)
-            )
+            declared.update(name for name in section if isinstance(name, str))
     return declared
 
 
-_NPM_PACKAGE_NAME = re.compile(
-    r"^(?:@[a-z0-9~-][a-z0-9._~-]*/)?[a-z0-9~-][a-z0-9._~-]*$"
-)
+_NPM_PACKAGE_NAME = re.compile(r"^(?:@[a-z0-9~-][a-z0-9._~-]*/)?[a-z0-9~-][a-z0-9._~-]*$")
 
 
 def _bare_module(specifier: str) -> str | None:
@@ -839,9 +1159,7 @@ def _manifest_finding(report_path: str, identity_path: str) -> Finding:
         category="package-health",
         severity="error",
         confidence="high",
-        message=(
-            f"{identity_path} cannot be read as a valid JSON object."
-        ),
+        message=(f"{identity_path} cannot be read as a valid JSON object."),
         location=Location(
             report_path,
             1,
@@ -873,9 +1191,7 @@ def _undeclared_finding(
             1,
             identity_path=identity_path,
         ),
-        remediation=(
-            "Declare the dependency in package.json or remove the import."
-        ),
+        remediation=("Declare the dependency in package.json or remove the import."),
     )
 
 

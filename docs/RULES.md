@@ -880,3 +880,88 @@ reported; item-scoped `#[allow(dead_code)]` and narrow lints
 #[allow(dead_code)]
 fn kept_for_ffi_layout() {}
 ```
+
+# Security rules (`*-SEC-*`)
+
+Added in 3.2.0. Every rule fires on a call shape or a literal the lexer can
+see — never on where a value came from. That is the honest boundary for a
+bounded lexer: `system(cmd)` with a non-literal `cmd` is reportable; "user
+input reaches `open()`" is not (that needs taint tracking, which Semgrep and
+CodeQL own). Dependency vulnerabilities are also out of scope: they need a
+database, so either network egress or a stale bundled copy, and this tool
+is zero-egress by design — use `pip-audit`, `osv-scanner` or Dependabot.
+
+Every security rule:
+
+* has category `security` and default severity `warning`, so an existing
+  `--fail-on error` gate does not start failing on upgrade;
+* is anchored to one or more CWE identifiers and carries a SARIF
+  `security-severity` (CVSS-like), rendered as `properties.security-severity`
+  and `properties.tags: ["security", "external/cwe/cwe-NNN"]` on the rule
+  descriptor. GitHub code scanning classifies these as security alerts and
+  ranks them by that number. The eight dynamic-SQL rules (`PY-COR-007`,
+  `*-COR-002`) keep their identifiers but are tagged `CWE-89` / `8.8` too;
+* documents its `not_when` conditions (`explain_rule`), including whether a
+  conventional test path downgrades the finding to `note` — TLS-off and
+  trust-all fixtures are the norm in tests, shell and `eval` are not;
+* can be suppressed on its line with a reason, in **every** language:
+
+```go
+cfg := &tls.Config{InsecureSkipVerify: true} // cqa: ignore=GO-SEC-001 reason="local test proxy"
+```
+
+`//`, `#`, `/* */` and `--` comments are recognised; a directive with a
+blank reason, or naming a different rule, does not suppress. (Python has had
+this directive since 2.x; 3.2.0 extends it to the other seven languages for
+all rules, not only security.)
+
+Calibration: on the 24-project corpus plus four of the author's repositories
+the family produced 94 findings (46 warnings, 48 test-path notes), each
+traced to source; two false-positive classes found there (a TypeScript
+interface method literally named `eval`, C adjacent-literal concatenation
+around `#ifdef`) were fixed before release and are locked by tests. Scores
+did not move — findings are reported, never scored.
+
+| Rule | Fires on | CWE | sec-sev | Test path |
+|---|---|---|---|---|
+| PY-SEC-001 | `pickle`/`marshal`/`shelve`/`dill` loads; `yaml.load` without `SafeLoader`/`CSafeLoader`/`BaseLoader`; `yaml.unsafe_load` | 502 | 8.8 | note |
+| PY-SEC-002 | `subprocess.*(cmd, shell=True)`, `os.system(cmd)`, `os.popen(cmd)` with non-literal `cmd` | 78 | 8.8 | warning |
+| PY-SEC-003 | bare `eval(x)` / `exec(x)` with non-literal `x` (`ast.literal_eval`, `df.eval` never) | 95 | 8.8 | warning |
+| PY-SEC-004 | `verify=False`, `ssl._create_unverified_context()`, `CERT_NONE` in `cert_reqs`/`verify_mode`, `check_hostname = False` | 295 | 7.4 | note |
+| PY-SEC-005 | `random.*` bound to a secret-shaped name (`token`, `secret`, `password`, `nonce`, `salt`, `otp`, `api_key`, `session_id`, `csrf`, …); `SystemRandom`/`secrets` never | 330 | 5.9 | warning |
+| GO-SEC-001 | `InsecureSkipVerify: true` | 295 | 7.4 | note |
+| GO-SEC-002 | `exec.Command("sh"\|"bash"\|"cmd", "-c", x)` / `CommandContext` with non-literal `x` | 78 | 8.8 | warning |
+| GO-SEC-003 | `math/rand` (import-checked) bound to a secret-shaped name | 338 | 5.9 | warning |
+| JAVA-SEC-001 / KT-SEC-001 | `new ObjectInputStream(`, `.readObject()`, `XMLDecoder` | 502 | 8.8 | note |
+| JAVA-SEC-002 / KT-SEC-002 | `Runtime.getRuntime().exec(x)`, `ProcessBuilder("sh", "-c", x)` with non-literal `x` | 78 | 8.8 | warning |
+| JAVA-SEC-003 / KT-SEC-003 | empty `checkServerTrusted`/`checkClientTrusted`, `verify(..., SSLSession) { return true; }`, `NoopHostnameVerifier`, `ALLOW_ALL_HOSTNAME_VERIFIER`, `TrustAllStrategy` | 295 | 7.4 | note |
+| CS-SEC-001 | `BinaryFormatter`, `NetDataContractSerializer`, `LosFormatter`, `SoapFormatter`, `ObjectStateFormatter`, Newtonsoft `TypeNameHandling.All/Auto/Objects/Arrays` | 502 | 8.8 | note |
+| CS-SEC-002 | `Process.Start("cmd.exe"\|"sh", x)` / `new ProcessStartInfo(shell, x)` with non-literal or interpolated `x` | 78 | 8.8 | warning |
+| CS-SEC-003 | certificate validation callback `=> true` / `delegate { return true; }`, `DangerousAcceptAnyServerCertificateValidator` | 295 | 7.4 | note |
+| TS-SEC-001 | `eval(x)`, `new Function(..., x)` with non-literal `x`; declarations named `eval` are skipped | 95 | 8.8 | warning |
+| TS-SEC-002 | `child_process` `exec`/`execSync` with template/concat command; `spawn`/`execFile` with `shell: true`. Binding resolved from the import, so `RegExp.exec` is never confused with it | 78 | 8.8 | warning |
+| TS-SEC-003 | `innerHTML`/`outerHTML` `=`/`+=`, `insertAdjacentHTML`, `document.write`, `dangerouslySetInnerHTML={{__html: x}}` with non-literal `x`; a leading `DOMPurify.sanitize(`/`sanitizeHtml(`/`*.sanitize(` is silent | 79 | 6.1 | note |
+| TS-SEC-004 | `rejectUnauthorized: false`, `NODE_TLS_REJECT_UNAUTHORIZED = "0"` | 295 | 7.4 | note |
+| C-SEC-001 | calls to `gets`, `strcpy`, `strcat`, `stpcpy`, `sprintf`, `vsprintf`, `wcscpy`, `wcscat`; declarations, `#define`s, member calls and `my_strcpy` are not | 120, 676 | 7.5 | warning |
+| C-SEC-002 | `system(x)` / `popen(x, …)` with non-literal `x` | 78 | 8.8 | warning |
+| C-SEC-003 | `printf`-family / `syslog` whose format is a non-literal **and** the last argument (`-Wformat-security`); ALL_CAPS macros are treated as literals | 134 | 7.5 | warning |
+| RS-SEC-001 | `unsafe {`, `unsafe fn`, `unsafe impl` with no `// SAFETY:` (or `# Safety` doc) in the comment block above, on the line, or first inside the block — clippy `undocumented_unsafe_blocks` | 119 | 5.9 | note |
+| RS-SEC-002 | `Command::new("sh")` … `.arg("-c").arg(x)` / `.args(["-c", x])` with non-literal `x` | 78 | 8.8 | warning |
+| RS-SEC-003 | reqwest `danger_accept_invalid_certs(true)` / `danger_accept_invalid_hostnames(true)`, rustls `.dangerous()` | 295 | 7.4 | note |
+
+Deliberately not rules: weak hashing (`md5` for a cache key is fine — the
+rule is context-blind and is Bandit's worst false positive), hardcoded
+secrets (gitleaks owns it, and literal blanking makes this lexer
+structurally poor at it), path traversal / open redirect / SSRF (taint).
+
+```python
+# Non-compliant
+subprocess.run(f"convert {path} out.png", shell=True)
+data = yaml.load(text)
+token = random.randint(0, 2**64)
+
+# Compliant
+subprocess.run(["convert", path, "out.png"])
+data = yaml.safe_load(text)
+token = secrets.token_urlsafe(32)
+```
