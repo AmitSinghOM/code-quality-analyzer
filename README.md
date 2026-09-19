@@ -227,8 +227,8 @@ python3 -m pip install --upgrade cqa-analyzer
 python3 -m pip install --upgrade 'cqa-analyzer[deep]'   # with the optional extra
 
 # a specific version
-pipx install --force 'cqa-analyzer==3.2.0'
-python3 -m pip install 'cqa-analyzer==3.2.0'
+pipx install --force 'cqa-analyzer==3.2.1'
+python3 -m pip install 'cqa-analyzer==3.2.1'
 ```
 
 Check with `code-quality-analyzer --version`. If the number does not
@@ -380,6 +380,17 @@ count) and `unparsed_examples` (up to five project-relative paths, redacted
 or tokenized like every other path in the report). `-v` prints the same
 paths under the parse-failure warning so a `parse_failures` verdict is
 actionable.
+
+Minified and bundled assets are left out on purpose (3.2.1): by name
+(`*.min.js`, `*-min.js`, `*.bundle.js`, `*.pack.js`, `*.umd.js` and their
+`.mjs`/`.cjs`/`.ts` forms) or by content (a 5 000-character line in a file
+whose lines average 500 characters or more, or that has at most ten lines).
+Their findings are real shapes nobody will fix in place, and a 40 KB line
+makes every column number meaningless. They are accounted under
+`scan_health.excluded_generated` / `excluded_generated_examples`, separately
+from skips, so a vendored bundle never marks the analysis non-authoritative.
+The name rule is mirrored by the MCP `preview` tool; the content rule needs
+the bytes and is decided at read time.
 
 Filters are project-relative, exclusion wins, and filtered files do not consume
 candidate or file-limit accounting. The root `.gitignore` is respected by

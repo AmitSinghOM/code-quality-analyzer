@@ -449,13 +449,14 @@ The `*-SEC-*` family (27 rules, `docs/RULES.md`) shipped with a stated
 boundary: call shapes and literals only. Items that the 3.2.0 calibration run
 surfaced but that belong to other layers:
 
-### Minified / vendored asset exclusion
+### Minified / vendored asset exclusion (✅ 3.2.1)
 
 ioredis's `docs/assets/main.js` (a 42 KB single-line typedoc bundle) produced
-four genuine-but-unactionable `TS-SEC-003` hits. The right fix is a
-scanner-level rule — skip files whose longest line exceeds a bound, or whose
-name matches `*.min.js` / `*.bundle.js` — recorded in `scan_health` like
-other pruning, so every rule benefits and none has to special-case it.
+four genuine-but-unactionable `TS-SEC-003` hits. Shipped in 3.2.1 as a
+discovery-level rule — name (`*.min.js`, `*.bundle.js`, …) or content (a
+5 000-character line in a file of long lines) — recorded in
+`scan_health.excluded_generated` separately from skips so authority is
+unaffected, and mirrored (name half) by the MCP `preview` tool.
 
 ### Rules with no corpus evidence yet
 

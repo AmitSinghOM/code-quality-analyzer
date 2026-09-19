@@ -4,6 +4,25 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 3.2.1 - 2026-09-19
+
+Minified and bundled assets are left out of discovery. The 3.2.0 calibration
+run produced four genuine-but-unactionable `TS-SEC-003` findings on ioredis's
+`docs/assets/main.js` — a 42 KB single-line typedoc bundle with a plain `.js`
+name. Discovery now excludes such files by name (`*.min.js`, `*-min.js`,
+`*.bundle.js`, `*.pack.js`, `*.umd.js`, plus `.mjs`/`.cjs`/`.ts` forms) or by
+content (a line of 5 000+ characters in a file whose lines average 500+, or
+with at most ten lines; one long generated table inside ordinary code is
+kept). Exclusions are accounted under `scan_health.excluded_generated` and
+`excluded_generated_examples` (redacted/tokenized like every other path,
+listed by `-v`), *separately from skips*, so a vendored bundle does not make
+the analysis non-authoritative. The MCP `preview` tool and `plan_file`
+mirror the name rule and document that the content rule is a read-time
+decision. On a fresh ioredis clone: three bundles excluded, the four
+findings gone, score and authority unchanged. `scan_health` is an open
+object, so the report schema stays 1.12.0; ruleset 2.25.0 unchanged.
+Roadmap item 14 (minified exclusion) closed.
+
 ## 3.2.0 - 2026-09-19
 
 Security rule family. Twenty-seven `*-SEC-*` rules across all eight

@@ -10,11 +10,15 @@ Guarantees:
   - Never reads a file larger than ``max_file_size``.
   - Caps the total number of files considered.
   - Records *why* a file was skipped instead of silently dropping it.
+  - Leaves minified/bundled assets out (``generated_reason``) and records
+    them separately from skips, so a vendored bundle neither produces
+    unactionable findings nor marks the analysis non-authoritative.
 """
 
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,21 +27,57 @@ from .config import AnalysisConfig, path_is_selected
 from .safe_io import SafeReadError, read_bounded_text
 
 # Directories that never contain first-party source worth rating.
-SKIP_DIRS = frozenset({
-    '.git', '.hg', '.svn',
-    '__pycache__', '.mypy_cache', '.pytest_cache', '.ruff_cache', '.tox',
-    '.venv', 'venv', 'env', '.eggs', 'site-packages', 'node_modules',
-    'dist', 'build', '.idea', '.vscode',
-    '.next', '.nuxt', '.turbo', '.svelte-kit', 'out', 'coverage',
-    'bower_components', '.yarn', '.pnpm-store',
-    'target', 'obj', '.gradle', '.mvn', 'TestResults',
-    # Vendored third-party code is not the project's own quality signal
-    # (staff review C4): Go `vendor/`, C/C++ `third_party/`, CocoaPods,
-    # Terraform providers, Bazel output symlinks.
-    'vendor', 'third_party', 'thirdparty', 'external', 'Pods', '.terraform',
-    'bazel-bin', 'bazel-out', 'bazel-testlogs', '.kotlin', 'cmake-build-debug',
-    'cmake-build-release',
-})
+SKIP_DIRS = frozenset(
+    {
+        ".git",
+        ".hg",
+        ".svn",
+        "__pycache__",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".tox",
+        ".venv",
+        "venv",
+        "env",
+        ".eggs",
+        "site-packages",
+        "node_modules",
+        "dist",
+        "build",
+        ".idea",
+        ".vscode",
+        ".next",
+        ".nuxt",
+        ".turbo",
+        ".svelte-kit",
+        "out",
+        "coverage",
+        "bower_components",
+        ".yarn",
+        ".pnpm-store",
+        "target",
+        "obj",
+        ".gradle",
+        ".mvn",
+        "TestResults",
+        # Vendored third-party code is not the project's own quality signal
+        # (staff review C4): Go `vendor/`, C/C++ `third_party/`, CocoaPods,
+        # Terraform providers, Bazel output symlinks.
+        "vendor",
+        "third_party",
+        "thirdparty",
+        "external",
+        "Pods",
+        ".terraform",
+        "bazel-bin",
+        "bazel-out",
+        "bazel-testlogs",
+        ".kotlin",
+        "cmake-build-debug",
+        "cmake-build-release",
+    }
+)
 
 # 2 MB. Anything bigger is generated, vendored, or a data blob.
 DEFAULT_MAX_FILE_SIZE = 2 * 1024 * 1024
@@ -66,11 +106,25 @@ class DiscoveryReport:
     bytes_read: int = 0
     pruned_directories: int = 0
     pruned_examples: list[str] = field(default_factory=list)
+    excluded_generated: dict[str, int] = field(default_factory=dict)
+    excluded_generated_examples: dict[str, list[str]] = field(default_factory=dict)
 
     def prune(self, name: str) -> None:
         self.pruned_directories += 1
         if len(self.pruned_examples) < 5 and name not in self.pruned_examples:
             self.pruned_examples.append(name)
+
+    def exclude_generated(self, reason: str, path: Path) -> None:
+        """Record a minified/bundled file left out on purpose.
+
+        Deliberate exclusions are accounted like pruned directories, not like
+        skips: they do not make the analysis non-authoritative, because a
+        vendored bundle is not a coverage gap in the project's own code.
+        """
+        self.excluded_generated[reason] = self.excluded_generated.get(reason, 0) + 1
+        examples = self.excluded_generated_examples.setdefault(reason, [])
+        if len(examples) < 3:
+            examples.append(self._safe_path(path))
 
     def truncate(self, reason: str) -> None:
         self.truncated = True
@@ -81,12 +135,14 @@ class DiscoveryReport:
         self.skipped[reason] = self.skipped.get(reason, 0) + 1
         examples = self.skipped_examples.setdefault(reason, [])
         if len(examples) < 3:
-            safe_path = (
-                display_path(path, self.root, self.redact_paths)
-                if self.root is not None
-                else Path(path).name
-            )
-            examples.append(safe_path)
+            examples.append(self._safe_path(path))
+
+    def _safe_path(self, path: Path) -> str:
+        return (
+            display_path(path, self.root, self.redact_paths)
+            if self.root is not None
+            else Path(path).name
+        )
 
     @property
     def total_skipped(self) -> int:
@@ -104,7 +160,37 @@ class DiscoveryReport:
             "bytes_read": self.bytes_read,
             "pruned_directories": self.pruned_directories,
             "pruned_examples": list(self.pruned_examples),
+            "excluded_generated": dict(sorted(self.excluded_generated.items())),
+            "excluded_generated_examples": self.excluded_generated_examples,
         }
+
+
+# Minified or bundled assets are not source anyone will fix in place: their
+# findings are real shapes but unactionable, and a 40 KB line makes column
+# numbers meaningless. Name and content are both consulted, because the
+# case that motivated this (a typedoc bundle under ``docs/assets/``) has a
+# plain ``.js`` name.
+MINIFIED_NAME = re.compile(r"(?:[.-]min|\.bundle|\.pack|\.umd)\.[cm]?[jt]sx?$", re.IGNORECASE)
+MINIFIED_LINE_LENGTH = 5_000
+"""A line at least this long marks a file as a minification candidate."""
+MINIFIED_AVERAGE_LINE_LENGTH = 500
+"""...and the file's average line must also be this long (or the file has at
+most ten lines), so one generated data table inside ordinary code does not
+disqualify the whole file."""
+MINIFIED_FEW_LINES = 10
+
+
+def generated_reason(name: str, text: str) -> str | None:
+    """``"minified_name"`` / ``"minified_content"`` when ``text`` should not be
+    analyzed as hand-written source, else ``None``."""
+    if MINIFIED_NAME.search(name):
+        return "minified_name"
+    lines = text.splitlines() or [""]
+    if max(map(len, lines)) < MINIFIED_LINE_LENGTH:
+        return None
+    if len(lines) <= MINIFIED_FEW_LINES or len(text) / len(lines) >= MINIFIED_AVERAGE_LINE_LENGTH:
+        return "minified_content"
+    return None
 
 
 def iter_source_files(
@@ -124,9 +210,7 @@ def iter_source_files(
         report.root = root
 
     normalized = tuple(
-        extension.lower()
-        if extension.startswith(".")
-        else f".{extension.lower()}"
+        extension.lower() if extension.startswith(".") else f".{extension.lower()}"
         for extension in extensions
     )
     for path in _candidate_paths(
@@ -138,6 +222,10 @@ def iter_source_files(
     ):
         text = read_source(path, root, max_file_size, report)
         if text is None:
+            continue
+        generated = generated_reason(path.name, text)
+        if generated is not None:
+            report.exclude_generated(generated, path)
             continue
         encoded = len(text.encode("utf-8", "surrogatepass"))
         if report.bytes_read + encoded > max_total_bytes:

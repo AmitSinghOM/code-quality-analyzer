@@ -969,6 +969,22 @@ def _print_scan_health(scan_health, scanner):
             "[yellow]![/yellow] File limit reached — results cover "
             "part of the project only (raise --max-files)"
         )
+    _print_excluded_generated(scan_health)
+
+
+def _print_excluded_generated(scan_health):
+    excluded = scan_health.get("excluded_generated", {})
+    if not excluded:
+        return
+    total = sum(excluded.values())
+    reasons = ", ".join(f"{reason}={count}" for reason, count in excluded.items())
+    console.print(
+        f"[dim]i[/dim] {total} minified/bundled file(s) left out ({_safe(reasons)}); "
+        "they do not affect authority"
+    )
+    for paths in scan_health.get("excluded_generated_examples", {}).values():
+        for path in paths:
+            console.print(f"    - {_safe(path)}")
 
 
 def _print_baseline_summary(summary):
