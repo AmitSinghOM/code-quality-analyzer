@@ -22,8 +22,17 @@ from ..registry import PluginRegistry
 from ..safe_io import SafeReadError, read_bounded_text
 from ..signals import FileSignals, pattern_is_present
 from ._parity import block_end, downgrade_in_tests, strip_nested_blocks
+from ._security import (
+    SHELL_BINARIES,
+    SHELL_COMMAND_FLAGS,
+    DynamicCall,
+    dynamic_call_findings,
+    marker_findings,
+    secret_random_findings,
+)
 from ._shared import line_column
 from ._sql import GO_SQL, dynamic_sql_findings
+from ._suppressions import apply_comment_suppressions
 
 GO_ADAPTER_VERSION = "1.1.0"
 GO_CACHE_CODEC_VERSION = "1.1.0"
@@ -422,6 +431,89 @@ class GoDeferInLoopRule:
                 )
 
 
+# ---- security (GO-SEC) -----------------------------------------------------
+
+_GO_INSECURE_TLS = re.compile(r"\bInsecureSkipVerify\s*:\s*true\b")
+# ``exec.Command("sh", "-c", cmd)`` / ``exec.CommandContext(ctx, "sh", "-c", cmd)``.
+_GO_SHELL_COMMAND = DynamicCall(
+    call=re.compile(r"\bexec\.Command(?=\()"),
+    dynamic=2,
+    pinned={0: SHELL_BINARIES, 1: SHELL_COMMAND_FLAGS},
+)
+_GO_SHELL_COMMAND_CONTEXT = DynamicCall(
+    call=re.compile(r"\bexec\.CommandContext(?=\()"),
+    dynamic=3,
+    pinned={1: SHELL_BINARIES, 2: SHELL_COMMAND_FLAGS},
+)
+_GO_ASSIGNMENT = re.compile(r"(?m)(?:^|[{;])\s*(?:var\s+)?(?P<name>[A-Za-z_]\w*)\s*(?::=|=)\s*")
+_MATH_RAND_PATHS = frozenset({"math/rand", "math/rand/v2"})
+
+
+class GoInsecureTlsRule:
+    """Detect ``tls.Config{InsecureSkipVerify: true}``."""
+
+    rule_id = "GO-SEC-001"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, GoFacts):
+            return
+        yield from marker_findings(
+            self.rule_id,
+            parsed,
+            _GO_INSECURE_TLS,
+            "TLS certificate verification is disabled (InsecureSkipVerify: true) (CWE-295).",
+            "Verify certificates; load a private CA into tls.Config.RootCAs instead.",
+            in_tests="note",
+        )
+
+
+class GoShellCommandRule:
+    """Detect ``exec.Command("sh", "-c", <runtime string>)``."""
+
+    rule_id = "GO-SEC-002"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, GoFacts):
+            return
+        for spec in (_GO_SHELL_COMMAND, _GO_SHELL_COMMAND_CONTEXT):
+            yield from dynamic_call_findings(
+                self.rule_id,
+                parsed,
+                spec,
+                "A shell runs a command string assembled at runtime (CWE-78).",
+                "Call the binary directly with exec.Command(name, args...) so "
+                "arguments are never re-parsed by a shell.",
+            )
+
+
+class GoInsecureRandomForSecretRule:
+    """Detect ``math/rand`` output bound to a secret-shaped name."""
+
+    rule_id = "GO-SEC-003"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, GoFacts):
+            return
+        qualifiers = {
+            imported.local_name or "rand"
+            for imported in parsed.facts.imports
+            if imported.path in _MATH_RAND_PATHS
+        }
+        if not qualifiers or "_" in qualifiers or "." in qualifiers:
+            return
+        random_call = re.compile(
+            r"\b(?:" + "|".join(re.escape(q) for q in sorted(qualifiers)) + r")\.\w+\s*\("
+        )
+        yield from secret_random_findings(
+            self.rule_id,
+            parsed,
+            random_call,
+            assignment=_GO_ASSIGNMENT,
+            message="A secret-shaped value is produced by math/rand (CWE-338).",
+            remediation="Use crypto/rand for tokens, keys, nonces and passwords.",
+        )
+
+
 class GoPackageGraphProvider:
     """Build a passive multi-file Go package graph from shared facts."""
 
@@ -501,7 +593,7 @@ class GoRulePack:
 
     rule_pack_id = GO_RULE_PACK_ID
     language_id = "go"
-    ruleset_version = "2.6.0"
+    ruleset_version = "2.7.0"
     plugin_api_version = PLUGIN_API_VERSION
 
     def __init__(self) -> None:
@@ -510,16 +602,19 @@ class GoRulePack:
             GoDynamicSqlRule(),
             GoUncheckedTypeAssertionRule(),
             GoDeferInLoopRule(),
+            GoInsecureTlsRule(),
+            GoShellCommandRule(),
+            GoInsecureRandomForSecretRule(),
         )
 
     def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
         if not parsed.complete:
             return ()
-        findings = [
+        findings = apply_comment_suppressions(parsed, (
             finding
             for rule in self.rules
             for finding in rule.evaluate(parsed)
-        ]
+        ))
         return tuple(sorted(
             findings,
             key=lambda finding: (

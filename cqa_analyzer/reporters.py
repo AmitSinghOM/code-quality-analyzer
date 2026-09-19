@@ -133,6 +133,18 @@ def _sarif_properties(run: SarifRun) -> dict:
 
 
 def _rule_descriptor(metadata: RuleMetadata) -> dict:
+    properties: dict[str, object] = {
+        "category": metadata.category,
+        "confidence": metadata.confidence,
+        "defaultSeverity": metadata.default_severity,
+        "language": metadata.language,
+    }
+    if metadata.cwe:
+        # GitHub code scanning classifies a result as a security alert from
+        # the ``security`` tag and ranks it by ``security-severity``; the
+        # ``external/cwe/cwe-NNN`` tag form is the one it links to CWE.
+        properties["security-severity"] = metadata.security_severity
+        properties["tags"] = ["security", *(f"external/cwe/{c.lower()}" for c in metadata.cwe)]
     return {
         "defaultConfiguration": {
             "level": _sarif_level(metadata.default_severity),
@@ -141,12 +153,7 @@ def _rule_descriptor(metadata: RuleMetadata) -> dict:
         "help": {"text": metadata.remediation},
         "id": metadata.rule_id,
         "name": metadata.name,
-        "properties": {
-            "category": metadata.category,
-            "confidence": metadata.confidence,
-            "defaultSeverity": metadata.default_severity,
-            "language": metadata.language,
-        },
+        "properties": properties,
         "shortDescription": {"text": metadata.title},
     }
 

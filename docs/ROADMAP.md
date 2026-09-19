@@ -442,3 +442,31 @@ files, finish the file in flight, and emit the normal report with the
 skipped files listed under `scan_health` as `skipped(deadline)` so the
 partial result is never mistaken for a full one. Exit code semantics: a
 deadline-truncated scan must fail `--strict`.
+
+## 14. Security family follow-ups (from 3.2.0)
+
+The `*-SEC-*` family (27 rules, `docs/RULES.md`) shipped with a stated
+boundary: call shapes and literals only. Items that the 3.2.0 calibration run
+surfaced but that belong to other layers:
+
+### Minified / vendored asset exclusion
+
+ioredis's `docs/assets/main.js` (a 42 KB single-line typedoc bundle) produced
+four genuine-but-unactionable `TS-SEC-003` hits. The right fix is a
+scanner-level rule — skip files whose longest line exceeds a bound, or whose
+name matches `*.min.js` / `*.bundle.js` — recorded in `scan_health` like
+other pruning, so every rule benefits and none has to special-case it.
+
+### Rules with no corpus evidence yet
+
+`PY-SEC-002/003/005`, `GO-SEC-002/003`, `JAVA-SEC-002`, `KT-SEC-002`,
+`CS-SEC-*`, `TS-SEC-001/002`, `C-SEC-002`, `RS-SEC-002` fired zero times on
+the 24-project corpus, so their precision is proven on fixtures only. Add a
+security-heavy corpus row per language (a CLI wrapper or deploy tool that
+legitimately shells out) before widening any of them.
+
+### Not planned
+
+Taint tracking, hardcoded-secret detection (gitleaks), dependency CVEs
+(pip-audit / osv-scanner), and weak-hash rules — see the boundary section of
+`docs/RULES.md` for why each is excluded.

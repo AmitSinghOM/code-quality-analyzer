@@ -30,8 +30,17 @@ from ._parity import (
     downgrade_in_tests,
     non_null_density_findings,
 )
+from ._security import dynamic_call_findings, marker_findings
 from ._sql import KOTLIN_SQL, dynamic_sql_findings
-from .java import JavaFacts, JavaPackageProvider
+from .java import (
+    JVM_PROCESS_BUILDER,
+    JVM_RUNTIME_EXEC,
+    JVM_SEC_MESSAGES,
+    JVM_TLS_DISABLED,
+    JVM_UNSAFE_DESERIALIZATION,
+    JavaFacts,
+    JavaPackageProvider,
+)
 
 KOTLIN_ADAPTER_VERSION = "1.0.0"
 KOTLIN_CACHE_CODEC_VERSION = "1.0.0"
@@ -449,12 +458,57 @@ class KotlinNonNullDensityRule:
             yield downgrade_in_tests(parsed, finding)
 
 
+# ---- security (KT-SEC) — JVM shapes shared with java.py ----------------------
+
+
+class KotlinUnsafeDeserializationRule:
+    """Detect ``ObjectInputStream`` / ``XMLDecoder`` / ``readObject()``."""
+
+    rule_id = "KT-SEC-001"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, KotlinFacts):
+            return
+        yield from marker_findings(
+            self.rule_id,
+            parsed,
+            JVM_UNSAFE_DESERIALIZATION,
+            *JVM_SEC_MESSAGES["deserialization"],
+            in_tests="note",
+        )
+
+
+class KotlinShellCommandRule:
+    """Detect ``Runtime.getRuntime().exec(cmd)`` / ``ProcessBuilder("sh", "-c", cmd)``."""
+
+    rule_id = "KT-SEC-002"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, KotlinFacts):
+            return
+        for spec in (JVM_RUNTIME_EXEC, JVM_PROCESS_BUILDER):
+            yield from dynamic_call_findings(self.rule_id, parsed, spec, *JVM_SEC_MESSAGES["shell"])
+
+
+class KotlinTlsVerificationDisabledRule:
+    """Detect trust-all managers and no-op hostname verifiers."""
+
+    rule_id = "KT-SEC-003"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, KotlinFacts):
+            return
+        yield from marker_findings(
+            self.rule_id, parsed, JVM_TLS_DISABLED, *JVM_SEC_MESSAGES["tls"], in_tests="note"
+        )
+
+
 class KotlinRulePack(RegexRulePackBase):
     """Run the bounded built-in Kotlin pilot rules."""
 
     rule_pack_id = KOTLIN_RULE_PACK_ID
     language_id = "kotlin"
-    ruleset_version = "1.1.0"
+    ruleset_version = "1.2.0"
     plugin_api_version = PLUGIN_API_VERSION
 
     def __init__(self) -> None:
@@ -464,6 +518,9 @@ class KotlinRulePack(RegexRulePackBase):
             KotlinBroadCatchRule(),
             KotlinBlockingInSuspendRule(),
             KotlinNonNullDensityRule(),
+            KotlinUnsafeDeserializationRule(),
+            KotlinShellCommandRule(),
+            KotlinTlsVerificationDisabledRule(),
         )
 
 

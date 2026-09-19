@@ -4,6 +4,76 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 3.2.0 - 2026-09-19
+
+Security rule family. Twenty-seven `*-SEC-*` rules across all eight
+languages for the defect classes a bounded lexer can report honestly — each
+fires on a call shape or a literal it can see, never on where a value came
+from. Taint tracking (Semgrep, CodeQL) and dependency-vulnerability scanning
+(needs a database, so egress) are explicitly out of scope and documented as
+such in `docs/RULES.md`. Ruleset 2.25.0; scoring policy and report schema
+unchanged — findings are reported, never scored, and the 29-project
+before/after run in `docs/reviews/2026-09-19-security-family-calibration.md`
+shows every external score unchanged to the decimal.
+
+Rules (CWE, SARIF `security-severity`):
+
+- Python `PY-SEC-001..005`: unsafe deserialization (pickle/marshal/shelve/dill,
+  `yaml.load` without a safe Loader; 502), shell command from a runtime
+  string (`shell=True`, `os.system`; 78), `eval`/`exec` of a runtime string
+  (95), TLS verification disabled (`verify=False`, unverified context,
+  `CERT_NONE`, `check_hostname=False`; 295), `random` for a secret-shaped name
+  (330).
+- Go `GO-SEC-001..003`: `InsecureSkipVerify: true` (295), `exec.Command("sh",
+  "-c", x)` (78), `math/rand` for a secret-shaped name (338).
+- Java/Kotlin `*-SEC-001..003`: `ObjectInputStream`/`readObject`/`XMLDecoder`
+  (502), `Runtime.exec(x)` / `ProcessBuilder("sh", "-c", x)` (78), trust-all
+  TrustManager / no-op HostnameVerifier (295).
+- C# `CS-SEC-001..003`: `BinaryFormatter` and friends, Newtonsoft
+  `TypeNameHandling` (502), `Process.Start(shell, x)` (78), certificate
+  callbacks returning `true` (295).
+- TypeScript `TS-SEC-001..004`: `eval` / `new Function` (95), `child_process`
+  exec with template or concatenated command, `shell: true` (78),
+  `innerHTML` / `insertAdjacentHTML` / `document.write` /
+  `dangerouslySetInnerHTML` sinks (79), `rejectUnauthorized: false` /
+  `NODE_TLS_REJECT_UNAUTHORIZED=0` (295). The `child_process` binding is
+  resolved from the import so `RegExp.prototype.exec` is never confused
+  with it.
+- C/C++ `C-SEC-001..003`: unbounded writes (`gets`, `strcpy`, `strcat`,
+  `sprintf`, …; 120/676), `system`/`popen` with a runtime string (78),
+  `printf`-family format from a runtime string as the last argument
+  (`-Wformat-security`; 134).
+- Rust `RS-SEC-001..003`: `unsafe` without a `SAFETY` comment (clippy
+  `undocumented_unsafe_blocks`; 119), `Command::new("sh").arg("-c").arg(x)`
+  (78), reqwest `danger_accept_invalid_*` / rustls `.dangerous()` (295).
+
+Behaviour shared by the family: category `security`, default severity
+`warning` (an existing `--fail-on error` gate does not start failing on
+upgrade); a conventional test path downgrades the fixture-shaped rules (TLS
+off, trust-all, deserialization, HTML sinks, `unsafe`) to `note`, never the
+shell/`eval` rules; every rule has `not_when` clauses for `explain_rule`.
+
+Cross-language suppression. The reason-required same-line directive Python
+has had since 2.x now works in every language and for every rule:
+`// cqa: ignore=GO-SEC-001 reason="local test proxy"` (`#`, `/* */` and
+`--` comments too). A blank reason or a different rule ID does not suppress.
+
+SARIF. Rule descriptors for CWE-anchored rules carry
+`properties.security-severity` and `properties.tags:
+["security", "external/cwe/cwe-NNN"]`, which is what GitHub code scanning
+uses to classify and rank security alerts. The eight dynamic-SQL rules
+(`PY-COR-007`, `*-COR-002`) keep their identifiers (deprecation promise) and
+gain `CWE-89` / `8.8`. `RuleMetadata` gains `cwe` and `security_severity`.
+
+Calibration discipline. New dev tool `scripts/findings_snapshot.py`
+(`snapshot` / `diff`) records per-rule findings and scores across the corpus
+so a rule release is judged by a mechanical before/after diff rather than
+by eye. On this release it caught two false-positive classes before they
+shipped — a TypeScript interface method literally named
+`eval(script: string, …)` (ioredis, 9 hits) and C adjacent-literal
+concatenation around `#ifdef` inside `fprintf` (jq) — both fixed and locked
+by tests. 84 new tests (795 total).
+
 ## 3.1.0 - 2026-09-14
 
 Delegate mode for the MCP server. A host agent that does its own review

@@ -57,10 +57,19 @@ See [`docs/PRIVACY.md`](docs/PRIVACY.md) for the exact data boundary.
 - **System Design** principles implemented in Python, Go,
   TypeScript/JavaScript, Java, Kotlin, C#, C/C++, and Rust
 - A compatibility **architecture signal score from 1-10**
+- A **security rule family** (`*-SEC-*`, 27 rules across all eight languages)
+  for the defect classes a lexer can see honestly — shell commands and
+  `eval` built from runtime strings, unsafe deserialization, disabled TLS
+  verification, non-cryptographic randomness for secrets, unbounded C buffer
+  writes, format-string sinks, undocumented Rust `unsafe` — each anchored to a
+  CWE and emitted with SARIF `security-severity` so code scanning ranks it as
+  a security alert. No taint tracking, no vulnerability database: those need a
+  data-flow engine or network egress, and both are out of scope by design.
 
 Reports render as text, versioned JSON, or SARIF 2.1.0, and gate CI through
 baselines, changed-line selection, and severity thresholds — all under the
-same privacy contract.
+same privacy contract. Any finding can be suppressed on its line, in every
+language, with a reason: `// cqa: ignore=GO-SEC-001 reason="local test proxy"`.
 
 ## Architecture Signal Score Scale
 
@@ -218,8 +227,8 @@ python3 -m pip install --upgrade cqa-analyzer
 python3 -m pip install --upgrade 'cqa-analyzer[deep]'   # with the optional extra
 
 # a specific version
-pipx install --force 'cqa-analyzer==3.1.0'
-python3 -m pip install 'cqa-analyzer==3.1.0'
+pipx install --force 'cqa-analyzer==3.2.0'
+python3 -m pip install 'cqa-analyzer==3.2.0'
 ```
 
 Check with `code-quality-analyzer --version`. If the number does not

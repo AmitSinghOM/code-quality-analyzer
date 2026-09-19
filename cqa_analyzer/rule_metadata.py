@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import MappingProxyType
 
 
@@ -24,6 +24,13 @@ class RuleMetadata:
     should not be reported onward. Describes what the detector actually does
     (path downgrades, literal blanking, thresholds), so a consumer can judge a
     finding's precision without reading the detector source."""
+    cwe: tuple[str, ...] = ()
+    """CWE identifiers (``"CWE-78"``) the rule is anchored to. Rendered as
+    SARIF ``external/cwe/cwe-78`` tags so code-scanning UIs classify the
+    finding as a security alert."""
+    security_severity: str | None = None
+    """SARIF ``security-severity`` (CVSS-like ``"0.0"``..``"10.0"``) for
+    security-anchored rules; ``None`` for quality rules."""
 
 
 def _rule(
@@ -698,6 +705,283 @@ _RULES = (
         "levels into named helpers.",
         language="rust",
     ),
+    # ---- 3.2.0: security family (*-SEC-*) ------------------------------------
+    _rule(
+        "PY-SEC-001",
+        "unsafe-deserialization",
+        "Unsafe deserialization of untrusted data",
+        "pickle/marshal/shelve/dill loads, or yaml.load without a safe Loader, can "
+        "instantiate arbitrary objects and run code from the payload.",
+        "security",
+        "warning",
+        "Deserialize with a format that cannot execute code (json, yaml.safe_load) "
+        "or restrict the loader.",
+    ),
+    _rule(
+        "PY-SEC-002",
+        "shell-command-from-runtime-string",
+        "Shell command assembled at runtime",
+        "subprocess.*(cmd, shell=True), os.system(cmd) or os.popen(cmd) with a "
+        "non-literal command lets a shell re-parse runtime data.",
+        "security",
+        "warning",
+        "Pass an argument list without shell=True; quote with shlex.quote if a "
+        "shell is unavoidable.",
+        confidence="medium",
+    ),
+    _rule(
+        "PY-SEC-003",
+        "dynamic-code-execution",
+        "eval/exec of a runtime string",
+        "eval() or exec() receives a value that is not a string literal.",
+        "security",
+        "warning",
+        "Use ast.literal_eval for data, a dispatch table for behaviour, or importlib "
+        "for module names.",
+    ),
+    _rule(
+        "PY-SEC-004",
+        "tls-verification-disabled",
+        "TLS certificate verification disabled",
+        "verify=False, ssl._create_unverified_context(), ssl.CERT_NONE or "
+        "check_hostname = False turns off peer authentication.",
+        "security",
+        "warning",
+        "Keep verification on; point verify= at a CA bundle for private CAs.",
+    ),
+    _rule(
+        "PY-SEC-005",
+        "insecure-random-for-secret",
+        "Non-cryptographic random used for a secret",
+        "A value bound to a secret-shaped name (token, password, nonce, salt, "
+        "otp, api_key, session id, csrf) is produced by the random module.",
+        "security",
+        "warning",
+        "Generate secrets with the secrets module (token_urlsafe, choice).",
+        confidence="medium",
+    ),
+    _rule(
+        "GO-SEC-001",
+        "tls-verification-disabled",
+        "TLS certificate verification disabled",
+        "tls.Config sets InsecureSkipVerify: true.",
+        "security",
+        "warning",
+        "Verify certificates; load a private CA into tls.Config.RootCAs.",
+        language="go",
+    ),
+    _rule(
+        "GO-SEC-002",
+        "shell-command-from-runtime-string",
+        "Shell command assembled at runtime",
+        'exec.Command("sh", "-c", cmd) (or CommandContext) with a non-literal cmd.',
+        "security",
+        "warning",
+        "Call the binary directly with exec.Command(name, args...).",
+        language="go",
+        confidence="medium",
+    ),
+    _rule(
+        "GO-SEC-003",
+        "insecure-random-for-secret",
+        "math/rand used for a secret",
+        "A value bound to a secret-shaped name is produced by math/rand.",
+        "security",
+        "warning",
+        "Use crypto/rand for tokens, keys, nonces and passwords.",
+        language="go",
+        confidence="medium",
+    ),
+    *(
+        _rule(
+            f"{prefix}-SEC-001",
+            "unsafe-deserialization",
+            "Java native deserialization",
+            "ObjectInputStream / readObject() / XMLDecoder instantiate arbitrary "
+            "classes named by the stream.",
+            "security",
+            "warning",
+            "Use a schema-bound format (JSON, protobuf) or an ObjectInputFilter allowlist.",
+            language=language,
+        )
+        for prefix, language in (("JAVA", "java"), ("KT", "kotlin"))
+    ),
+    *(
+        _rule(
+            f"{prefix}-SEC-002",
+            "shell-command-from-runtime-string",
+            "Shell command assembled at runtime",
+            'Runtime.getRuntime().exec(cmd) or ProcessBuilder("sh", "-c", cmd) with a '
+            "non-literal cmd.",
+            "security",
+            "warning",
+            "Pass the program and each argument separately to ProcessBuilder.",
+            language=language,
+            confidence="medium",
+        )
+        for prefix, language in (("JAVA", "java"), ("KT", "kotlin"))
+    ),
+    *(
+        _rule(
+            f"{prefix}-SEC-003",
+            "tls-verification-disabled",
+            "TLS certificate or hostname verification disabled",
+            "A trust-all TrustManager (empty checkServerTrusted), a hostname verifier "
+            "returning true, NoopHostnameVerifier or ALLOW_ALL_HOSTNAME_VERIFIER.",
+            "security",
+            "warning",
+            "Keep the default TrustManager and HostnameVerifier; add a private CA to a truststore.",
+            language=language,
+        )
+        for prefix, language in (("JAVA", "java"), ("KT", "kotlin"))
+    ),
+    _rule(
+        "CS-SEC-001",
+        "unsafe-deserialization",
+        "Type-resolving deserializer",
+        "BinaryFormatter, NetDataContractSerializer, LosFormatter, SoapFormatter, "
+        "ObjectStateFormatter or Newtonsoft TypeNameHandling other than None.",
+        "security",
+        "warning",
+        "Use System.Text.Json or a DataContract serializer with known types.",
+        language="csharp",
+    ),
+    _rule(
+        "CS-SEC-002",
+        "shell-command-from-runtime-string",
+        "Shell command assembled at runtime",
+        'Process.Start("cmd.exe", args) or new ProcessStartInfo("sh", args) with '
+        "non-literal args.",
+        "security",
+        "warning",
+        "Start the program directly and use ProcessStartInfo.ArgumentList.",
+        language="csharp",
+        confidence="medium",
+    ),
+    _rule(
+        "CS-SEC-003",
+        "tls-verification-disabled",
+        "Certificate validation callback accepts everything",
+        "ServerCertificateCustomValidationCallback / ServerCertificateValidationCallback "
+        "returns true, or DangerousAcceptAnyServerCertificateValidator is used.",
+        "security",
+        "warning",
+        "Remove the callback or validate the chain; trust a private CA via the store.",
+        language="csharp",
+    ),
+    _rule(
+        "TS-SEC-001",
+        "dynamic-code-execution",
+        "eval / new Function of a runtime string",
+        "eval(x) or new Function(..., x) receives a value that is not a string literal.",
+        "security",
+        "warning",
+        "Use JSON.parse for data and a dispatch table or dynamic import for behaviour.",
+        language="typescript",
+    ),
+    _rule(
+        "TS-SEC-002",
+        "shell-command-from-runtime-string",
+        "Shell command assembled at runtime",
+        "child_process exec/execSync with a non-literal command, or spawn/execFile "
+        "with { shell: true } and a non-literal program.",
+        "security",
+        "warning",
+        "Use execFile/spawn with an argument array and no shell option.",
+        language="typescript",
+        confidence="medium",
+    ),
+    _rule(
+        "TS-SEC-003",
+        "html-injection-sink",
+        "Runtime value written as HTML",
+        "innerHTML/outerHTML assignment, insertAdjacentHTML, document.write or "
+        "dangerouslySetInnerHTML receives a non-literal value.",
+        "security",
+        "warning",
+        "Set textContent, build DOM nodes, or sanitize with DOMPurify first.",
+        language="typescript",
+        confidence="medium",
+    ),
+    _rule(
+        "TS-SEC-004",
+        "tls-verification-disabled",
+        "TLS certificate verification disabled",
+        "rejectUnauthorized: false, or NODE_TLS_REJECT_UNAUTHORIZED set to '0'.",
+        "security",
+        "warning",
+        "Keep rejectUnauthorized on; pass a private CA through the ca option.",
+        language="typescript",
+    ),
+    _rule(
+        "C-SEC-001",
+        "unbounded-buffer-write",
+        "Unbounded buffer write",
+        "gets, strcpy, strcat, stpcpy, sprintf, vsprintf, wcscpy or wcscat is called; "
+        "none bounds the bytes written.",
+        "security",
+        "warning",
+        "Use the bounded form (strlcpy/strncpy_s, snprintf, fgets) or std::string.",
+        language="c_cpp",
+    ),
+    _rule(
+        "C-SEC-002",
+        "shell-command-from-runtime-string",
+        "Shell command assembled at runtime",
+        "system(cmd) or popen(cmd, mode) with a non-literal cmd.",
+        "security",
+        "warning",
+        "Use execve/posix_spawn with an argument vector.",
+        language="c_cpp",
+        confidence="medium",
+    ),
+    _rule(
+        "C-SEC-003",
+        "format-string-from-runtime-value",
+        "Runtime string used as a format",
+        "printf-family or syslog call whose format argument is a non-literal and "
+        "the last argument (the -Wformat-security shape).",
+        "security",
+        "warning",
+        'Pass a literal format and the value as an argument: printf("%s", msg).',
+        language="c_cpp",
+        confidence="medium",
+    ),
+    _rule(
+        "RS-SEC-001",
+        "undocumented-unsafe",
+        "unsafe without a SAFETY comment",
+        "An unsafe block, fn or impl has no SAFETY comment (or # Safety doc section) "
+        "stating the invariants it relies on.",
+        "security",
+        "warning",
+        "Add `// SAFETY: ...` above the block explaining why the operation is sound.",
+        language="rust",
+        confidence="medium",
+    ),
+    _rule(
+        "RS-SEC-002",
+        "shell-command-from-runtime-string",
+        "Shell command assembled at runtime",
+        'Command::new("sh") followed by .arg("-c").arg(cmd) or .args(["-c", cmd]) with '
+        "a non-literal cmd.",
+        "security",
+        "warning",
+        "Run the program directly with Command::new(program).args([...]).",
+        language="rust",
+        confidence="medium",
+    ),
+    _rule(
+        "RS-SEC-003",
+        "tls-verification-disabled",
+        "TLS certificate verification disabled",
+        "reqwest danger_accept_invalid_certs(true) / danger_accept_invalid_hostnames(true) "
+        "or rustls .dangerous().",
+        "security",
+        "warning",
+        "Keep verification on; add a private CA with add_root_certificate.",
+        language="rust",
+    ),
 )
 
 # --- negative conditions ----------------------------------------------------------
@@ -712,6 +996,12 @@ _TEST_PATH_DOWNGRADE = (
     "*.spec.ts, *Test.kt, test_*.py): the finding is downgraded to informational, "
     "not dropped (languages/_parity.py: downgrade_in_tests; applied by the density "
     "and unchecked-assertion rules only)."
+)
+_SECURITY_TEST_PATH_DOWNGRADE = (
+    "The file is on a conventional test path (tests/, __tests__/, spec/, *_test.go, "
+    "*.spec.ts, *Test.kt, test_*.py): the finding is downgraded to informational, not "
+    "dropped — disabled TLS verification and trust-all fixtures are the norm in tests "
+    "(languages/_parity.py: downgrade_in_tests)."
 )
 _SQL_NOT_WHEN = (
     "The literal is not the head of a SQL statement: only literals whose leading "
@@ -938,25 +1228,170 @@ _NOT_WHEN: dict[str, tuple[str, ...]] = {
         "workspace inheritance can appear undeclared; confirm before acting.",
     ),
     "RS-PKG-002": _INVALID_MANIFEST_NOT_WHEN,
+    # ---- security family --------------------------------------------------
+    "PY-SEC-001": (
+        "yaml.load/load_all passes Loader=SafeLoader, CSafeLoader, BaseLoader or "
+        "CBaseLoader (positionally or by keyword); yaml.safe_load is never reported.",
+        "The call is not one of the fixed pickle/cPickle/_pickle/marshal/shelve/dill/"
+        "yaml.unsafe_load targets (python_security._UNSAFE_LOADS).",
+        _SECURITY_TEST_PATH_DOWNGRADE,
+    ),
+    "PY-SEC-002": (
+        "The command is a string literal, or the subprocess call has no shell=True "
+        "keyword (a list of arguments is never reported).",
+        "os.system/os.popen are only recognised through the `os.` qualifier; a "
+        "`from os import system` call is not seen.",
+    ),
+    "PY-SEC-003": (
+        "The first argument is a string literal, or the callee is an attribute "
+        "(pandas `df.eval`, `ast.literal_eval`) rather than the bare builtin.",
+    ),
+    "PY-SEC-004": (
+        "verify= is anything other than the literal False (a CA bundle path is the "
+        "recommended form), or CERT_NONE appears outside a cert_reqs/verify_mode slot.",
+        _SECURITY_TEST_PATH_DOWNGRADE,
+    ),
+    "PY-SEC-005": (
+        "The bound name or keyword does not match the secret-shaped pattern "
+        "(languages/_security.SECRET_NAME); `counter = random.randint(...)` is fine.",
+        "The expression mentions SystemRandom, or uses the secrets module.",
+    ),
+    "GO-SEC-001": (_SECURITY_TEST_PATH_DOWNGRADE,),
+    "GO-SEC-002": (
+        'The program is not a shell (`exec.Command(cmd)` and `exec.Command("ls", arg)` '
+        "are not reported), the flag is not -c, or the command string is a literal.",
+    ),
+    "GO-SEC-003": (
+        "The file does not import math/rand (crypto/rand is fine), or the bound "
+        "name is not secret-shaped (languages/_security.SECRET_NAME).",
+    ),
+    "JAVA-SEC-001": (_SECURITY_TEST_PATH_DOWNGRADE,),
+    "KT-SEC-001": (_SECURITY_TEST_PATH_DOWNGRADE,),
+    "JAVA-SEC-002": (
+        "The exec/ProcessBuilder command is a string literal, or ProcessBuilder's "
+        "program is not a shell / its second argument is not -c.",
+    ),
+    "KT-SEC-002": (
+        "The exec/ProcessBuilder command is a string literal, or ProcessBuilder's "
+        "program is not a shell / its second argument is not -c.",
+    ),
+    "JAVA-SEC-003": (
+        "checkServerTrusted has a non-empty body, or the HostnameVerifier does more "
+        "than `return true` (comments are blanked, so a commented empty body still counts).",
+        _SECURITY_TEST_PATH_DOWNGRADE,
+    ),
+    "KT-SEC-003": (
+        "checkServerTrusted has a non-empty body, or the verify override is not "
+        "`= true` / `{ return true }`.",
+        _SECURITY_TEST_PATH_DOWNGRADE,
+    ),
+    "CS-SEC-001": (
+        "TypeNameHandling.None; serializers other than the fixed list "
+        "(System.Text.Json, XmlSerializer, DataContractSerializer) are never reported.",
+        _SECURITY_TEST_PATH_DOWNGRADE,
+    ),
+    "CS-SEC-002": (
+        "The program is not a shell (`Process.Start(exe, args)`), or the arguments "
+        "are a plain literal without interpolation or concatenation.",
+    ),
+    "CS-SEC-003": (
+        "The callback body is anything other than a constant `true`.",
+        _SECURITY_TEST_PATH_DOWNGRADE,
+    ),
+    "TS-SEC-001": (
+        "The evaluated argument (last argument for new Function) is a string literal; "
+        "`obj.eval(...)` is not the global eval and is not reported.",
+    ),
+    "TS-SEC-002": (
+        "The file does not import child_process (`RegExp.prototype.exec` is never "
+        "confused with it), the command is a literal without `${}`/`+`, or "
+        "spawn/execFile is called without `shell: true`.",
+    ),
+    "TS-SEC-003": (
+        "The assigned value is a string literal, or starts with a recognised sanitizer "
+        "call (DOMPurify.sanitize, sanitizeHtml, escapeHtml, *.sanitize).",
+        _SECURITY_TEST_PATH_DOWNGRADE,
+    ),
+    "TS-SEC-004": (
+        "NODE_TLS_REJECT_UNAUTHORIZED is compared or set to anything other than the "
+        "literal '0'.",
+        _SECURITY_TEST_PATH_DOWNGRADE,
+    ),
+    "C-SEC-001": (
+        "The identifier is declared rather than called (`char *strcpy(`, `#define "
+        "strcpy`), is a member call (`obj.strcpy(`), or is a differently named "
+        "function (`my_strcpy`).",
+    ),
+    "C-SEC-002": (
+        "The command is a string literal, or system/popen is being declared.",
+    ),
+    "C-SEC-003": (
+        "The format is a string literal or an ALL_CAPS macro constant, or further "
+        "arguments follow it (`printf(fmt, x)` is not this shape).",
+    ),
+    "RS-SEC-001": (
+        "A comment block immediately above the unsafe item, its own line, or the first "
+        "line inside the block contains `SAFETY` or `# Safety`.",
+        _SECURITY_TEST_PATH_DOWNGRADE,
+    ),
+    "RS-SEC-002": (
+        "Command::new's program is not a shell, no -c flag precedes the argument, or "
+        "the argument is a string literal.",
+    ),
+    "RS-SEC-003": (_SECURITY_TEST_PATH_DOWNGRADE,),
+}
+
+# CWE anchors and SARIF ``security-severity`` (CVSS-like). The eight dynamic-SQL
+# rules keep their COR identifiers (12-month deprecation promise) but are
+# security findings and are tagged as such.
+_SECURITY_ANCHORS: dict[str, tuple[tuple[str, ...], str]] = {
+    **{
+        rule_id: (("CWE-89",), "8.8")
+        for rule_id in (
+            "PY-COR-007", "GO-COR-002", "JAVA-COR-002", "KT-COR-002",
+            "CS-COR-002", "TS-COR-002", "C-COR-002", "RS-COR-002",
+        )
+    },
+    "PY-SEC-001": (("CWE-502",), "8.8"),
+    "PY-SEC-002": (("CWE-78",), "8.8"),
+    "PY-SEC-003": (("CWE-95",), "8.8"),
+    "PY-SEC-004": (("CWE-295",), "7.4"),
+    "PY-SEC-005": (("CWE-330",), "5.9"),
+    "GO-SEC-001": (("CWE-295",), "7.4"),
+    "GO-SEC-002": (("CWE-78",), "8.8"),
+    "GO-SEC-003": (("CWE-338",), "5.9"),
+    "JAVA-SEC-001": (("CWE-502",), "8.8"),
+    "JAVA-SEC-002": (("CWE-78",), "8.8"),
+    "JAVA-SEC-003": (("CWE-295",), "7.4"),
+    "KT-SEC-001": (("CWE-502",), "8.8"),
+    "KT-SEC-002": (("CWE-78",), "8.8"),
+    "KT-SEC-003": (("CWE-295",), "7.4"),
+    "CS-SEC-001": (("CWE-502",), "8.8"),
+    "CS-SEC-002": (("CWE-78",), "8.8"),
+    "CS-SEC-003": (("CWE-295",), "7.4"),
+    "TS-SEC-001": (("CWE-95",), "8.8"),
+    "TS-SEC-002": (("CWE-78",), "8.8"),
+    "TS-SEC-003": (("CWE-79",), "6.1"),
+    "TS-SEC-004": (("CWE-295",), "7.4"),
+    "C-SEC-001": (("CWE-120", "CWE-676"), "7.5"),
+    "C-SEC-002": (("CWE-78",), "8.8"),
+    "C-SEC-003": (("CWE-134",), "7.5"),
+    "RS-SEC-001": (("CWE-119",), "5.9"),
+    "RS-SEC-002": (("CWE-78",), "8.8"),
+    "RS-SEC-003": (("CWE-295",), "7.4"),
 }
 
 
 def _attach_not_when(rules: tuple[RuleMetadata, ...]) -> tuple[RuleMetadata, ...]:
     attached = []
     for rule in rules:
-        clauses = _NOT_WHEN.get(rule.rule_id, ())
+        cwe, security_severity = _SECURITY_ANCHORS.get(rule.rule_id, ((), None))
         attached.append(
-            RuleMetadata(
-                rule_id=rule.rule_id,
-                name=rule.name,
-                title=rule.title,
-                description=rule.description,
-                category=rule.category,
-                default_severity=rule.default_severity,
-                confidence=rule.confidence,
-                remediation=rule.remediation,
-                language=rule.language,
-                not_when=clauses,
+            replace(
+                rule,
+                not_when=_NOT_WHEN.get(rule.rule_id, ()),
+                cwe=cwe,
+                security_severity=security_severity,
             )
         )
     return tuple(attached)

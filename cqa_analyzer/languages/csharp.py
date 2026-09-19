@@ -51,6 +51,7 @@ from ..safe_io import SafeReadError, read_bounded_text
 from ..signals import FileSignals, pattern_is_present
 from ._shared import RegexRulePackBase, empty_catch_finding
 from ._parity import blocking_in_async_findings, broad_catch_findings
+from ._security import SHELL_BINARIES, DynamicCall, dynamic_call_findings, marker_findings
 from ._sql import CSHARP_SQL, dynamic_sql_findings
 
 CSHARP_ADAPTER_VERSION = "1.0.0"
@@ -466,12 +467,97 @@ class CSharpBlockingInAsyncRule:
         )
 
 
+# ---- security (CS-SEC) ------------------------------------------------------
+
+_CS_UNSAFE_DESERIALIZATION = re.compile(
+    r"\bnew\s+(?:BinaryFormatter|NetDataContractSerializer|LosFormatter|"
+    r"SoapFormatter|ObjectStateFormatter)\s*\(|"
+    r"\bTypeNameHandling\s*\.\s*(?:All|Auto|Objects|Arrays)\b"
+)
+# ``Process.Start("cmd.exe", args)`` / ``new ProcessStartInfo("sh", args)``.
+_CS_PROCESS_START = DynamicCall(
+    call=re.compile(r"\bProcess\s*\.\s*Start(?=\()"),
+    dynamic=1,
+    pinned={0: SHELL_BINARIES},
+    interpolates=CSHARP_SQL.interpolates,
+)
+_CS_PROCESS_START_INFO = DynamicCall(
+    call=re.compile(r"\bProcessStartInfo(?=\()"),
+    dynamic=1,
+    pinned={0: SHELL_BINARIES},
+    interpolates=CSHARP_SQL.interpolates,
+)
+_CS_TLS_DISABLED = re.compile(
+    r"\bDangerousAcceptAnyServerCertificateValidator\b|"
+    r"\b(?:ServerCertificateCustomValidationCallback|ServerCertificateValidationCallback|"
+    r"RemoteCertificateValidationCallback)\s*\+?=\s*"
+    r"(?:delegate\s*(?:\([^)]*\))?\s*\{\s*return\s+true\s*;\s*\}|(?:\([^)]*\)|\w+)\s*=>\s*true\b)"
+)
+
+
+class CSharpUnsafeDeserializationRule:
+    """Detect ``BinaryFormatter`` and friends, and Newtonsoft ``TypeNameHandling``."""
+
+    rule_id = "CS-SEC-001"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, CSharpFacts):
+            return
+        yield from marker_findings(
+            self.rule_id,
+            parsed,
+            _CS_UNSAFE_DESERIALIZATION,
+            "Deserializer instantiates arbitrary types named by the payload (CWE-502).",
+            "Use System.Text.Json or a DataContract serializer with known types; "
+            "keep TypeNameHandling.None.",
+            in_tests="note",
+        )
+
+
+class CSharpShellCommandRule:
+    """Detect ``Process.Start("cmd", <runtime string>)``."""
+
+    rule_id = "CS-SEC-002"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, CSharpFacts):
+            return
+        for spec in (_CS_PROCESS_START, _CS_PROCESS_START_INFO):
+            yield from dynamic_call_findings(
+                self.rule_id,
+                parsed,
+                spec,
+                "A shell runs a command string assembled at runtime (CWE-78).",
+                "Start the program directly and pass arguments through "
+                "ProcessStartInfo.ArgumentList.",
+            )
+
+
+class CSharpTlsVerificationDisabledRule:
+    """Detect certificate validation callbacks that always return true."""
+
+    rule_id = "CS-SEC-003"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, CSharpFacts):
+            return
+        yield from marker_findings(
+            self.rule_id,
+            parsed,
+            _CS_TLS_DISABLED,
+            "TLS certificate validation accepts every certificate (CWE-295).",
+            "Remove the callback or validate the chain; trust a private CA via "
+            "the machine store instead.",
+            in_tests="note",
+        )
+
+
 class CSharpRulePack(RegexRulePackBase):
     """Run the bounded built-in C# pilot rules."""
 
     rule_pack_id = CSHARP_RULE_PACK_ID
     language_id = "csharp"
-    ruleset_version = "1.1.0"
+    ruleset_version = "1.2.0"
     plugin_api_version = PLUGIN_API_VERSION
 
     def __init__(self) -> None:
@@ -480,6 +566,9 @@ class CSharpRulePack(RegexRulePackBase):
             CSharpDynamicSqlRule(),
             CSharpBroadCatchRule(),
             CSharpBlockingInAsyncRule(),
+            CSharpUnsafeDeserializationRule(),
+            CSharpShellCommandRule(),
+            CSharpTlsVerificationDisabledRule(),
         )
 
 

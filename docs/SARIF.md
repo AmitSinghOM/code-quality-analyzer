@@ -52,6 +52,28 @@ Path validation fails closed for empty, absolute, scheme-based, NUL-containing,
 or parent-traversing artifact paths. `--offline` applies the same socket-denial
 guard used by other formats; rendering itself performs no network access.
 
+## Security classification
+
+Rules anchored to a CWE (the `*-SEC-*` family and the eight dynamic-SQL rules)
+carry two extra properties on their `tool.driver.rules[]` descriptor:
+
+```json
+"properties": {
+  "category": "security",
+  "confidence": "medium",
+  "defaultSeverity": "warning",
+  "language": "python",
+  "security-severity": "8.8",
+  "tags": ["security", "external/cwe/cwe-78"]
+}
+```
+
+`security-severity` is CVSS-like (`0.0`–`10.0`); the `security` tag and the
+`external/cwe/cwe-NNN` form are what GitHub code scanning uses to classify a
+result as a security alert, rank it, and link the CWE. Quality rules carry
+neither property. The result `level` is unchanged (`warning`), so an existing
+`--fail-on error` gate does not fail on upgrade.
+
 ## Contract versions
 
 The output declares SARIF `2.1.0`. Analyzer semantic versioning identifies the

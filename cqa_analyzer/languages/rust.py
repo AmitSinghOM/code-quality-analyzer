@@ -59,6 +59,15 @@ from ._parity import (
     is_test_path,
 )
 from ..signals import FileSignals, pattern_is_present
+from ._security import (
+    SHELL_BINARIES,
+    SHELL_COMMAND_FLAGS,
+    classify_argument,
+    marker_findings,
+    preceding_comment_block,
+    security_finding,
+    split_arguments,
+)
 from ._shared import RegexRulePackBase, line_column
 from ._sql import RUST_SQL, dynamic_sql_findings
 
@@ -456,7 +465,7 @@ class RustRulePack(RegexRulePackBase):
 
     rule_pack_id = RUST_RULE_PACK_ID
     language_id = "rust"
-    ruleset_version = "1.0.0"
+    ruleset_version = "1.1.0"
     plugin_api_version = PLUGIN_API_VERSION
 
     def __init__(self) -> None:
@@ -465,6 +474,9 @@ class RustRulePack(RegexRulePackBase):
             RustDynamicSqlRule(),
             RustBlockingInAsyncRule(),
             RustUnexplainedLintAllowRule(),
+            RustUndocumentedUnsafeRule(),
+            RustShellCommandRule(),
+            RustTlsVerificationDisabledRule(),
         )
 
 
@@ -572,6 +584,144 @@ class RustUnexplainedLintAllowRule:
                     'needs it, or record why: `#![allow(dead_code, reason = "…")]`.'
                 ),
             )
+
+
+# ---- security (RS-SEC) ------------------------------------------------------
+
+_RS_UNSAFE = re.compile(r"\bunsafe\s*(?:\{|\bfn\b|\bimpl\b)")
+_RS_SAFETY_COMMENT = re.compile(r"SAFETY|# Safety|Safety:")
+_RS_SHELL_NEW = re.compile(r"\bCommand\s*::\s*new(?=\()")
+_RS_ARG_CALL = re.compile(r"\.\s*(?P<method>args?)(?=\()")
+_RS_TLS_DISABLED = re.compile(
+    r"\.\s*danger_accept_invalid_(?:certs|hostnames)\s*\(\s*true\s*\)|\.\s*dangerous\s*\(\s*\)"
+)
+
+
+class RustUndocumentedUnsafeRule:
+    """Detect ``unsafe`` blocks/fns/impls without a ``// SAFETY:`` comment."""
+
+    rule_id = "RS-SEC-001"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, RustFacts):
+            return
+        code_text = parsed.facts.code_text
+        source = parsed.source.content
+        for match in _RS_UNSAFE.finditer(code_text):
+            if _RS_SAFETY_COMMENT.search(preceding_comment_block(source, match.start())):
+                continue
+            yield security_finding(
+                self.rule_id,
+                parsed,
+                match.start(),
+                "unsafe code has no SAFETY comment stating the invariants it relies on (CWE-119).",
+                "Add `// SAFETY: ...` above the block (or a `# Safety` doc section on an "
+                "unsafe fn) explaining why the operation is sound.",
+                confidence="medium",
+                in_tests="note",
+            )
+
+
+class RustShellCommandRule:
+    """Detect ``Command::new("sh").arg("-c").arg(<runtime string>)``."""
+
+    rule_id = "RS-SEC-002"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, RustFacts):
+            return
+        code_text = parsed.facts.code_text
+        for match in _RS_SHELL_NEW.finditer(code_text):
+            spans, close = split_arguments(code_text, match.end())
+            program = classify_argument(parsed, spans[0]) if spans else None
+            if program is None or program.kind != "literal" or program.text not in SHELL_BINARIES:
+                continue
+            if self._dynamic_after_flag(parsed, code_text, close + 1):
+                yield security_finding(
+                    self.rule_id,
+                    parsed,
+                    match.start(),
+                    "A shell runs a command string assembled at runtime (CWE-78).",
+                    "Run the program directly with Command::new(program).args([...]) so "
+                    "no shell re-parses the arguments.",
+                )
+
+    @staticmethod
+    def _dynamic_after_flag(parsed: ParsedFile, code_text: str, start: int) -> bool:
+        """Walk the builder chain after ``Command::new(...)`` looking for a
+        ``-c`` flag followed by a non-literal argument."""
+        expect_command = False
+        position = start
+        end = _chain_end(code_text, start)
+        while position < end:
+            call = _RS_ARG_CALL.search(code_text, position, end)
+            if call is None:
+                return False
+            spans, close = split_arguments(code_text, call.end())
+            position = close + 1
+            if call.group("method") == "arg":
+                verdict, expect_command = _arg_step(parsed, spans, expect_command)
+            else:
+                verdict = _args_step(parsed, code_text, spans)
+            if verdict is not None:
+                return verdict
+        return False
+
+
+def _arg_step(parsed: ParsedFile, spans: list, expect_command: bool) -> tuple[bool | None, bool]:
+    """One ``.arg(x)``: returns ``(verdict, expect_command_next)``."""
+    if not spans:
+        return None, expect_command
+    argument = classify_argument(parsed, spans[0])
+    if expect_command:
+        return argument.kind == "dynamic", False
+    return None, argument.kind == "literal" and argument.text in SHELL_COMMAND_FLAGS
+
+
+def _args_step(parsed: ParsedFile, code_text: str, spans: list) -> bool | None:
+    """One ``.args(["-c", cmd])`` / ``.args(&["-c", cmd])``."""
+    inner = code_text.find("[", spans[0][0], spans[0][1]) if spans else -1
+    if inner < 0:
+        return None
+    items, _ = split_arguments(code_text, inner)
+    kinds = [classify_argument(parsed, item) for item in items]
+    for index, item in enumerate(kinds[:-1]):
+        if item.kind == "literal" and item.text in SHELL_COMMAND_FLAGS:
+            return kinds[index + 1].kind == "dynamic"
+    return None
+
+
+def _chain_end(code_text: str, start: int) -> int:
+    depth = 0
+    for index in range(start, len(code_text)):
+        char = code_text[index]
+        if char in "([{":
+            depth += 1
+        elif char in ")]}":
+            if depth == 0:
+                return index
+            depth -= 1
+        elif depth == 0 and char == ";":
+            return index
+    return len(code_text)
+
+
+class RustTlsVerificationDisabledRule:
+    """Detect reqwest ``danger_accept_invalid_*`` and rustls ``.dangerous()``."""
+
+    rule_id = "RS-SEC-003"
+
+    def evaluate(self, parsed: ParsedFile) -> Iterable[Finding]:
+        if not isinstance(parsed.facts, RustFacts):
+            return
+        yield from marker_findings(
+            self.rule_id,
+            parsed,
+            _RS_TLS_DISABLED,
+            "TLS certificate verification is disabled or replaced (CWE-295).",
+            "Keep verification on; add a private CA with add_root_certificate instead.",
+            in_tests="note",
+        )
 
 
 class _RustFileSignals(FileSignals):
