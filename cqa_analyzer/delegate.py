@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .config import AnalyzerConfig, load_config, path_is_selected
-from .discovery import DEFAULT_MAX_FILE_SIZE, SKIP_DIRS
+from .discovery import DEFAULT_MAX_FILE_SIZE, MINIFIED_NAME, SKIP_DIRS
 from .plugins import create_default_registry
 from .registry import PluginRegistry
 from .rule_metadata import RuleMetadata, builtin_rule_ids, rule_metadata
@@ -91,8 +91,12 @@ def plan_file(
 
     Mirrors :mod:`cqa_analyzer.discovery` ordering: built-in skip directories,
     configured include/exclude and gitignore, then adapter ownership by
-    extension. When ``root`` is given, the on-disk size is also checked so the
-    plan matches what a scan would do; a missing file is reported, not guessed.
+    extension, then minified names (``*.min.js``, ``*.bundle.js``). When
+    ``root`` is given, the on-disk size is also checked so the plan matches
+    what a scan would do; a missing file is reported, not guessed. The one
+    discovery decision that needs file *contents* — ``minified_content``, a
+    5 000-character line in a file of long lines — is made at read time and
+    appears in ``scan_health.excluded_generated``, not here.
     """
     parts = tuple(relative.split("/"))
     pruned = _skipped_directory(parts, configuration.analysis.keep_directories)
@@ -103,6 +107,8 @@ def plan_file(
     adapter = registry.adapter_for_path(relative)
     if adapter is None:
         return FilePlan(relative, None, False, "unsupported_extension")
+    if MINIFIED_NAME.search(parts[-1]):
+        return FilePlan(relative, adapter.language_id, False, "minified_name")
     if root is not None:
         candidate = root / relative
         try:
@@ -309,6 +315,9 @@ class _PreviewWalker:
         if not path_is_selected(relative, self.analysis):
             self._exclude("excluded_by_configuration", relative)
             return False
+        if MINIFIED_NAME.search(path.name):
+            self._exclude("minified_name", relative)
+            return False
         if len(self.planned) >= self.max_files:
             self.truncated = True
             self._exclude("file_limit", relative)
@@ -364,10 +373,12 @@ def preview(
 
     Walks the tree with the same rules as :mod:`cqa_analyzer.discovery` (skip
     directories, configured include/exclude, gitignore, adapter ownership,
-    size cap, file limit) but never reads file contents, so it is cheap enough
-    to call before every review. Every source-looking file ends up either in
-    ``planned`` or counted under an ``excluded`` reason: nothing is silently
-    dropped.
+    minified names, size cap, file limit) but never reads file contents, so it
+    is cheap enough to call before every review. Every source-looking file
+    ends up either in ``planned`` or counted under an ``excluded`` reason:
+    nothing is silently dropped. The single content-based discovery decision
+    (``minified_content``) cannot be previewed without reading; a scan reports
+    it under ``scan_health.excluded_generated``.
     """
     root = Path(root).resolve()
     if not root.is_dir():
