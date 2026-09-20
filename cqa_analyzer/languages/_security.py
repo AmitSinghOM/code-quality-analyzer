@@ -339,24 +339,32 @@ def constant_literal(parsed: ParsedFile, text: str) -> str | None:
     source = parsed.source.content
     if len(source) > MAX_CONSTANT_SCAN:
         return None
-    code_text = parsed.facts.code_text
-    # ``code_text`` blanks strings in place, so a definition line reading
-    # ``const NAME =`` followed by nothing had a bare literal on the right.
+    literal_start = _single_definition_end(name, source, parsed.facts.code_text)
+    if literal_start is None or len(_rebinding(name).findall(parsed.facts.code_text)) > 1:
+        return None
+    return _bare_literal_to_line_end(source, literal_start)
+
+
+def _single_definition_end(name: str, source: str, code_text: str) -> int | None:
+    """Offset just after ``=`` (or the ``#define NAME``) of the one definition
+    of ``name``; ``None`` when there is none or more than one.
+
+    ``code_text`` blanks strings in place, so a definition line reading
+    ``const NAME =`` followed by nothing had a bare literal on the right."""
     definitions = list(_constant_definition(name).finditer(code_text))
     if len(definitions) == 1:
-        literal_start = definitions[0].end("eq")
-        rebindings = len(_rebinding(name).findall(code_text))
-    else:
-        directives = list(_define_directive(name).finditer(source))
-        if len(definitions) or len(directives) != 1:
-            return None
-        literal_start = directives[0].end()
-        rebindings = len(_rebinding(name).findall(code_text))
-    if rebindings > 1:
+        return definitions[0].end("eq")
+    if definitions:
         return None
-    line_end = source.find("\n", literal_start)
+    directives = list(_define_directive(name).finditer(source))
+    return directives[0].end() if len(directives) == 1 else None
+
+
+def _bare_literal_to_line_end(source: str, start: int) -> str | None:
+    """The content of a string literal at ``start`` when nothing but
+    whitespace or ``;`` follows it on the line."""
+    line_end = source.find("\n", start)
     line_end = len(source) if line_end < 0 else line_end
-    start = literal_start
     while start < line_end and source[start] in " \t":
         start += 1
     literal = _read_literal(source, start, line_end)

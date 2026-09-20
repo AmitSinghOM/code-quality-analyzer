@@ -68,18 +68,13 @@ def module_constants(tree: ast.AST) -> frozenset[str]:
     anywhere else in the module (a second assignment, a loop target, an
     augmented assignment, a ``global`` rebinding) is not a constant.
     """
-    stores: dict[str, int] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
-            stores[node.id] = stores.get(node.id, 0) + 1
+    stores = _store_counts(tree)
     constants: set[str] = set()
     for statement in getattr(tree, "body", []):
-        if isinstance(statement, ast.Assign) and len(statement.targets) == 1:
-            target, value = statement.targets[0], statement.value
-        elif isinstance(statement, ast.AnnAssign) and statement.value is not None:
-            target, value = statement.target, statement.value
-        else:
+        binding = _single_target_binding(statement)
+        if binding is None:
             continue
+        target, value = binding
         if (
             isinstance(target, ast.Name)
             and isinstance(value, ast.Constant)
@@ -88,6 +83,24 @@ def module_constants(tree: ast.AST) -> frozenset[str]:
         ):
             constants.add(target.id)
     return frozenset(constants)
+
+
+def _store_counts(tree: ast.AST) -> dict[str, int]:
+    """How many times each name is assigned anywhere in the module."""
+    stores: dict[str, int] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            stores[node.id] = stores.get(node.id, 0) + 1
+    return stores
+
+
+def _single_target_binding(statement: ast.stmt) -> tuple[ast.expr, ast.expr] | None:
+    """``(target, value)`` for ``NAME = value`` / ``NAME: T = value``, else None."""
+    if isinstance(statement, ast.Assign) and len(statement.targets) == 1:
+        return statement.targets[0], statement.value
+    if isinstance(statement, ast.AnnAssign) and statement.value is not None:
+        return statement.target, statement.value
+    return None
 
 
 def _shlex_safe(node: ast.expr) -> bool:

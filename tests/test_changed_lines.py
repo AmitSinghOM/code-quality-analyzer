@@ -397,18 +397,8 @@ def test_cli_sarif_changed_selection_is_aggregate_and_deterministic(
 
     outputs = []
     for manifest in (first, second):
-        result = CliRunner().invoke(
-            main,
-            [
-                str(root),
-                "-f",
-                "sarif",
-                "--anonymize",
-                "--offline",
-                "--changed-lines-manifest",
-                str(manifest),
-            ],
-        )
+        args = [str(root), "-f", "sarif", "--anonymize", "--offline"]
+        result = CliRunner().invoke(main, [*args, "--changed-lines-manifest", str(manifest)])
         assert result.exit_code == EXIT_OK
         outputs.append(result.output)
 
