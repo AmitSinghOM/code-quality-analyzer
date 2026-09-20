@@ -618,3 +618,35 @@ def test_not_analyzed_examples_are_bounded():
     assert summary["files_not_analyzed"] == 25
     assert len(summary["files_not_analyzed_examples"]) == 10
     assert summary["files_not_analyzed_examples"][0] == "gen/f00.txt"
+
+
+def test_anonymized_not_analyzed_examples_are_tokenized(tmp_path):
+    """Closing-pass R2: a manifest path is as sensitive as a source path. With
+    --anonymize the unanalyzed example must be a stable token in JSON and SARIF."""
+    root = tmp_path / "proj"
+    (root / "private").mkdir(parents=True)
+    (root / "private" / "app.py").write_text("x = 1\n")
+    (root / "private" / "customer_list.txt").write_text("k\n")
+    manifest = tmp_path / "m.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0.0",
+                "files": [
+                    _file("private/app.py", (1, 1)),
+                    _file("private/customer_list.txt", (1, 1)),
+                ],
+            }
+        )
+    )
+    common = [str(root), "--offline", "--anonymize", "--changed-lines-manifest", str(manifest)]
+
+    as_json = CliRunner().invoke(main, [*common, "-f", "json"])
+    as_sarif = CliRunner().invoke(main, [*common, "-f", "sarif"])
+
+    assert as_json.exit_code == EXIT_OK and as_sarif.exit_code == EXIT_OK
+    summary = json.loads(as_json.output)["changed_lines"]
+    assert summary["files_not_analyzed"] == 1
+    assert summary["files_not_analyzed_examples"] == ["file-0001"]
+    for output in (as_json.output, as_sarif.output):
+        assert "customer_list" not in output and "private/" not in output
