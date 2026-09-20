@@ -26,6 +26,7 @@ from .protocols import (
     SourceFile,
 )
 from .registry import PluginRegistry
+from .suppression_ledger import SuppressionLedger, open_ledger
 
 # How many unparseable files are named in scan health / verbose output.
 # Bounded so a corrupt tree cannot bloat the report; the count is exact.
@@ -62,6 +63,7 @@ class CodeScanner:
         self.cache_store = cache_store
         self.cache_enabled = cache_store is not None
         self._scanned = False
+        self.suppressions = SuppressionLedger()
         self.language_counts: dict[str, int] = {}
 
         self.files_scanned = 0
@@ -91,6 +93,7 @@ class CodeScanner:
         if self._scanned:
             raise RuntimeError("CodeScanner instances are single-use")
         self._scanned = True
+        self.suppressions = open_ledger()
         for path, content in iter_source_files(
             self.project_path,
             self.registry.source_extensions(),
@@ -197,11 +200,7 @@ class CodeScanner:
             identity_path=internal_path,
             content=content,
         )
-        parsed = (
-            self.cache_store.load(adapter, source)
-            if self.cache_store is not None
-            else None
-        )
+        parsed = self.cache_store.load(adapter, source) if self.cache_store is not None else None
         if parsed is None:
             parsed = adapter.parse(source)
             if self.cache_store is not None:
@@ -221,9 +220,7 @@ class CodeScanner:
             return
 
         self.files_successfully_analyzed += 1
-        self.parsed_files.setdefault(adapter.language_id, {})[
-            internal_path
-        ] = parsed
+        self.parsed_files.setdefault(adapter.language_id, {})[internal_path] = parsed
         for rule_pack in self.registry.rule_packs_for(adapter.language_id):
             self._add_findings(rule_pack.evaluate(parsed))
 
@@ -235,9 +232,9 @@ class CodeScanner:
                 per_language = self.signals_by_language.setdefault(
                     adapter.language_id, {"dsa": set(), "design": set(), "files": 0}
                 )
-                per_language[
-                    "dsa" if observation.category == "architecture.dsa" else "design"
-                ].add(observation.signal_id)
+                per_language["dsa" if observation.category == "architecture.dsa" else "design"].add(
+                    observation.signal_id
+                )
                 target = {
                     "architecture.dsa": (
                         self.dsa_found,
@@ -272,28 +269,21 @@ class CodeScanner:
 
     def evidence_for(self, pattern: str) -> list[PatternHit]:
         """Return evidence rows for a pattern from either category."""
-        return (
-            self.dsa_evidence.get(pattern)
-            or self.design_evidence.get(pattern)
-            or []
-        )
+        return self.dsa_evidence.get(pattern) or self.design_evidence.get(pattern) or []
 
     def scan_health(self) -> dict:
         """Describe what was and was not analyzed."""
         health = self.discovery.as_dict()
         health["files_scanned"] = self.files_scanned
-        health["files_successfully_analyzed"] = (
-            self.files_successfully_analyzed
-        )
+        health["files_successfully_analyzed"] = self.files_successfully_analyzed
         health["unparsed_files"] = self.unparsed_files
         health["unparsed_examples"] = list(self.unparsed_examples)
         health["languages"] = dict(sorted(self.language_counts.items()))
+        health["suppressed"] = self.suppressions.health()
         health["package_analysis"] = self.package_health
         health["project_analysis"] = {
             f"{language_id}:{capability}": dict(result.health)
-            for (language_id, capability), result in sorted(
-                self.project_results.items()
-            )
+            for (language_id, capability), result in sorted(self.project_results.items())
         }
         return health
 
@@ -306,9 +296,7 @@ class CodeScanner:
         rather than as a floor value.
         """
         languages = list(self.registry.signal_capable_languages())
-        applicable = any(
-            self.parsed_files.get(language) for language in languages
-        )
+        applicable = any(self.parsed_files.get(language) for language in languages)
         # Per-language breakdown (staff review D2): a polyglot repository is
         # scored on the union of its signals; this shows which language
         # contributed what, without changing the score.
@@ -339,8 +327,7 @@ class CodeScanner:
         if self.discovery.truncated:
             reasons.append("discovery_truncated")
         if any(
-            not result.health.get("complete", True)
-            or bool(result.health.get("errors", 0))
+            not result.health.get("complete", True) or bool(result.health.get("errors", 0))
             for result in self.project_results.values()
         ):
             reasons.append("project_analysis_incomplete")
@@ -348,20 +335,13 @@ class CodeScanner:
             reasons.append("no_successful_analysis")
 
         complete = not reasons
-        ratio = (
-            self.files_successfully_analyzed / candidates
-            if candidates
-            else 0.0
-        )
+        ratio = self.files_successfully_analyzed / candidates if candidates else 0.0
         return {
             "complete": complete,
-            "authoritative": complete
-            and self.files_successfully_analyzed > 0,
+            "authoritative": complete and self.files_successfully_analyzed > 0,
             "source_candidates": candidates,
             "files_read": self.files_scanned,
-            "files_successfully_analyzed": (
-                self.files_successfully_analyzed
-            ),
+            "files_successfully_analyzed": (self.files_successfully_analyzed),
             "completeness_ratio": round(ratio, 3),
             "reasons": reasons,
         }
@@ -375,8 +355,7 @@ class CodeScanner:
             or self.unparsed_files > 0
             or self.package_health.get("errors", 0) > 0
             or any(
-                not result.health.get("complete", True)
-                or bool(result.health.get("errors", 0))
+                not result.health.get("complete", True) or bool(result.health.get("errors", 0))
                 for result in self.project_results.values()
             )
         )

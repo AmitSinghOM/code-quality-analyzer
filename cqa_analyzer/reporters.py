@@ -13,8 +13,7 @@ from .registry import PluginRegistry
 from .rule_metadata import RuleMetadata, rule_metadata
 
 SARIF_SCHEMA = (
-    "https://docs.oasis-open.org/sarif/sarif/v2.1.0/"
-    "cs01/schemas/sarif-schema-2.1.0.json"
+    "https://docs.oasis-open.org/sarif/sarif/v2.1.0/" "cs01/schemas/sarif-schema-2.1.0.json"
 )
 SARIF_VERSION = "2.1.0"
 _SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
@@ -37,6 +36,10 @@ class SarifRun:
     baseline_selection: Mapping[str, object]
     changed_line_selection: Mapping[str, object] | None = None
     findings: tuple[Mapping[str, object], ...] = ()
+    suppressed: tuple[Mapping[str, object], ...] = ()
+    """Findings removed by an in-source directive (review 5, A6). Emitted as
+    results carrying ``suppressions: [{kind: inSource, justification}]`` so a
+    SARIF consumer shows them as suppressed rather than absent."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,24 +101,40 @@ def register_standard_reporters(registry: PluginRegistry) -> PluginRegistry:
 
 def _sarif_payload(run: SarifRun) -> dict:
     findings = sorted(run.findings, key=_finding_sort_key)
-    rule_ids = sorted({_finding_string(item, "rule_id") for item in findings})
+    suppressed = sorted(run.suppressed, key=_finding_sort_key)
+    rule_ids = sorted({_finding_string(item, "rule_id") for item in (*findings, *suppressed)})
     catalog = [rule_metadata(rule_id) for rule_id in rule_ids]
     indexes = {metadata.rule_id: index for index, metadata in enumerate(catalog)}
+    results = [_result(item, indexes) for item in findings]
+    results.extend(_suppressed_result(item, indexes) for item in suppressed)
     return {
         "$schema": SARIF_SCHEMA,
-        "runs": [{
-            "tool": {
-                "driver": {
-                    "name": "Code Quality Analyzer",
-                    "rules": [_rule_descriptor(item) for item in catalog],
-                    "semanticVersion": run.analyzer_version,
+        "runs": [
+            {
+                "tool": {
+                    "driver": {
+                        "name": "Code Quality Analyzer",
+                        "rules": [_rule_descriptor(item) for item in catalog],
+                        "semanticVersion": run.analyzer_version,
+                    },
                 },
-            },
-            "results": [_result(item, indexes) for item in findings],
-            "properties": _sarif_properties(run),
-        }],
+                "results": results,
+                "properties": _sarif_properties(run),
+            }
+        ],
         "version": SARIF_VERSION,
     }
+
+
+def _suppressed_result(finding: Mapping[str, object], indexes: dict[str, int]) -> dict:
+    result = _result(finding, indexes)
+    result["suppressions"] = [
+        {
+            "kind": "inSource",
+            "justification": _finding_string(finding, "suppression_reason"),
+        }
+    ]
+    return result
 
 
 def _sarif_properties(run: SarifRun) -> dict:
@@ -126,9 +145,7 @@ def _sarif_properties(run: SarifRun) -> dict:
         "privacy": dict(run.privacy),
     }
     if run.changed_line_selection is not None:
-        properties["changedLineSelection"] = dict(
-            run.changed_line_selection
-        )
+        properties["changedLineSelection"] = dict(run.changed_line_selection)
     return properties
 
 
@@ -179,14 +196,16 @@ def _result(finding: Mapping[str, object], indexes: dict[str, int]) -> dict:
         )
     return {
         "level": _sarif_level(_finding_string(finding, "severity")),
-        "locations": [{
-            "physicalLocation": {
-                "artifactLocation": {
-                    "uri": _artifact_uri(_finding_string(location, "path")),
+        "locations": [
+            {
+                "physicalLocation": {
+                    "artifactLocation": {
+                        "uri": _artifact_uri(_finding_string(location, "path")),
+                    },
+                    "region": region,
                 },
-                "region": region,
-            },
-        }],
+            }
+        ],
         "message": {"text": _finding_string(finding, "message")},
         "properties": {
             "category": _finding_string(finding, "category"),
@@ -249,7 +268,5 @@ def _positive_integer(
 ) -> int:
     value = mapping.get(key)
     if not isinstance(value, int) or isinstance(value, bool) or value < 1:
-        raise ValueError(
-            f"Finding {rule_id} location {key!r} must be a positive integer"
-        )
+        raise ValueError(f"Finding {rule_id} location {key!r} must be a positive integer")
     return value

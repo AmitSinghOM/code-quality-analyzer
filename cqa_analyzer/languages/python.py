@@ -23,7 +23,8 @@ from ..protocols import (
     SourceFile,
 )
 from ..python_rules import PythonRuleAnalyzer
-from ..python_suppressions import comment_lines, suppression_lines
+from ..python_suppressions import comment_lines, suppression_lines, suppressions
+from ..suppression_ledger import drop_suppressed
 from ..registry import PluginRegistry
 from ..signals import FileSignals, extract_signals, pattern_is_present
 
@@ -155,12 +156,11 @@ class PythonRulePack:
             parsed.source.display_path,
             identity_path=parsed.source.identity_path,
         )
-        suppressed = suppression_lines(parsed.source.content)
+        suppressed = suppressions(parsed.source.content)
         documented = comment_lines(parsed.source.content)
         return tuple(
             _downgrade_documented_swallow(finding, documented)
-            for finding in findings
-            if (finding.location.line, finding.rule_id) not in suppressed
+            for finding in drop_suppressed(findings, suppressed)
         )
 
 

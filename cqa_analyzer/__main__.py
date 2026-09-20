@@ -539,6 +539,24 @@ def _run_analysis(
     )
 
 
+def _suppressed_payload(scanner: CodeScanner, anonymizer) -> list[dict]:
+    """Findings an in-source directive removed, each with its justification.
+
+    Review 5, A6: a suppression is visible evidence, not an absence. Neither
+    the score nor the exit code counts these (they never reach
+    ``reported_findings``); they are reported so a reviewer can tell a clean
+    file from a silenced one, and so SARIF can mark them suppressed."""
+    payload = []
+    for entry in scanner.suppressions.entries:
+        item = anonymizer.finding(entry.finding) if anonymizer else entry.finding.as_dict()
+        item["suppression_reason"] = entry.reason
+        payload.append(item)
+    payload.sort(
+        key=lambda item: (item["location"]["path"], item["location"]["line"], item["rule_id"])
+    )
+    return payload
+
+
 def _exit_code(
     scanner: CodeScanner,
     rating: float,
@@ -687,6 +705,7 @@ def _build_sarif_run(
         baseline_selection=baseline_selection,
         changed_line_selection=changed_lines_summary,
         findings=findings,
+        suppressed=tuple(_suppressed_payload(scanner, anonymizer)),
     )
 
 
@@ -769,6 +788,7 @@ def _build_json_report(
         ),
         "finding_summary": _finding_summary(reported_findings),
         "findings": finding_payload,
+        "suppressed_findings": _suppressed_payload(scanner, anonymizer),
         "dsa_patterns": _pattern_payload(
             dsa_found,
             _signal_definitions(scanner, "architecture.dsa", DSA_PATTERNS),
@@ -974,6 +994,19 @@ def _print_scan_health(scan_health, scanner):
             "part of the project only (raise --max-files)"
         )
     _print_excluded_generated(scan_health)
+    _print_suppressed(scan_health)
+
+
+def _print_suppressed(scan_health):
+    suppressed = scan_health.get("suppressed") or {}
+    count = suppressed.get("count", 0)
+    if not count:
+        return
+    by_rule = ", ".join(f"{rule}={n}" for rule, n in suppressed.get("by_rule", {}).items())
+    console.print(
+        f"[dim]i[/dim] {count} finding(s) suppressed by in-source directives "
+        f"({_safe(by_rule)}); listed under suppressed_findings in JSON/SARIF"
+    )
 
 
 def _print_excluded_generated(scan_health):
