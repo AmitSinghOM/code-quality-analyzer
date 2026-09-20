@@ -46,11 +46,13 @@ were dismissed and why). Every fix ships with a test proven to fail on 3.2.1.
   finding and its `suppression_reason`, SARIF results with
   `suppressions: [{kind: inSource, justification}]`, and a text summary line.
   Suppressed findings never reach the score, the exit code or baselines; the
-  reason is redacted under `--anonymize`. Report schema 1.12.0 -> 1.13.0
+  reason is redacted under `--anonymize`; package-level (`PY-PKG-*`) and
+  duplication (`PY-DUP-001`) suppressions are recorded too. Report schema 1.12.0 -> 1.13.0
   (`docs/report-schema-1.13.0.json`).
 - A changed-lines manifest file no analyzer saw (unsupported, excluded,
   unparsed) is reported as `files_not_analyzed` with bounded examples and named
-  in the text report; under `--strict` it is a coverage gap (exit 3). Such a
+  in the text report (paths tokenized under `--anonymize`); under `--strict` it
+  is a coverage gap (exit 3). Such a
   file was previously passed as clean.
 
 ### CLI

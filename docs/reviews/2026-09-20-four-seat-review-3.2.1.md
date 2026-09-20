@@ -97,3 +97,87 @@ A7 in cqa-action (v1.2.0). Each fix lands with a test proven to fail on
 ruff, the corpus before/after diff via `scripts/findings_snapshot.py`
 (expected: only reductions on the FP classes above, zero new findings),
 and an independent code-reviewer pass over the fix commits.
+
+
+## Outcome (2026-09-21)
+
+Every accepted finding in this repository is fixed on `review5/four-seat-2026-09-20`,
+each with a test proven to fail on `df8eb08` before the fix was applied:
+
+| Finding | Commit | Proof of discrimination (test failure on 3.2.1 code) |
+|---|---|---|
+| A1 MCP `python -m` hijack | `297f5d4` | `'HIJACKED' == '3.2.1'` |
+| A2 secret-name substrings + A10 anchor | `476483f` | import failure / `'sessionKey' in 'func RealBug() int64 {'` |
+| A3 literal constants treated as dynamic | `4104a6b` | `[8, 10, 12, 17] == [17]`, `[8, 14] == [14]`, `[4, 12] == [12]` |
+| A4 minified rule on non-JS files | `1339545` | `'minified_content' is None` x4, `{'minified_content': 1} == {}` |
+| A5 flag prefixes accepted | `774396e` | `assert 0 == 2` x4 |
+| A6 suppressions invisible + A9 quadratic lines | `45b48e5` | new keys absent on 3.2.1 (schema 1.13.0) |
+| A7 unanalyzed manifest files pass silently | `94838cb` | `assert 0 == 3` (strict exit) |
+| A11 README `python -m` tip | `bde185e` | doc change |
+
+A8 (cqa-action `python -` heredocs need `-P`) lives in the `cqa-action` repository
+and ships as its v1.2.0; not part of this branch.
+
+### Closing gate
+
+- Full suite: 855 collected, 843 passed, 12 skipped (all `tests/test_deep.py`,
+  optional `[deep]` extra absent from the local interpreter; CI has that leg).
+  52 tests added versus 3.2.1. `ruff check .` clean.
+- CQA on the analyzer itself, `df8eb08` vs branch, findings paired by
+  (path, rule, function) so line shifts do not count: score 7.5 -> 7.5,
+  149 -> 149 findings, NEW: [], GONE: []. Three findings the branch introduced
+  (`constant_literal` cyclomatic 12, `module_constants` 13, one test span 63)
+  were refactored away, not suppressed (`413a8d2`). The report now shows the
+  analyzer's own pre-existing `PY-COR-003` directive under `scan_health.suppressed`
+  -- A6 working on day one.
+- Independent code-review pass (code-reviewer skill, run inline: manifest of
+  25 files in 9 bundles over `df8eb08..HEAD`, risk-ordered, every row REVIEWED).
+
+### Closing-pass findings (against this branch's own commits)
+
+Accepted and fixed:
+
+- **R1 (HIGH)** -- the suppression ledger recorded drops only in the per-file
+  rule packs; the Python package analyzer (`PY-PKG-004/005`,
+  `package_intelligence.py`) and the duplication analyzer (`PY-DUP-001`,
+  `duplication.py`) still filtered with plain `(line, rule)` sets, so those
+  suppressions stayed invisible -- contradicting the README sentence written on
+  this branch. Both now record with the directive's reason; a legacy set still
+  works for external callers. `a28a767`; test fails on the unfixed code with
+  `('PY-PKG-004', 'generated at build time') in set()`.
+- **R2 (HIGH, privacy)** -- `files_not_analyzed_examples` (A7) carried raw
+  manifest paths into `--anonymize` JSON and SARIF output; the existing
+  anonymization test had every manifest file analyzed, so the list was empty.
+  Reproduced (`private/customer_list.txt` present in both outputs), fixed by
+  tokenizing through the anonymizer's `file()`; `3ac6ae2`; test fails on the
+  unfixed code with `['private/customer_list.txt'] == ['file-0001']`.
+- **R3 (MEDIUM, self-caught while writing docs)** -- the README promised
+  "suppression reasons never enter reports", which A6 made false; reasons are
+  author free text, so they are now `[redacted]` under `--anonymize` and the
+  README states the real contract. `bde185e`.
+
+Dismissed with reasons:
+
+- *ContextVar ledger lost across threads* -- no thread pools, executors or
+  asyncio anywhere in the package (grep), and the MCP server scans in a
+  subprocess whose context is fresh per scan.
+- *`-P` placed after `-m` would be a module argument* -- argv is
+  `[python, "-P", "-m", "cqa_analyzer", ...]`; interpreter flag position verified.
+- *`_suppressed_result` on a payload lacking `suppression_reason`* -- only
+  `_suppressed_payload` produces those payloads and it always sets the key.
+- *`reporters.py` diff is large* -- whole-file `ruff format` churn on a file
+  that was pre-existing unformatted (49 such files at `df8eb08`; CI enforces
+  `ruff check` only). Accepted as noise limited to files this branch edited;
+  22 untouched files that a package-wide format had swept in were restored
+  before commit.
+
+Known limitations recorded, not fixed (inside the documented "top-level,
+single definition" contract of A3; precision over recall):
+
+- A block-local `const local = "<b>x</b>"; el.innerHTML = local` inside a
+  function is not resolved and still fires.
+- A function-like C macro `system(CMD("-a"))` is classified as a call and fires
+  even when the macro expands to adjacent literals.
+
+Both are candidates for a later, separately calibrated widening of
+`constant_literal`.
