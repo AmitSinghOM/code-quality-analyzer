@@ -178,6 +178,12 @@ MINIFIED_AVERAGE_LINE_LENGTH = 500
 most ten lines), so one generated data table inside ordinary code does not
 disqualify the whole file."""
 MINIFIED_FEW_LINES = 10
+MINIFIED_CONTENT_SUFFIX = re.compile(r"\.[cm]?[jt]sx?$", re.IGNORECASE)
+"""Only the JavaScript/TypeScript ecosystem ships minified source, so the
+content heuristic is consulted for those extensions alone. A three-line
+``constants.py`` holding one 6 KB base64 literal, or a ``schema.go`` with one
+long DDL string, is hand-written code that every rule (including the security
+family) must still see (review 5, A4)."""
 
 
 def generated_reason(name: str, text: str) -> str | None:
@@ -185,6 +191,8 @@ def generated_reason(name: str, text: str) -> str | None:
     analyzed as hand-written source, else ``None``."""
     if MINIFIED_NAME.search(name):
         return "minified_name"
+    if not MINIFIED_CONTENT_SUFFIX.search(name):
+        return None
     lines = text.splitlines() or [""]
     if max(map(len, lines)) < MINIFIED_LINE_LENGTH:
         return None
