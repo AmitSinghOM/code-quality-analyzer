@@ -4,6 +4,8 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 3.3.0 - 2026-09-21
+
 Four-seat review of 3.2.1 (Staff, Product, Security, CTO; record in
 `docs/reviews/2026-09-20-four-seat-review-3.2.1.md`, with the candidates that
 were dismissed and why). Every fix ships with a test proven to fail on 3.2.1.

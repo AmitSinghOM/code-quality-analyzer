@@ -465,7 +465,7 @@ class RustRulePack(RegexRulePackBase):
 
     rule_pack_id = RUST_RULE_PACK_ID
     language_id = "rust"
-    ruleset_version = "1.1.0"
+    ruleset_version = "1.2.0"
     plugin_api_version = PLUGIN_API_VERSION
 
     def __init__(self) -> None:

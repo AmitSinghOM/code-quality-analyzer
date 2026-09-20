@@ -739,7 +739,7 @@ class CRulePack(RegexRulePackBase):
 
     rule_pack_id = C_RULE_PACK_ID
     language_id = "c_cpp"
-    ruleset_version = "1.2.0"
+    ruleset_version = "1.3.0"
     plugin_api_version = PLUGIN_API_VERSION
 
     def __init__(self) -> None:
