@@ -23,7 +23,7 @@ from ..protocols import (
     SourceFile,
 )
 from ..python_rules import PythonRuleAnalyzer
-from ..python_suppressions import comment_lines, suppression_lines, suppressions
+from ..python_suppressions import comment_lines, suppressions
 from ..suppression_ledger import drop_suppressed
 from ..registry import PluginRegistry
 from ..signals import FileSignals, extract_signals, pattern_is_present
@@ -228,8 +228,8 @@ class PythonPackageProvider:
             for path, parsed in project.parsed_files.items()
             if isinstance(parsed.artifact, ast.AST)
         }
-        suppressions = {
-            path: suppression_lines(parsed.source.content)
+        suppressions_by_path = {
+            path: suppressions(parsed.source.content)
             for path, parsed in project.parsed_files.items()
             if isinstance(parsed.artifact, ast.AST)
         }
@@ -237,7 +237,7 @@ class PythonPackageProvider:
             project.root,
             artifacts,
             redact_paths=project.redact_paths,
-            suppressions_by_path=suppressions,
+            suppressions_by_path=suppressions_by_path,
         )
         payload = analyzer.analyze()
         return ProviderResult(
@@ -262,7 +262,7 @@ class PythonDuplicationProvider:
             path: (
                 parsed.source.display_path,
                 parsed.artifact,
-                suppression_lines(parsed.source.content),
+                suppressions(parsed.source.content),
             )
             for path, parsed in project.parsed_files.items()
             if isinstance(parsed.artifact, ast.AST)

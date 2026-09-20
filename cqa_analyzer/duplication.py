@@ -23,6 +23,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 from .findings import Finding, Location
+from .suppression_ledger import _reason, record
 
 RULE_ID = "PY-DUP-001"
 MIN_BODY_STATEMENTS = 3
@@ -68,9 +69,7 @@ def _structure_key(node: ast.AST, body: list[ast.stmt]) -> str:
     """Build the normalized structural fingerprint for one function."""
     returns = ast.dump(node.returns) if node.returns is not None else ""
     body_dump = "\x00".join(ast.dump(statement) for statement in body)
-    return "\x1f".join(
-        (type(node).__name__, ast.dump(node.args), returns, body_dump)
-    )
+    return "\x1f".join((type(node).__name__, ast.dump(node.args), returns, body_dump))
 
 
 def _body_node_count(body: list[ast.stmt]) -> int:
@@ -142,26 +141,31 @@ class PythonDuplicationAnalyzer:
         reported_groups = []
         for occurrences in groups:
             first = occurrences[0]
-            reported_groups.append({
-                "function_count": len(occurrences),
-                "occurrences": [
-                    {
-                        "path": occurrence.display_path,
-                        "line": occurrence.line,
-                        "function": occurrence.name,
-                    }
-                    for occurrence in occurrences
-                ],
-            })
+            reported_groups.append(
+                {
+                    "function_count": len(occurrences),
+                    "occurrences": [
+                        {
+                            "path": occurrence.display_path,
+                            "line": occurrence.line,
+                            "function": occurrence.name,
+                        }
+                        for occurrence in occurrences
+                    ],
+                }
+            )
             for occurrence in occurrences:
                 other = occurrences[1] if occurrence is first else first
                 suppressed = self._suppressions.get(
                     occurrence.identity_path,
                     frozenset(),
                 )
-                if (occurrence.line, self.rule_id) in suppressed:
+                finding = self._finding(occurrence, other, len(occurrences))
+                key = (occurrence.line, self.rule_id)
+                if key in suppressed:
+                    record(finding, _reason(suppressed, key))
                     continue
-                findings.append(self._finding(occurrence, other, len(occurrences)))
+                findings.append(finding)
         payload = {
             "functions_analyzed": self.functions_analyzed,
             "duplicate_groups": len(groups),
@@ -186,19 +190,14 @@ class PythonDuplicationAnalyzer:
             if len(occurrences) >= 2
         ]
         duplicate_ids = {
-            occurrence.node_id
-            for occurrences in candidates
-            for occurrence in occurrences
+            occurrence.node_id for occurrences in candidates for occurrence in occurrences
         }
         groups = []
         for occurrences in candidates:
             surviving = [
                 occurrence
                 for occurrence in occurrences
-                if not any(
-                    ancestor_id in duplicate_ids
-                    for ancestor_id in occurrence.ancestor_ids
-                )
+                if not any(ancestor_id in duplicate_ids for ancestor_id in occurrence.ancestor_ids)
             ]
             if len(surviving) >= 2:
                 groups.append(surviving)

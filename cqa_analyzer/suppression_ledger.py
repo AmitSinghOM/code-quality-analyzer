@@ -84,3 +84,10 @@ def drop_suppressed(
         else:
             record(finding, reason)
     return tuple(kept)
+
+
+def _reason(suppressions: object, key: tuple[int, str]) -> str:
+    """The directive reason for ``key`` when ``suppressions`` is the
+    reason-bearing mapping; ``""`` for a legacy ``(line, rule)`` set."""
+    getter = getattr(suppressions, "get", None)
+    return str(getter(key, "")) if callable(getter) else ""

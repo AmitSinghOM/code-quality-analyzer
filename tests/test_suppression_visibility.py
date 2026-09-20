@@ -13,6 +13,7 @@ import json
 
 from cqa_analyzer.languages._suppressions import comment_suppression_lines, comment_suppressions
 from cqa_analyzer.python_suppressions import suppressions as python_suppressions
+from cqa_analyzer.scanner import CodeScanner
 from tests.test_cli import run  # noqa: E402 - shared CLI harness
 
 GO_TLS = (
@@ -137,3 +138,59 @@ def test_python_suppressions_return_reasons():
         'import os\nos.system(cmd)  # cqa: ignore=PY-SEC-002 reason="cmd is a literal upstream"\n'
     )
     assert python_suppressions(source) == {(2, "PY-SEC-002"): "cmd is a literal upstream"}
+
+
+# ---- Review 5 closing pass, R1: project-level analyzers record their drops too ---
+# The per-file rule packs reported into the ledger from the start; the Python
+# package analyzer (PY-PKG-*) and the duplication analyzer (PY-DUP-001) filtered
+# with plain (line, rule) sets and left no trace. Every drop site must record.
+
+
+_DUP_BODY = """
+    total = 0
+    for record in records:
+        if record.value > threshold:
+            total += record.value
+        else:
+            total -= 1
+    if total < 0:
+        return 0
+    return [
+        total,
+        len(records),
+        threshold,
+    ]
+"""
+
+
+def _dup_function(name: str, directive: str = "") -> str:
+    return f"def {name}(records, threshold=0):{directive}\n{_DUP_BODY}\n"
+
+
+def test_package_and_duplication_suppressions_are_recorded(project):
+    root = project(
+        {
+            "pkg/__init__.py": (
+                "__all__ = [\n"
+                "    'hidden',  # cqa: ignore=PY-PKG-004 reason='generated at build time'\n"
+                "]\n"
+            ),
+            "pkg/a.py": _dup_function("summarize", '  # cqa: ignore=PY-DUP-001 reason="generated"'),
+            "pkg/b.py": _dup_function("summarize"),
+        }
+    )
+
+    scanner = CodeScanner(root)
+    scanner.scan()
+    reported = {f.rule_id for f in scanner.findings}
+    recorded = {(e.finding.rule_id, e.reason) for e in scanner.suppressions.entries}
+
+    assert "PY-PKG-004" not in reported
+    assert ("PY-PKG-004", "generated at build time") in recorded
+    assert ("PY-DUP-001", "generated") in recorded
+    assert scanner.suppressions.health() == {
+        "count": 2,
+        "by_rule": {"PY-DUP-001": 1, "PY-PKG-004": 1},
+    }
+    # The unsuppressed twin is still reported, so the directive removed exactly one.
+    assert [f.location.path for f in scanner.findings if f.rule_id == "PY-DUP-001"] == ["pkg/b.py"]
