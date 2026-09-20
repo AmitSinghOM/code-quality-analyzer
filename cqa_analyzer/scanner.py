@@ -68,6 +68,7 @@ class CodeScanner:
 
         self.files_scanned = 0
         self.files_successfully_analyzed = 0
+        self.analyzed_paths: set[str] = set()
         self.total_lines = 0
         self.unparsed_files = 0
         self.unparsed_examples: list[str] = []
@@ -220,6 +221,7 @@ class CodeScanner:
             return
 
         self.files_successfully_analyzed += 1
+        self.analyzed_paths.add(internal_path)
         self.parsed_files.setdefault(adapter.language_id, {})[internal_path] = parsed
         for rule_pack in self.registry.rule_packs_for(adapter.language_id):
             self._add_findings(rule_pack.evaluate(parsed))

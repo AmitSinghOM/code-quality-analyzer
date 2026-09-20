@@ -445,6 +445,7 @@ def _run_analysis(
         changed_lines_summary = changed_line_selection.summary(
             input_findings=len(baseline_selected_findings),
             selected_findings=len(reported_findings),
+            not_analyzed=changed_line_selection.not_analyzed(scanner.analyzed_paths),
         )
     baseline_summary = (
         comparison.as_dict()
@@ -536,6 +537,7 @@ def _run_analysis(
         complexity_health=complexity_health,
         findings=reported_findings,
         fail_on=fail_on,
+        changed_lines_summary=changed_lines_summary,
     )
 
 
@@ -566,12 +568,17 @@ def _exit_code(
     complexity_health: dict | None = None,
     findings=None,
     fail_on: str | None = None,
+    changed_lines_summary: dict | None = None,
 ) -> int:
     if scanner.discovery.source_candidates == 0:
         return EXIT_NOTHING_ANALYZED
     if scanner.files_successfully_analyzed == 0:
         return EXIT_COVERAGE_GAP
-    if strict and (scanner.has_coverage_gaps or _health_has_gaps(complexity_health)):
+    if strict and (
+        scanner.has_coverage_gaps
+        or _health_has_gaps(complexity_health)
+        or bool((changed_lines_summary or {}).get("files_not_analyzed"))
+    ):
         return EXIT_COVERAGE_GAP
     if fail_under is not None and not signal_scope["applicable"]:
         return EXIT_SCORE_NOT_APPLICABLE
@@ -931,6 +938,7 @@ def _emit_text(
     _print_package_intelligence(package_payload)
     _print_baseline_summary(baseline_summary)
     _print_changed_lines_summary(changed_lines_summary)
+    _print_not_analyzed(changed_lines_summary)
     _print_findings(finding_payload)
     _print_pattern_table(
         "DSA Patterns Detected",
@@ -995,6 +1003,20 @@ def _print_scan_health(scan_health, scanner):
         )
     _print_excluded_generated(scan_health)
     _print_suppressed(scan_health)
+
+
+def _print_not_analyzed(changed_lines_summary):
+    summary = changed_lines_summary or {}
+    count = summary.get("files_not_analyzed", 0)
+    if not count:
+        return
+    console.print(
+        f"[yellow]![/yellow] {count} changed file(s) in the manifest were not analyzed "
+        "(unsupported, excluded or unparsed) - they are unchecked, not clean; "
+        "--strict treats this as a coverage gap"
+    )
+    for path in summary.get("files_not_analyzed_examples", []):
+        console.print(f"    - {_safe(path)}")
 
 
 def _print_suppressed(scan_health):
