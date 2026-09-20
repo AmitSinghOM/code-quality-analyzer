@@ -14,7 +14,7 @@ from collections.abc import Iterable
 
 from .findings import Finding, Location
 from .languages._parity import is_test_path
-from .languages._security import SECRET_NAME
+from .languages._security import is_secret_name
 
 _SAFE_YAML_LOADERS = frozenset({"SafeLoader", "CSafeLoader", "BaseLoader", "CBaseLoader"})
 _UNSAFE_LOADS = {
@@ -50,7 +50,6 @@ _RANDOM_FUNCTIONS = frozenset(
         "triangular",
     }
 )
-_SECRET_NAME = SECRET_NAME
 _TLS_ATTRIBUTES = frozenset({"_create_unverified_context", "CERT_NONE"})
 _CERT_NONE_CONTEXT = re.compile(r"(?i)cert_?reqs|verify_?mode")
 
@@ -277,7 +276,7 @@ class InsecureRandomForSecretRule(_SecurityRule):
         if binding is None:
             return None
         names, value = binding
-        secret = next((n for n in names if n and _SECRET_NAME.search(n)), None)
+        secret = next((n for n in names if n and is_secret_name(n)), None)
         if secret is None or not _uses_random(value):
             return None
         return f"'{secret}' is produced by the non-cryptographic random module (CWE-330)."
@@ -294,7 +293,7 @@ def _binding(node: ast.AST) -> tuple[list[str], ast.expr] | None:
 
 def _random_keyword(node: ast.Call) -> str | None:
     for keyword in node.keywords:
-        if keyword.arg and _SECRET_NAME.search(keyword.arg) and _uses_random(keyword.value):
+        if keyword.arg and is_secret_name(keyword.arg) and _uses_random(keyword.value):
             return (
                 f"Argument '{keyword.arg}' is produced by the non-cryptographic "
                 "random module (CWE-330)."

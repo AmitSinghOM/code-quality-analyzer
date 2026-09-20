@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 from cqa_analyzer.languages._security import (
-    SECRET_NAME,
+    is_secret_name,
     Argument,
     classify_argument,
     split_arguments,
@@ -430,12 +430,84 @@ def test_classify_argument(language, call, expected):
     "name", ["token", "apiKey", "SESSION_ID", "csrf_token", "reset_code", "password"]
 )
 def test_secret_names_match(name):
-    assert SECRET_NAME.search(name)
+    assert is_secret_name(name)
 
 
 @pytest.mark.parametrize("name", ["counter", "retries", "index", "delay_ms", "shuffle_seed"])
 def test_ordinary_names_do_not_match(name):
-    assert not SECRET_NAME.search(name)
+    assert not is_secret_name(name)
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "max_tokens",  # a sampling parameter, not a credential
+        "maxTokens",
+        "tokens_per_second",
+        "token_index",
+        "tokenIndex",
+        "salt_rounds",
+        "footprint",  # used to match on the 'otp' inside it
+        "hotplug_delay",
+        "secretary",
+        "tokenizer",
+    ],
+)
+def test_secret_shaped_substrings_are_not_secrets(name):
+    """Whole segments only: ``token`` in ``max_tokens`` is a count, ``otp`` in
+    ``footprint`` is three letters. This is the false-positive class a
+    random-for-secrets rule earns its reputation on."""
+    assert not is_secret_name(name)
+
+
+@pytest.mark.parametrize(
+    "name", ["reset_token", "sessionKey", "API_KEY", "csrfToken", "passphrase"]
+)
+def test_segmented_secret_names_match(name):
+    assert is_secret_name(name)
+
+
+SAMPLING_PY = (
+    "import random\n\n\n"
+    "def sample(n):\n"
+    "    max_tokens = random.randint(1, 10)\n"
+    "    footprint = random.random()\n"
+    "    token_index = random.choice(range(n))\n"
+    "    salt_rounds = random.randint(1, 3)\n"
+    "    hotplug_delay = random.uniform(0, 1)\n"
+    "    return max_tokens, footprint, token_index, salt_rounds, hotplug_delay\n\n\n"
+    "def real_bug():\n"
+    "    reset_token = random.getrandbits(64)\n"
+    "    return reset_token\n"
+)
+
+SAMPLING_GO = (
+    "package sampling\n\n"
+    'import "math/rand"\n\n'
+    "func Sample(n int) (int, float64, int) {\n"
+    "\tmaxTokens := rand.Intn(10)\n"
+    "\tfootprint := rand.Float64()\n"
+    "\ttokenIndex := rand.Intn(n)\n"
+    "\treturn maxTokens, footprint, tokenIndex\n"
+    "}\n\n"
+    "func RealBug() int64 {\n"
+    "\tsessionKey := rand.Int63()\n"
+    "\treturn sessionKey\n"
+    "}\n"
+)
+
+
+def test_py_sec_005_precision_on_sampling_code():
+    """Five benign random draws with token-like names and one real bug: exactly
+    the bug is reported. On 3.2.1 this file produced six findings."""
+    found = py(SAMPLING_PY, "PY-SEC-005")
+    assert [f.location.line for f in found] == [14]
+
+
+def test_go_sec_003_precision_on_sampling_code():
+    found = findings("go", SAMPLING_GO, "GO-SEC-003")
+    assert len(found) == 1
+    assert "sessionKey" in SAMPLING_GO.splitlines()[found[0].location.line - 1]
 
 
 # ---- SARIF --------------------------------------------------------------------

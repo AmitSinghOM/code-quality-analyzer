@@ -37,12 +37,79 @@ from ._sql import PREFIXED_QUOTE, find_closer
 
 Interpolates = Callable[[str, str, str], bool]
 
-SECRET_NAME = re.compile(
-    r"(?i)(?:^|_|[a-z])(?:token|secret|passw(?:or)?d|nonce|salt|otp|api_?key|"
-    r"session_?(?:id|key)|csrf|auth_?code|verification_?code|reset_?code)",
+_SEGMENT = re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|\d+")
+
+_SECRET_SEGMENTS = frozenset(
+    {
+        "token",
+        "tokens",
+        "secret",
+        "secrets",
+        "password",
+        "passwd",
+        "passphrase",
+        "nonce",
+        "salt",
+        "otp",
+        "apikey",
+        "csrf",
+        "sessionid",
+    }
 )
-"""Identifier shapes that hold a security-relevant value. Kept deliberately
-short: a broad list is how ``random``-for-secrets rules earn their reputation."""
+_SECRET_PAIRS = frozenset(
+    {
+        ("api", "key"),
+        ("session", "id"),
+        ("session", "key"),
+        ("auth", "code"),
+        ("verification", "code"),
+        ("reset", "code"),
+    }
+)
+_QUANTITY_SEGMENTS = frozenset(
+    {
+        "max",
+        "min",
+        "num",
+        "count",
+        "len",
+        "length",
+        "size",
+        "index",
+        "idx",
+        "per",
+        "rate",
+        "limit",
+        "budget",
+        "delay",
+        "timeout",
+        "ttl",
+        "rounds",
+        "offset",
+        "position",
+        "pos",
+    }
+)
+
+
+def is_secret_name(name: str) -> bool:
+    """Whether ``name`` is an identifier that holds a security-relevant value.
+
+    Identifiers are split into snake/camel segments and matched as WHOLE
+    segments (``reset_token``, ``sessionKey``, ``API_KEY``), never as
+    substrings: ``max_tokens``, ``footprint`` and ``hotplug_delay`` used to
+    fire on ``token``/``otp``. A name that also carries a quantity or position
+    word (``max_tokens``, ``token_index``, ``salt_rounds``) is a count, not a
+    secret, and stays silent. Kept deliberately short: a broad list is how
+    ``random``-for-secrets rules earn their reputation.
+    """
+    segments = [segment.lower() for segment in _SEGMENT.findall(name)]
+    if not segments or _QUANTITY_SEGMENTS.intersection(segments):
+        return False
+    if _SECRET_SEGMENTS.intersection(segments):
+        return True
+    return any(pair in _SECRET_PAIRS for pair in zip(segments, segments[1:], strict=False))
+
 
 SHELL_BINARIES = frozenset(
     {
@@ -359,7 +426,7 @@ def secret_random_findings(
     code_text = parsed.facts.code_text
     for match in assignment.finditer(code_text):
         name = match.group("name")
-        if SECRET_NAME.search(name) is None:
+        if not is_secret_name(name):
             continue
         end = _statement_end(code_text, match.end())
         expression = code_text[match.end() : end]
@@ -368,7 +435,7 @@ def secret_random_findings(
         yield security_finding(
             rule_id,
             parsed,
-            match.start(),
+            match.start("name"),  # not match.start(): a leading `{` sits on the previous line
             message,
             remediation,
             confidence="medium",
