@@ -2,6 +2,7 @@
 
 import json
 
+import pytest
 from clirunner import CliRunner
 
 from cqa_analyzer.__main__ import (
@@ -887,3 +888,27 @@ def test_config_flags_pin_the_gate_outside_the_scanned_tree(project, tmp_path):
     assert "fingerprint mismatch" in tampered.output
     both = CliRunner().invoke(main, [str(root), "--config", str(pinned), "--no-project-config"])
     assert both.exit_code == 2 and "mutually exclusive" in both.output
+
+
+# ---- Review 5, A5: flags match exactly, never by prefix ----------------------
+
+
+@pytest.mark.parametrize("prefix", ["--off", "--output-form", "--fail-o", "--no-project"])
+def test_flag_prefixes_are_rejected_like_click_did(project, prefix):
+    """click (2.x) never matched flag prefixes; the argparse CLI must not either,
+    or adding a flag that shares a prefix would break scripts that work today."""
+    root = project({"lib.py": "x = 1\n"})
+
+    result = run([str(root), prefix] + (["json"] if prefix == "--output-form" else []))
+
+    assert result.exit_code == 2
+    assert "unrecognized arguments" in result.output or "error" in result.output
+
+
+def test_full_flag_names_still_work(project):
+    root = project({"lib.py": "x = 1\n"})
+
+    result = run([str(root), "--offline", "--output-format", "json"])
+
+    assert result.exit_code == EXIT_OK
+    assert json.loads(result.output)["schema_version"]

@@ -245,6 +245,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="code-quality-analyzer",
         description="Analyze a project without sending source outside the machine.",
+        # click never matched flag prefixes; argparse does by default, which would
+        # let ``--off``/``--output-form`` work today and break the moment a flag
+        # sharing that prefix is added (review 5, A5).
+        allow_abbrev=False,
     )
     parser.add_argument(
         "--version",
