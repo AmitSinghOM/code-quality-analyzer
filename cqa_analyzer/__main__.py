@@ -58,6 +58,9 @@ EXIT_FINDINGS = 4
 EXIT_SCORE_NOT_APPLICABLE = 5
 EXIT_CONFIG_MISMATCH = 6
 
+ANONYMIZED_REASON = "[redacted]"
+"""Stands in for a suppression reason under --anonymize (author-written free text)."""
+
 
 class CliError(Exception):
     """A fatal, expected error: printed as ``Error: <message>`` and exit 1.
@@ -550,8 +553,14 @@ def _suppressed_payload(scanner: CodeScanner, anonymizer) -> list[dict]:
     file from a silenced one, and so SARIF can mark them suppressed."""
     payload = []
     for entry in scanner.suppressions.entries:
-        item = anonymizer.finding(entry.finding) if anonymizer else entry.finding.as_dict()
-        item["suppression_reason"] = entry.reason
+        if anonymizer:
+            item = anonymizer.finding(entry.finding)
+            # Free text written by the repository author; a shareable report
+            # must not carry it verbatim.
+            item["suppression_reason"] = ANONYMIZED_REASON
+        else:
+            item = entry.finding.as_dict()
+            item["suppression_reason"] = entry.reason
         payload.append(item)
     payload.sort(
         key=lambda item: (item["location"]["path"], item["location"]["line"], item["rule_id"])

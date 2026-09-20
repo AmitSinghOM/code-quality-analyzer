@@ -249,7 +249,12 @@ missing. pip drops scripts next to the interpreter that installed them
 (for example `~/.local/share/mise/installs/python/3.12.x/bin/` or
 `~/Library/Python/3.x/bin/` on macOS), and that directory may not be on
 PATH. Either add it to your shell profile, run `pipx ensurepath` if you
-used pipx, or use `python3 -m cqa_analyzer` instead of the command.
+used pipx, or use `python3 -m cqa_analyzer` instead of the command. If you
+run the module form from inside a repository you do not trust, add `-P`
+(`python3 -P -m cqa_analyzer .`): `-m` puts the current directory first on
+`sys.path`, so a checked-in `cqa_analyzer/` directory would run instead of
+the installed analyzer. The console script and the MCP server are not
+affected (the server already launches its subprocess with `-P`).
 
 **`No module named cqa_analyzer`** — the package is installed in a
 different Python than the one you are running. This is common with
@@ -396,9 +401,15 @@ Filters are project-relative, exclusion wins, and filtered files do not consume
 candidate or file-limit accounting. The root `.gitignore` is respected by
 default. Python findings can be suppressed on their reported line only with an
 explicit rule ID and nonempty quoted reason, for example
-`# cqa: ignore=PY-COR-001 reason="legacy API"`. Suppression reasons never enter
-reports or baselines. JSON reports identify the validated effective policy with
-a privacy-safe `configuration_fingerprint`.
+`# cqa: ignore=PY-COR-001 reason="legacy API"`. A suppression is visible
+evidence, not an absence: the report carries `scan_health.suppressed`
+(`count`, `by_rule`) and a `suppressed_findings` list with each suppressed
+finding and its `suppression_reason`; SARIF emits them as results with
+`suppressions: [{"kind": "inSource", "justification": ...}]`, which GitHub
+code scanning shows as suppressed; the text report prints one summary line.
+Suppressed findings never reach the score, the exit code, or baselines, and
+under `--anonymize` the reason text is redacted. JSON reports identify the
+validated effective policy with a privacy-safe `configuration_fingerprint`.
 
 See [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) for glob semantics,
 validation limits, rule policy, suppressions, and compatibility boundaries.

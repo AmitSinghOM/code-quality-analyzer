@@ -80,7 +80,7 @@ def test_text_report_mentions_suppressed_count(project):
     assert "1 finding(s) suppressed by in-source directives (GO-SEC-001=1)" in result.output
 
 
-def test_anonymized_suppressed_findings_do_not_leak_paths(project):
+def test_anonymized_suppressed_findings_leak_neither_paths_nor_reasons(project):
     root = project({"tls.go": GO_TLS})
 
     result = run([str(root), "-f", "json", "--offline", "--anonymize"])
@@ -88,7 +88,7 @@ def test_anonymized_suppressed_findings_do_not_leak_paths(project):
 
     (item,) = payload["suppressed_findings"]
     assert "tls.go" not in item["location"]["path"]
-    assert item["suppression_reason"] == "self-signed in dev"
+    assert item["suppression_reason"] == "[redacted]", "author free text is redacted"
 
 
 def test_report_without_directives_has_empty_suppression_keys(project):
