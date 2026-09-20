@@ -9,6 +9,7 @@ an f-string, ``%``/``.format``/``+`` — is dynamic.
 from __future__ import annotations
 
 import ast
+import contextvars
 import re
 from collections.abc import Iterable
 
@@ -54,8 +55,58 @@ _TLS_ATTRIBUTES = frozenset({"_create_unverified_context", "CERT_NONE"})
 _CERT_NONE_CONTEXT = re.compile(r"(?i)cert_?reqs|verify_?mode")
 
 
+_MODULE_CONSTANTS: contextvars.ContextVar[frozenset[str]] = contextvars.ContextVar(
+    "cqa_module_constants", default=frozenset()
+)
+
+
+def module_constants(tree: ast.AST) -> frozenset[str]:
+    """Names bound exactly once, at module level, to a string literal.
+
+    ``CMD = "ls -la"`` at the top of a file makes ``subprocess.run(CMD,
+    shell=True)`` a literal command, not a runtime one. A name assigned
+    anywhere else in the module (a second assignment, a loop target, an
+    augmented assignment, a ``global`` rebinding) is not a constant.
+    """
+    stores: dict[str, int] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            stores[node.id] = stores.get(node.id, 0) + 1
+    constants: set[str] = set()
+    for statement in getattr(tree, "body", []):
+        if isinstance(statement, ast.Assign) and len(statement.targets) == 1:
+            target, value = statement.targets[0], statement.value
+        elif isinstance(statement, ast.AnnAssign) and statement.value is not None:
+            target, value = statement.target, statement.value
+        else:
+            continue
+        if (
+            isinstance(target, ast.Name)
+            and isinstance(value, ast.Constant)
+            and isinstance(value.value, str)
+            and stores.get(target.id) == 1
+        ):
+            constants.add(target.id)
+    return frozenset(constants)
+
+
+def _shlex_safe(node: ast.expr) -> bool:
+    """``shlex.join(...)``, ``shlex.quote(...)``, or an f-string whose every
+    interpolation is ``shlex.quote(...)``: quoted by construction."""
+    if isinstance(node, ast.Call):
+        return _attr(node.func) in {("shlex", "join"), ("shlex", "quote")}
+    if isinstance(node, ast.JoinedStr):
+        holes = [part for part in node.values if isinstance(part, ast.FormattedValue)]
+        return bool(holes) and all(_shlex_safe(hole.value) for hole in holes)
+    return False
+
+
 def _is_dynamic(node: ast.expr | None) -> bool:
-    return node is not None and not isinstance(node, ast.Constant)
+    if node is None or isinstance(node, ast.Constant):
+        return False
+    if isinstance(node, ast.Name) and node.id in _MODULE_CONSTANTS.get():
+        return False
+    return not _shlex_safe(node)
 
 
 def _attr(node: ast.expr) -> tuple[str, str] | None:
@@ -97,6 +148,20 @@ class _SecurityRule:
         identity_path = identity_path or path
         in_tests = self.downgrade_in_tests and is_test_path(identity_path)
         seen: set[int] = set()
+        reset_handle = _MODULE_CONSTANTS.set(module_constants(tree))
+        try:
+            yield from self._walk(tree, path, identity_path, in_tests, seen)
+        finally:
+            _MODULE_CONSTANTS.reset(reset_handle)
+
+    def _walk(
+        self,
+        tree: ast.AST,
+        path: str,
+        identity_path: str,
+        in_tests: bool,
+        seen: set[int],
+    ) -> Iterable[Finding]:
         for node in ast.walk(tree):
             hit = self.classify(node)
             if hit is None or node.lineno in seen:

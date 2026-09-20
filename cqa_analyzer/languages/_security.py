@@ -274,6 +274,9 @@ def classify_argument(
         return Argument("empty")
     literal = _read_literal(source, start, end)
     if literal is None:
+        constant = constant_literal(parsed, source[start:end])
+        if constant is not None:
+            return Argument("literal", constant)
         return Argument("dynamic")
     delimiter, prefix, content, close = literal
     absorbed = _absorb_adjacent_literals(source, close, end, content)
@@ -285,6 +288,84 @@ def classify_argument(
     if interpolates is not None and interpolates(delimiter, prefix, content):
         return Argument("dynamic")
     return Argument("literal", content)
+
+
+# ---- constant resolution ----------------------------------------------------
+
+_IDENTIFIER = re.compile(r"[A-Za-z_]\w*\Z")
+
+_CONSTANT_KEYWORDS = (
+    r"(?:const\s+val|const\s+string|static\s+final\s+String|final\s+String|"
+    r"static\s+const\s+char\s*\*\s*|const\s+char\s*\*\s*|const)"
+)
+"""Kotlin, C#, Java, C/C++ and the shared ``const`` of Go, TS/JS and Rust."""
+
+MAX_CONSTANT_SCAN = 200_000
+"""Files past this many characters skip constant resolution: the scan is a
+handful of regexes but the benefit on a generated file is nil."""
+
+
+def _constant_definition(name: str) -> re.Pattern:
+    escaped = re.escape(name)
+    return re.compile(
+        r"(?m)^[ \t]*(?:export\s+|public\s+|private\s+|internal\s+|pub(?:\(crate\))?\s+)?"
+        rf"{_CONSTANT_KEYWORDS}\s+{escaped}(?:\s*:\s*&(?:'static\s+)?str)?"
+        r"[ \t]*(?P<eq>=)[ \t]*;?[ \t]*$"
+    )
+
+
+def _define_directive(name: str) -> re.Pattern:
+    return re.compile(rf"(?m)^[ \t]*#[ \t]*define[ \t]+{re.escape(name)}[ \t]+(?=[\"'])")
+
+
+def _rebinding(name: str) -> re.Pattern:
+    return re.compile(rf"\b{re.escape(name)}\s*(?:\+=|:=|=(?!=))")
+
+
+def constant_literal(parsed: ParsedFile, text: str) -> str | None:
+    """The string a bare identifier names when it is a file-level constant.
+
+    ``exec.Command("sh", "-c", script)`` with ``const script = "echo hi"`` at
+    the top of the file is a literal command, not a runtime one. Resolution
+    is deliberately narrow: same file, one ``const``-style definition at the
+    start of a line whose right-hand side is a single string literal, and no
+    other assignment to that name anywhere in the file. Anything else stays
+    ``dynamic`` -- the rule's job is to be right when it fires, not to
+    understand the program.
+    """
+    name = text.strip()
+    if _IDENTIFIER.fullmatch(name) is None:
+        return None
+    source = parsed.source.content
+    if len(source) > MAX_CONSTANT_SCAN:
+        return None
+    code_text = parsed.facts.code_text
+    # ``code_text`` blanks strings in place, so a definition line reading
+    # ``const NAME =`` followed by nothing had a bare literal on the right.
+    definitions = list(_constant_definition(name).finditer(code_text))
+    if len(definitions) == 1:
+        literal_start = definitions[0].end("eq")
+        rebindings = len(_rebinding(name).findall(code_text))
+    else:
+        directives = list(_define_directive(name).finditer(source))
+        if len(definitions) or len(directives) != 1:
+            return None
+        literal_start = directives[0].end()
+        rebindings = len(_rebinding(name).findall(code_text))
+    if rebindings > 1:
+        return None
+    line_end = source.find("\n", literal_start)
+    line_end = len(source) if line_end < 0 else line_end
+    start = literal_start
+    while start < line_end and source[start] in " \t":
+        start += 1
+    literal = _read_literal(source, start, line_end)
+    if literal is None:
+        return None
+    _delimiter, _prefix, content, close = literal
+    if source[close:line_end].strip(" \t;\r"):
+        return None
+    return content
 
 
 # ---- detector shapes --------------------------------------------------------

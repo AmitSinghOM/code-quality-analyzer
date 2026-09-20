@@ -549,3 +549,116 @@ def test_quality_rules_carry_no_security_properties():
     descriptor = _rule_descriptor(rule_metadata("PY-MAINT-001"))
     assert "security-severity" not in descriptor["properties"]
     assert "tags" not in descriptor["properties"]
+
+
+# ---- A3: literal constants and quoted-by-construction arguments ---------------
+# Review 5 (docs/reviews/2026-09-20-four-seat-review-3.2.1.md, A3). On 3.2.1 a
+# bare identifier bound to a string literal at module/package level was treated
+# as dynamic, so these four files produced nine findings, five of them false.
+
+SHELL_PY = """import subprocess, os, shlex
+
+CMD = "ls -la"
+SAFE_CMD = ("git", "status")
+
+
+def benign(path):
+    subprocess.run(CMD, shell=True)                 # module constant, literal upstream
+    subprocess.run(["ls", path])                    # list form, no shell
+    subprocess.run(shlex.join(["ls", path]), shell=True)  # quoted via shlex
+    os.system("make clean")                         # literal
+    subprocess.run(f"echo {shlex.quote(path)}", shell=True)  # quoted interpolation
+    return "subprocess.run(cmd, shell=True) is dangerous"    # string mentioning it
+
+
+def bug(user):
+    subprocess.run("ls " + user, shell=True)
+"""
+
+RUN_GO = """package run
+
+import "os/exec"
+
+const script = "echo hi"
+
+func benign(path string) {
+\texec.Command("sh", "-c", script)      // package constant
+\texec.Command("ls", "-la", path)       // no shell
+\texec.Command(path)                    // binary is the variable, no -c
+\t_ = `exec.Command("sh", "-c", cmd) is bad`
+}
+
+func bug(user string) { exec.Command("sh", "-c", "ls "+user) }
+"""
+
+DOM_TS = """const template = "<b>hi</b>";
+enum Mode { eval = "eval", exec = "exec" }
+function benign(el: HTMLElement, n: number) {
+  el.innerHTML = template;                 // module constant literal
+  el.innerHTML = "";                       // clear
+  el.innerHTML = DOMPurify.sanitize(user); // sanitized
+  el.textContent = user;                   // safe sink
+  const evalResult = model.eval(batch);    // method named eval on a tensor lib
+  const s = "eval(x) is unsafe";           // string
+  return `${n}`;
+}
+function bug(el: HTMLElement, user: string) { el.innerHTML = "<p>" + user; }
+"""
+
+SER_JAVA = """class Ser {
+  static final String NOTE = "new ObjectInputStream(in) is unsafe";
+  Object benign(java.io.InputStream in) throws Exception {
+    // new ObjectInputStream(in).readObject() -- commented out
+    return new java.io.DataInputStream(in).readInt();
+  }
+  Object bug(java.io.InputStream in) throws Exception { return new java.io.ObjectInputStream(in).readObject(); }
+}
+"""
+
+
+def test_py_sec_002_module_constant_and_shlex_are_not_dynamic():
+    """Exactly the concatenated command is reported; the module constant, the
+    shlex-joined string and the shlex-quoted f-string are quoted by construction."""
+    found = py(SHELL_PY, "PY-SEC-002")
+    assert [f.location.line for f in found] == [17]
+
+
+def test_go_sec_002_package_constant_is_not_dynamic():
+    found = findings("go", RUN_GO, "GO-SEC-002")
+    assert [f.location.line for f in found] == [14]
+
+
+def test_ts_sec_003_module_constant_is_not_dynamic():
+    found = findings("typescript", DOM_TS, "TS-SEC-003")
+    assert [f.location.line for f in found] == [12]
+    assert findings("typescript", DOM_TS, "TS-SEC-001") == []
+
+
+def test_java_sec_001_strings_and_comments_do_not_fire():
+    found = findings("java", SER_JAVA, "JAVA-SEC-001")
+    assert [f.location.line for f in found] == [7]
+
+
+@pytest.mark.parametrize(
+    "language, source, rule_id",
+    [
+        # Reassigned or twice-defined constants stay dynamic.
+        (
+            "go",
+            'package p\nimport "os/exec"\nconst s = "a"\nfunc f(){ s = x; exec.Command("sh","-c", s) }\n',
+            "GO-SEC-002",
+        ),
+        (
+            "typescript",
+            'let t = "<b>";\nt = user;\nfunction f(el: HTMLElement){ el.innerHTML = t; }\n',
+            "TS-SEC-003",
+        ),
+    ],
+)
+def test_rebound_constants_remain_dynamic(language, source, rule_id):
+    assert len(findings(language, source, rule_id)) == 1
+
+
+def test_python_rebound_module_constant_remains_dynamic():
+    source = 'import subprocess\nCMD = "ls"\ndef f(x):\n    global CMD\n    CMD = x\n    subprocess.run(CMD, shell=True)\n'
+    assert len(py(source, "PY-SEC-002")) == 1
