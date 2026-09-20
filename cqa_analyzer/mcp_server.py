@@ -330,7 +330,7 @@ def _cli_args(params: dict[str, Any]) -> list[str]:
 
 def _run_cli(params: dict[str, Any]) -> tuple[int, dict[str, Any] | None, str]:
     timeout = int(params.get("timeout_seconds") or DEFAULT_TIMEOUT_SECONDS)
-    command = [sys.executable, "-m", "cqa_analyzer", *_cli_args(params)]
+    command = [sys.executable, "-P", "-m", "cqa_analyzer", *_cli_args(params)]
     try:
         completed = subprocess.run(  # noqa: S603 - fixed argv, no shell
             command, capture_output=True, text=True, timeout=timeout, check=False
