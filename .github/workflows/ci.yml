@@ -300,10 +300,10 @@ jobs:
           persist-credentials: false
 
       # Ratchet: existing debt is fingerprinted in .code-quality-baseline.json
-      # (151 maintainability warnings, mostly __main__.py, which 3.0 rewrites);
+      # (148 maintainability warnings at 3.4.1; schema 2.0.0, keyed on line text);
       # any *new* warning fails the job. Regenerate the baseline only after a
       # deliberate review: code-quality-analyzer . --write-baseline .code-quality-baseline.json
-      - uses: AmitSinghOM/cqa-action@f6fd7e6674c613124540eb947ed3a3067876569d # v1.3.0
+      - uses: AmitSinghOM/cqa-action@4cc5c438978277cb96efff0bf47f838a9656a00e # v1.3.1
         with:
           baseline: .code-quality-baseline.json
           fail-on: warning
