@@ -94,3 +94,80 @@ def test_cache_prunes_old_entries_to_aggregate_limit(tmp_path, monkeypatch):
         cache.store(adapter, source, adapter.parse(source))
 
     assert len(list((tmp_path / "cache" / CACHE_NAMESPACE).glob("*.json"))) == 1
+
+
+# --- B3 (review 6): a cached artifact is the lexer's output, so it must not
+# survive an analyzer upgrade or an edit to the adapter that produced it.
+
+
+def test_cache_misses_after_analyzer_upgrade(tmp_path, monkeypatch):
+    adapter, _ = _python_parts()
+    source = _source("VALUE = 1\n")
+    cache = CacheStore(tmp_path / "cache")
+    cache.store(adapter, source, adapter.parse(source))
+    assert cache.load(adapter, source) is not None
+
+    monkeypatch.setattr(cache_module, "__version__", "999.0.0")
+
+    assert cache.load(adapter, source) is None
+
+
+def test_cache_misses_when_adapter_source_changes(tmp_path, monkeypatch):
+    """Editing the lexer must invalidate that language's entries even when
+    ``adapter_version`` was not bumped (3.3.0 shipped three lexer fixes and
+    bumped none of the fourteen version constants)."""
+    adapter, _ = _python_parts()
+    source = _source("VALUE = 1\n")
+    cache = CacheStore(tmp_path / "cache")
+    cache.store(adapter, source, adapter.parse(source))
+    assert cache.load(adapter, source) is not None
+
+    module_name = type(adapter).__module__
+    real_digest = cache_module._module_source_sha256(module_name)
+    assert len(real_digest) == 64, "adapter module source must be readable"
+
+    monkeypatch.setattr(
+        cache_module,
+        "_module_source_sha256",
+        lambda name: "0" * 64 if name == module_name else real_digest,
+    )
+
+    assert cache.load(adapter, source) is None
+
+
+def test_cache_hits_when_version_and_adapter_unchanged(tmp_path):
+    adapter, _ = _python_parts()
+    source = _source("VALUE = 1\n")
+    cache = CacheStore(tmp_path / "cache")
+    cache.store(adapter, source, adapter.parse(source))
+
+    metadata = cache_module._codec_metadata(adapter, source)
+
+    assert metadata["analyzer_version"] == cache_module.__version__
+    assert metadata["adapter_source_sha256"] == cache_module._module_source_sha256(
+        type(adapter).__module__
+    )
+    assert cache.load(adapter, source) is not None
+
+
+def test_module_source_digest_is_content_based(tmp_path, monkeypatch):
+    """The digest follows the module's bytes on disk, not its name or version."""
+    import importlib.util
+    import sys
+
+    module_path = tmp_path / "fake_adapter_module.py"
+    module_path.write_text("X = 1\n")
+    spec = importlib.util.spec_from_file_location("fake_adapter_module", module_path)
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, "fake_adapter_module", module)
+    spec.loader.exec_module(module)
+
+    cache_module._module_source_sha256.cache_clear()
+    before = cache_module._module_source_sha256("fake_adapter_module")
+
+    module_path.write_text("X = 2\n")
+    cache_module._module_source_sha256.cache_clear()
+    after = cache_module._module_source_sha256("fake_adapter_module")
+
+    assert before != after
+    assert cache_module._module_source_sha256("module.that.does.not.exist") == "no-source"
