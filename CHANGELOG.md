@@ -30,11 +30,80 @@ reached. Every fix ships with a test proven to fail on 3.3.0.
   from the same scan. Fingerprints are omitted under `--anonymize` because they
   derive from the real path and line text.
 
+### Precision (measured on a shallow clone of psf/requests, 37 files)
+
+Every non-maintainability hit was read at source. Four false-positive classes
+were found and removed; all other rule counts were byte-identical before and
+after each fix.
+
+- **PY-SEC-001** no longer fires on `pickle.loads(pickle.dumps(x))` (7 of 7
+  hits on requests): the bytes are produced in the same expression, so no
+  attacker input reaches the deserializer. Only a direct `dumps()`/`dump()`
+  payload qualifies -- a name bound elsewhere, a non-`dumps` call, or
+  `load(fh)` still fire.
+- **PY-COR-002** no longer fires on `except BaseException: cleanup(); raise`:
+  that is a `finally` with access to the exception and the only way to
+  guarantee cleanup on `KeyboardInterrupt`; ruff `BLE001` exempts the same
+  shape. Only a bare `raise` or `raise <bound name>` as the final statement
+  qualifies -- `raise Wrapped() from exc`, logging without re-raising, and a
+  non-final `raise` still fire.
+- **PY-PKG-001** ignores imports under `if TYPE_CHECKING:` (and
+  `typing.TYPE_CHECKING`) when building the import graph: they never execute,
+  so they cannot close a cycle. requests' `_types.py` annotates the models
+  that import it and was reported as an 8-module circular group with no
+  runtime edge. The guard's `else` branch and function-local imports still
+  count.
+- **PY-COR-003** grades `except ImportError: pass` (optional-dependency probe)
+  and `except StopIteration: pass` (iterator exhaustion) as `note` with a
+  message naming the idiom, instead of `warning` (3 of 9 hits on requests).
+  The finding stays visible; a bare `except:`, `Exception`, or a tuple mixing
+  in any other type (`(ImportError, AttributeError)`) keeps the warning.
+
+### Correctness
+
+- **Latent circular import fixed.** `python_rules` -> `python_security` ->
+  `languages._parity`/`_security` executed `languages/__init__`, which imports
+  every adapter, and the Python adapter imports `python_rules` back while it
+  is half-initialised. The `ImportError` only fired when `python_rules` was
+  the first import, so two releases of green full-suite runs were
+  order-dependent. `is_test_path` and the secret-name classifier moved to
+  leaf modules (`test_paths`, `secret_names`) with re-exports; a new test
+  imports every package module first in its own interpreter.
+
+### Cache
+
+- **Parsed-artifact cache invalidates on upgrade and on lexer edits.** Entries
+  keyed only on a hand-maintained `adapter_version` that no lexer fix ever
+  bumped (3.3.0 shipped three; all fourteen constants still read `1.0.0`), so
+  a `--cache` directory written by an older release served pre-fix lexer
+  output for every unchanged file. Entries now also key on the released
+  version and a digest of the adapter module's source; a mismatch is an
+  ordinary miss.
+
+### Diagnostics
+
+- Refused baseline, changed-lines-manifest and configuration reads name the
+  actual cause (`is a symbolic link; pass the real file`, `resolves outside
+  the project root`) instead of `not readable valid JSON` / `could not be
+  read safely`.
+
 ### Checked and cleared
 
 - The regexes 3.3.0 added for secret-name segmentation and constant
   resolution were timed on 32k-character identifiers and 200k-character lines:
   linear. Locked as fuzz tests so a future edit cannot regress them.
+- Every SARIF shape the reporter emits (results with `partialFingerprints`,
+  suppressed results with `suppressions[]`, `--anonymize`, `--redact-paths`,
+  empty run) validates against the vendored OASIS 2.1.0 schema
+  (`additionalProperties: false`); `jsonschema` is pinned in the `[dev]` extra
+  and the check runs in CI. Runtime dependencies remain zero.
+- Path containment on a hostile checkout (file and directory symlinks out of
+  the root, symlinked config/baseline/manifest, oversized manifest): every
+  escape refused or skipped-and-counted, the planted marker never reached a
+  report.
+- Anonymizer completeness: sixteen seed tokens on every source-derived
+  surface (paths, identifiers, messages, suppression reasons, manifest paths,
+  package metadata); zero survived in anonymized JSON, SARIF or text.
 
 ## 3.3.0 - 2026-09-21
 
