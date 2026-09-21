@@ -1073,7 +1073,10 @@ _NOT_WHEN: dict[str, tuple[str, ...]] = {
     ),
     "PY-COR-002": (
         "The handler catches a specific exception class rather than Exception or "
-        "BaseException, or is a bare `except:` handled by PY-COR-003.",
+        "BaseException.",
+        "The handler body is only `pass`/`...` (a bare `except:`, `except "
+        "Exception: pass`, ...): PY-COR-003 reports the swallow and one handler "
+        "yields one finding, not two.",
         "The handler ends with a bare `raise` or `raise <bound name>` (no `from`): "
         "`except BaseException: cleanup(); raise` is a `finally` with access to the "
         "exception and the only way to guarantee cleanup on KeyboardInterrupt; "

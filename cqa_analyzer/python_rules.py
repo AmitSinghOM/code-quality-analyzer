@@ -187,6 +187,10 @@ class BroadExceptionRule:
             caught = _broad_exception(handler.type)
             if caught is None or _reraises(handler):
                 continue
+            if _silently_discards(handler.body):
+                # PY-COR-003 owns the swallow; reporting breadth as well
+                # scored one handler twice (7 of 20 hits on pallets/click).
+                continue
             yield Finding(
                 rule_id=self.rule_id,
                 category=self.category,

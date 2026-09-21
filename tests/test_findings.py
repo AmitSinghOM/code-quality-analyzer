@@ -252,9 +252,9 @@ def test_broad_handler_that_reraises_after_cleanup_is_not_reported():
 
 def test_broad_handler_exemption_requires_a_final_bare_reraise():
     findings = findings_for(
-        # swallowed: still breadth
+        # broad and not re-raised (and not a silent `pass`, which PY-COR-003 owns)
         "try:\n    a()\n"
-        "except BaseException:\n    pass\n"
+        "except BaseException:\n    log()\n    return None\n"
         # wrapped in a new type: a different decision, still reported
         "try:\n    b()\n"
         "except Exception as exc:\n    raise Wrapped() from exc\n"
@@ -325,4 +325,26 @@ def test_expected_exception_tier_requires_every_caught_type_to_qualify():
         ("warning", "silent"),
         ("warning", "silent"),
         ("warning", "silent"),
+    ]
+
+
+# --- P7 (review 6): one handler, one finding. `except Exception: pass` was
+# reported by PY-COR-002 (breadth) and PY-COR-003 (swallow) at once -- 7 of
+# 20 COR-002 hits on pallets/click were double counts.
+
+
+def test_swallowed_broad_handler_is_reported_once_by_the_swallow_rule():
+    findings = findings_for(
+        "try:\n    a()\n"
+        "except Exception:\n    pass\n"
+        "try:\n    b()\n"
+        "except BaseException:\n    ...\n"
+        "try:\n    c()\n"
+        "except Exception:\n    recover()\n"
+    )
+
+    assert [f.rule_id for f in findings if f.rule_id.startswith("PY-COR-00")] == [
+        "PY-COR-003",
+        "PY-COR-003",
+        "PY-COR-002",
     ]
