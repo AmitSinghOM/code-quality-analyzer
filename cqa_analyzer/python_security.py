@@ -14,8 +14,8 @@ import re
 from collections.abc import Iterable
 
 from .findings import Finding, Location
-from .languages._parity import is_test_path
-from .languages._security import is_secret_name
+from .test_paths import is_test_path
+from .secret_names import is_secret_name
 
 _SAFE_YAML_LOADERS = frozenset({"SafeLoader", "CSafeLoader", "BaseLoader", "CBaseLoader"})
 _UNSAFE_LOADS = {

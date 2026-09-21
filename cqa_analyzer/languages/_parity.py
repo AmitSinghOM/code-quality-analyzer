@@ -21,7 +21,10 @@ from dataclasses import replace
 
 from ..findings import Finding, Location
 from ..protocols import ParsedFile
+from ..test_paths import is_test_path
 from ._shared import line_column
+
+__all__ = ["is_test_path"]
 
 _THROW = re.compile(r"\b(?:throw|rethrow)\b")
 
@@ -206,20 +209,6 @@ def non_null_density_findings(
             "keep assertions to the few places the invariant is documented."
         ),
     )
-
-
-_TEST_PATH = re.compile(
-    r"(?:^|/)(?:tests?|__tests__|spec|specs|e2e|integration|testdata)(?:/|$)|"
-    r"(?:_test\.go|\.(?:test|spec)\.[cm]?[jt]sx?|Tests?\.(?:kt|cs|java)|"
-    r"(?:^|/)test_[^/]*\.py)$",
-    re.IGNORECASE,
-)
-
-
-def is_test_path(path: str) -> bool:
-    """True for paths that conventionally hold tests (Go ``_test.go``, TS
-    ``*.spec.ts``, JVM ``*Test.kt``, ``tests/`` and ``__tests__/`` trees)."""
-    return _TEST_PATH.search(path.replace("\\", "/")) is not None
 
 
 def downgrade_in_tests(parsed: ParsedFile, finding: Finding) -> Finding:
