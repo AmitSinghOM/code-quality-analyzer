@@ -447,7 +447,9 @@ def _run_analysis(
             reported_findings = list(changed_line_selection.select(baseline_selected_findings))
         except ChangedLinesError as error:
             raise CliError(str(error)) from error
-        not_analyzed = changed_line_selection.not_analyzed(scanner.analyzed_paths)
+        not_analyzed = changed_line_selection.not_analyzed(
+            scanner.analyzed_paths, scanner.registry.source_extensions()
+        )
         if anonymizer is not None:
             # Manifest paths are as sensitive as source paths (review 5, R2).
             not_analyzed = tuple(anonymizer.file(path) for path in not_analyzed)

@@ -566,8 +566,10 @@ def test_manifest_files_not_analyzed_are_reported(tmp_path):
     summary = json.loads(result.output)["changed_lines"]
 
     assert result.exit_code == EXIT_OK, "without --strict the exit code is unchanged"
-    assert summary["files_not_analyzed"] == 2
-    assert summary["files_not_analyzed_examples"] == ["README.md", "src/vendor.min.js"]
+    # README.md has no registered adapter, so it was never in scope (3.4.1);
+    # the minified bundle is a supported extension discovery dropped.
+    assert summary["files_not_analyzed"] == 1
+    assert summary["files_not_analyzed_examples"] == ["src/vendor.min.js"]
 
 
 def test_strict_gate_fails_when_a_changed_file_was_not_analyzed(tmp_path):
@@ -578,8 +580,76 @@ def test_strict_gate_fails_when_a_changed_file_was_not_analyzed(tmp_path):
     )
 
     assert result.exit_code == EXIT_COVERAGE_GAP
-    assert "2 changed file(s) in the manifest were not analyzed" in result.output
-    assert "    - README.md" in result.output and "    - src/vendor.min.js" in result.output
+    assert "1 changed file(s) in the manifest were not analyzed" in result.output
+    assert "    - src/vendor.min.js" in result.output
+    assert "README.md" not in result.output
+
+
+def test_strict_gate_passes_a_docs_and_config_only_manifest(tmp_path):
+    """3.4.1: a pull request touching only files no adapter claims (Markdown,
+    YAML, TOML, JSON) is not a coverage gap. On 3.3.0/3.4.0 this exited 3 --
+    the analyzer's own CI-only PR #49 failed its dogfood gate this way."""
+    root = tmp_path / "proj"
+    (root / ".github" / "workflows").mkdir(parents=True)
+    (root / "src").mkdir()
+    (root / "src" / "app.py").write_text("x = 1\n")
+    (root / "README.md").write_text("hello\n")
+    (root / "pyproject.toml").write_text("[project]\nname = 'p'\n")
+    (root / ".github" / "workflows" / "ci.yml").write_text("on: push\n")
+    (root / "baseline.json").write_text("{}\n")
+    manifest = tmp_path / "m.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0.0",
+                "files": [
+                    _file("README.md", (1, 1)),
+                    _file("pyproject.toml", (1, 2)),
+                    _file(".github/workflows/ci.yml", (1, 1)),
+                    _file("baseline.json", (1, 1)),
+                ],
+            }
+        )
+    )
+
+    result = CliRunner().invoke(
+        main,
+        [
+            str(root),
+            "-f",
+            "json",
+            "--offline",
+            "--strict",
+            "--changed-lines-manifest",
+            str(manifest),
+        ],
+    )
+
+    assert result.exit_code == EXIT_OK, result.output
+    summary = json.loads(result.output)["changed_lines"]
+    assert summary["file_count"] == 4
+    assert summary["files_not_analyzed"] == 0
+    assert summary["files_not_analyzed_examples"] == []
+
+
+def test_not_analyzed_scopes_to_the_registered_extensions():
+    selection = parse_changed_lines(
+        {
+            "schema_version": "1.0.0",
+            "files": [
+                _file("a.py", (1, 1)),
+                _file("b.PY", (1, 1)),
+                _file("docs/c.md", (1, 1)),
+                _file("d.min.js", (1, 1)),
+            ],
+        }
+    )
+
+    unbounded = selection.not_analyzed(analyzed_paths={"a.py"})
+    scoped = selection.not_analyzed(analyzed_paths={"a.py"}, source_extensions=(".py", ".JS"))
+
+    assert unbounded == ("b.PY", "d.min.js", "docs/c.md")
+    assert scoped == ("b.PY", "d.min.js"), "suffix match is case-insensitive both ways"
 
 
 def test_strict_gate_passes_when_every_changed_file_was_analyzed(tmp_path):
@@ -626,7 +696,9 @@ def test_anonymized_not_analyzed_examples_are_tokenized(tmp_path):
     root = tmp_path / "proj"
     (root / "private").mkdir(parents=True)
     (root / "private" / "app.py").write_text("x = 1\n")
-    (root / "private" / "customer_list.txt").write_text("k\n")
+    # A supported extension discovery drops (minified bundle), so it is an
+    # in-scope unanalyzed file; a .txt would be out of scope since 3.4.1.
+    (root / "private" / "customer_list.min.js").write_text("var a=1;\n")
     manifest = tmp_path / "m.json"
     manifest.write_text(
         json.dumps(
@@ -634,7 +706,7 @@ def test_anonymized_not_analyzed_examples_are_tokenized(tmp_path):
                 "schema_version": "1.0.0",
                 "files": [
                     _file("private/app.py", (1, 1)),
-                    _file("private/customer_list.txt", (1, 1)),
+                    _file("private/customer_list.min.js", (1, 1)),
                 ],
             }
         )

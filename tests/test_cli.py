@@ -39,7 +39,7 @@ def test_version_flag_reports_analyzer_version():
     result = run(["--version"])
 
     assert result.exit_code == EXIT_OK
-    assert result.output.strip() == ("code-quality-analyzer, version 3.4.0")
+    assert result.output.strip() == ("code-quality-analyzer, version 3.4.1")
 
 
 def test_json_output_is_valid_and_includes_health(project):
@@ -50,7 +50,7 @@ def test_json_output_is_valid_and_includes_health(project):
 
     assert result.exit_code == EXIT_OK
     assert payload["schema_version"] == "1.14.0"
-    assert payload["analyzer_version"] == "3.4.0"
+    assert payload["analyzer_version"] == "3.4.1"
     assert payload["ruleset_version"] == "2.27.0"
     assert payload["scoring_policy_version"] == "2.1.0"
     assert len(payload["configuration_fingerprint"]) == 64
