@@ -4,6 +4,38 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+Review 6 (Staff, Product, Security, CTO) over surfaces no earlier review
+reached. Every fix ships with a test proven to fail on 3.3.0.
+
+### Baselines
+
+- **Fingerprints no longer key on the line number.** Baseline schema 1.0.0
+  hashed the rule, path, line, column and message, so one inserted line above
+  a baselined finding, a re-indent, or a reworded rule message made
+  `--new-findings-only` re-report it as new and re-fail the PR. Schema 2.0.0
+  hashes the rule, the redaction-independent path, the whitespace-collapsed
+  text of the reported line, and an ordinal among identical lines, so twins
+  are baselined individually and deleting one never resurrects the other.
+  Existing 1.0.0 baselines still load and compare with the legacy hash; new
+  baselines are written as 2.0.0. The report's `baseline.schema_version` now
+  states which hashing was used.
+
+### Report contract (1.13.0 -> 1.14.0, additive)
+
+- Each reported finding carries `fingerprint`, the schema-2.0.0 hash, and SARIF
+  results carry the same value as `partialFingerprints["cqaFingerprint/v2"]`.
+  GitHub code scanning keys alert identity on `partialFingerprints`, so one
+  alert now stays open across line shifts instead of closing and reopening on
+  every edit above it; any report can be reconciled with a baseline written
+  from the same scan. Fingerprints are omitted under `--anonymize` because they
+  derive from the real path and line text.
+
+### Checked and cleared
+
+- The regexes 3.3.0 added for secret-name segmentation and constant
+  resolution were timed on 32k-character identifiers and 200k-character lines:
+  linear. Locked as fuzz tests so a future edit cannot regress them.
+
 ## 3.3.0 - 2026-09-21
 
 Four-seat review of 3.2.1 (Staff, Product, Security, CTO; record in

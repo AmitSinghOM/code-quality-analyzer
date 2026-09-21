@@ -266,3 +266,43 @@ def test_catalog_flattening_and_coordinates_never_raise():
     assert pairs["g"] == {"name": "n"}  # incomplete spec is a leaf, resolves to None
     for spec in (None, 5, [], {}, "", ":", "g:", ":a", {"module": ":"}, {"group": "g"}):
         assert _catalog_coordinates(spec) is None or isinstance(_catalog_coordinates(spec), tuple)
+
+
+# --- Review 6 (S4): the regexes 3.3.0 added must stay linear on hostile input.
+
+
+@pytest.mark.parametrize(
+    "make",
+    [
+        lambda n: "A" * n,  # one long capital run: the lookahead alternative
+        lambda n: "A" * n + "a",
+        lambda n: "1" * n,
+        lambda n: "aB" * (n // 2),  # camel alternation
+        lambda n: "A_" * (n // 2),  # snake alternation
+    ],
+)
+def test_secret_name_segmentation_is_linear_on_long_identifiers(make):
+    from cqa_analyzer.languages._security import is_secret_name
+
+    def elapsed(n: int) -> float:
+        started = time.perf_counter()
+        is_secret_name(make(n))
+        return time.perf_counter() - started
+
+    # 32k-character identifier; a quadratic split would take seconds here.
+    assert elapsed(32_000) < 0.5
+
+
+def test_constant_resolution_regexes_are_linear_on_long_lines():
+    from cqa_analyzer.languages._security import (
+        _constant_definition,
+        _define_directive,
+        _rebinding,
+    )
+
+    name = "X" * 5_000
+    text = " " * 200_000 + "\n" + ("const " + name + " = 1\n") * 50
+    started = time.perf_counter()
+    for build in (_constant_definition, _rebinding, _define_directive):
+        list(build(name).finditer(text))
+    assert time.perf_counter() - started < 2.0
