@@ -227,8 +227,8 @@ python3 -m pip install --upgrade cqa-analyzer
 python3 -m pip install --upgrade 'cqa-analyzer[deep]'   # with the optional extra
 
 # a specific version
-pipx install --force 'cqa-analyzer==3.3.0'
-python3 -m pip install 'cqa-analyzer==3.3.0'
+pipx install --force 'cqa-analyzer==3.4.0'
+python3 -m pip install 'cqa-analyzer==3.4.0'
 ```
 
 Check with `code-quality-analyzer --version`. If the number does not
