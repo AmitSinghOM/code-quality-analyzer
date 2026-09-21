@@ -211,6 +211,8 @@ class UnsafeDeserializationRule(_SecurityRule):
         if target is None:
             return None
         if target in _UNSAFE_LOADS:
+            if _round_trips_own_bytes(node):
+                return None
             return f"{target[0]}.{target[1]} deserializes arbitrary objects (CWE-502)."
         if (
             target[0] == "yaml"
@@ -222,6 +224,23 @@ class UnsafeDeserializationRule(_SecurityRule):
                 "Python objects (CWE-502)."
             )
         return None
+
+
+def _round_trips_own_bytes(node: ast.Call) -> bool:
+    """``loads(dumps(x))`` deserializes bytes the same expression just produced.
+
+    The picklability-test and deep-copy idiom carries no attacker-controlled
+    input, so there is nothing for CWE-502 to exploit. Only a *direct*
+    ``dumps``/``dump`` call as the sole payload argument qualifies; a name
+    bound elsewhere may hold anything.
+    """
+    if not node.args:
+        return False
+    payload = node.args[0]
+    if not isinstance(payload, ast.Call):
+        return False
+    producer = _attr(payload.func)
+    return producer is not None and producer[1] in {"dumps", "dump"}
 
 
 def _yaml_loader_is_safe(node: ast.Call) -> bool:

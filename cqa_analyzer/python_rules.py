@@ -185,7 +185,7 @@ class BroadExceptionRule:
             if isinstance(node, ast.ExceptHandler)
         ):
             caught = _broad_exception(handler.type)
-            if caught is None:
+            if caught is None or _reraises(handler):
                 continue
             yield Finding(
                 rule_id=self.rule_id,
@@ -279,6 +279,30 @@ class UnreachableCodeRule:
                     location=_node_location(statement, path, identity_path),
                     remediation=self.remediation,
                 )
+
+
+def _reraises(handler: ast.ExceptHandler) -> bool:
+    """True when the handler ends by re-raising what it caught.
+
+    ``except BaseException: cleanup(); raise`` is the idiom for guaranteed
+    cleanup that must also run on KeyboardInterrupt/SystemExit -- it is a
+    ``finally`` with access to the exception, not a broad catch. ruff's
+    BLE001 exempts the same shape. Only a bare ``raise`` or ``raise <name>``
+    of the bound exception as the final statement qualifies; wrapping the
+    error in a new type is a different decision and still reported.
+    """
+    if not handler.body:
+        return False
+    last = handler.body[-1]
+    if not isinstance(last, ast.Raise) or last.cause is not None:
+        return False
+    if last.exc is None:
+        return True
+    return (
+        handler.name is not None
+        and isinstance(last.exc, ast.Name)
+        and last.exc.id == handler.name
+    )
 
 
 def _broad_exception(node: ast.expr | None) -> str | None:

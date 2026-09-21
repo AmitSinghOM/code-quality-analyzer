@@ -1074,7 +1074,11 @@ _NOT_WHEN: dict[str, tuple[str, ...]] = {
     "PY-COR-002": (
         "The handler catches a specific exception class rather than Exception or "
         "BaseException, or is a bare `except:` handled by PY-COR-003.",
-        "The handler re-raises or logs: breadth is the finding, not silence.",
+        "The handler ends with a bare `raise` or `raise <bound name>` (no `from`): "
+        "`except BaseException: cleanup(); raise` is a `finally` with access to the "
+        "exception and the only way to guarantee cleanup on KeyboardInterrupt; "
+        "ruff BLE001 exempts the same shape. Logging without re-raising, or "
+        "wrapping in a new exception type, is still reported.",
     ),
     "PY-COR-003": (
         "The handler body contains any statement other than `pass` or `...`; a "
@@ -1234,6 +1238,10 @@ _NOT_WHEN: dict[str, tuple[str, ...]] = {
         "CBaseLoader (positionally or by keyword); yaml.safe_load is never reported.",
         "The call is not one of the fixed pickle/cPickle/_pickle/marshal/shelve/dill/"
         "yaml.unsafe_load targets (python_security._UNSAFE_LOADS).",
+        "The payload is a direct `dumps(...)`/`dump(...)` call in the same "
+        "expression (`pickle.loads(pickle.dumps(x))`): the bytes were produced "
+        "right there, so no attacker input reaches the deserializer. A name bound "
+        "elsewhere is still reported.",
         _SECURITY_TEST_PATH_DOWNGRADE,
     ),
     "PY-SEC-002": (
