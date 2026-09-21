@@ -53,6 +53,8 @@ dev = [
     "pytest==9.1.1",
     "pip-audit==2.10.1",
     "ruff==0.8.4",
+    # SARIF output is validated against the vendored OASIS 2.1.0 schema.
+    "jsonschema==4.26.0",
 ]
 
 [project.scripts]
