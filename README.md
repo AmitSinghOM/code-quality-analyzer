@@ -524,7 +524,7 @@ No source candidates exit with code 2. If candidates exist but none can be
 successfully parsed, analysis exits with code 3 even without `--strict`.
 Partial non-strict analysis may exit successfully for inspection, but it is
 always marked non-authoritative. See the versioned schema in
-[`docs/report-schema-1.13.0.json`](docs/report-schema-1.13.0.json) and the decision
+[`docs/report-schema-1.14.0.json`](docs/report-schema-1.14.0.json) and the decision
 record in
 [`docs/adr/001-analysis-authority-and-score-migration.md`](docs/adr/001-analysis-authority-and-score-migration.md).
 

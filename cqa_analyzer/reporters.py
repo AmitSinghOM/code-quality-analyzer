@@ -12,6 +12,7 @@ from .protocols import DEFAULT_CAPABILITY_VERSION, PLUGIN_API_VERSION
 from .registry import PluginRegistry
 from .rule_metadata import RuleMetadata, rule_metadata
 
+SARIF_FINGERPRINT_KEY = "cqaFingerprint/v2"
 SARIF_SCHEMA = (
     "https://docs.oasis-open.org/sarif/sarif/v2.1.0/" "cs01/schemas/sarif-schema-2.1.0.json"
 )
@@ -194,7 +195,7 @@ def _result(finding: Mapping[str, object], indexes: dict[str, int]) -> dict:
             "end_column",
             rule_id,
         )
-    return {
+    result = {
         "level": _sarif_level(_finding_string(finding, "severity")),
         "locations": [
             {
@@ -215,6 +216,13 @@ def _result(finding: Mapping[str, object], indexes: dict[str, int]) -> dict:
         "ruleId": rule_id,
         "ruleIndex": indexes[rule_id],
     }
+    fingerprint = finding.get("fingerprint")
+    if isinstance(fingerprint, str) and fingerprint:
+        # GitHub code scanning keys alert identity on partialFingerprints, so a
+        # line-independent value keeps one alert open across line shifts
+        # instead of closing and reopening it on every edit above the finding.
+        result["partialFingerprints"] = {SARIF_FINGERPRINT_KEY: fingerprint}
+    return result
 
 
 def _finding_sort_key(finding: Mapping[str, object]) -> tuple:

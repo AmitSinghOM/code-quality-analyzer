@@ -18,6 +18,7 @@ from . import (
 from .anonymize import ANONYMIZED_PROJECT, ReportAnonymizer
 from .baseline import (
     BaselineError,
+    fingerprints_for,
     compare_findings,
     load_baseline,
     write_baseline,
@@ -31,6 +32,7 @@ from .patterns import DSA_PATTERNS, SYSTEM_DESIGN_PATTERNS
 from .plugins import create_default_registry
 from .rater import QualityRater, coverage_gap_ratio
 from .reporters import AnalysisReport, SarifRun
+from .findings import Finding
 from .scanner import CodeScanner
 from .text_render import Panel, Table, escape, get_console
 
@@ -697,8 +699,16 @@ def _build_sarif_run(
     new_findings_only,
 ) -> SarifRun:
     if anonymizer is None:
-        findings = tuple(finding.as_dict() for finding in reported_findings)
+        findings = tuple(
+            _attach_fingerprints(
+                [finding.as_dict() for finding in reported_findings],
+                reported_findings,
+                scanner.findings,
+            )
+        )
     else:
+        # Fingerprints hash the real path and line text; an anonymized report
+        # must not carry a value that lets a reader confirm either by guessing.
         identities = sorted(
             {
                 finding.location.identity_path or finding.location.path
@@ -768,7 +778,11 @@ def _build_json_report(
     if anonymizer is None:
         health_payload = scan_health
         package_payload = scanner.package_intelligence.as_dict()
-        finding_payload = [finding.as_dict() for finding in reported_findings]
+        finding_payload = _attach_fingerprints(
+            [finding.as_dict() for finding in reported_findings],
+            reported_findings,
+            scanner.findings,
+        )
         complexity_payload = complexity_data
     else:
         health_payload = anonymizer.scan_health(scan_health)
@@ -1277,6 +1291,25 @@ def _print_complexity(complexity_data, verbose):
             console.print(f"\n[cyan]{function['name']}[/cyan] ({function['file']})")
             for reason in function.get("reasoning", []):
                 console.print(f"  • {reason}")
+
+
+def _attach_fingerprints(
+    payloads: list[dict],
+    reported: list[Finding] | tuple[Finding, ...],
+    all_findings: list[Finding],
+) -> list[dict]:
+    """Add the schema-2 baseline fingerprint to each reported finding payload.
+
+    Ordinals are computed over every scanner finding, not the reported subset,
+    so a fingerprint in a filtered report always equals the one a baseline
+    written from the same scan stores.
+    """
+    by_identity = dict(zip(map(id, all_findings), fingerprints_for(all_findings), strict=True))
+    for payload, finding in zip(payloads, reported, strict=True):
+        fingerprint = by_identity.get(id(finding))
+        if fingerprint is not None:
+            payload["fingerprint"] = fingerprint
+    return payloads
 
 
 if __name__ == "__main__":

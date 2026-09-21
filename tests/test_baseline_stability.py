@@ -244,3 +244,67 @@ def test_context_is_never_serialised(tmp_path):
     path = tmp_path / "b.json"
     write_baseline(path, [finding])
     assert "subprocess" not in path.read_text(encoding="utf-8")
+
+
+# --- C1: fingerprints surfaced in reports so alert identity survives shifts ---
+
+
+def test_json_and_sarif_fingerprints_match_the_written_baseline(tmp_path):
+    root = _project(tmp_path, ORIGINAL)
+    baseline = _baseline(root, tmp_path)
+    stored = json.loads(baseline.read_text(encoding="utf-8"))["fingerprints"]
+
+    report = _scan(root)
+    sarif = CliRunner().invoke(main, [str(root), "-f", "sarif"])
+    assert sarif.exit_code == EXIT_OK, sarif.output
+    results = json.loads(sarif.output)["runs"][0]["results"]
+
+    assert [f["fingerprint"] for f in report["findings"]] == stored
+    assert [r["partialFingerprints"]["cqaFingerprint/v2"] for r in results] == stored
+
+
+def test_fingerprints_are_omitted_from_anonymized_reports(tmp_path):
+    root = _project(tmp_path, ORIGINAL)
+
+    report = _scan(root, "--anonymize")
+    sarif = CliRunner().invoke(main, [str(root), "-f", "sarif", "--anonymize"])
+
+    assert report["findings"] and all("fingerprint" not in f for f in report["findings"])
+    assert "partialFingerprints" not in sarif.output
+
+
+def test_filtered_report_keeps_baseline_ordinals(tmp_path):
+    """A --new-findings-only report must not renumber twins.
+
+    Ordinals are assigned over every finding of the scan, so the surviving
+    twin in a filtered report carries the same fingerprint the full baseline
+    stored for it, not ordinal 0 recomputed over the subset.
+    """
+    twice = (
+        "import subprocess\n\ndef run(cmd):\n" + OFFENDING + "\n"
+        "def run_again(cmd):\n" + OFFENDING
+    )
+    root = _project(tmp_path, twice)
+    baseline_path = _baseline(root, tmp_path)
+    stored = set(json.loads(baseline_path.read_text(encoding="utf-8"))["fingerprints"])
+
+    # Baseline only the first twin, then report new findings: the second twin
+    # must be reported under its ordinal-1 fingerprint.
+    first_only = _scan(root)["findings"][0]["fingerprint"]
+    partial = tmp_path / "partial.json"
+    partial.write_text(
+        json.dumps(
+            {
+                "schema_version": BASELINE_SCHEMA_VERSION,
+                "fingerprint_algorithm": "sha256",
+                "fingerprints": [first_only],
+            }
+        ),
+        encoding="utf-8",
+    )
+    report = _new_findings(root, partial)
+
+    assert report["baseline"]["new_findings"] == 1
+    reported = report["findings"][0]["fingerprint"]
+    assert reported != first_only
+    assert reported in stored
