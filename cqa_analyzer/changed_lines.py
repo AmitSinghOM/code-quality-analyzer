@@ -67,16 +67,35 @@ class ChangedLineSelection:
                 selected.append(finding)
         return tuple(selected)
 
-    def not_analyzed(self, analyzed_paths: Iterable[str]) -> tuple[str, ...]:
-        """Manifest files no analyzer saw (review 5, A7).
+    def not_analyzed(
+        self,
+        analyzed_paths: Iterable[str],
+        source_extensions: Iterable[str] | None = None,
+    ) -> tuple[str, ...]:
+        """Manifest files the analyzer should have seen but did not (review 5, A7;
+        scoped in 3.4.1).
 
-        A changed file that discovery dropped (unsupported extension, size or
-        file limit, minified/bundled, failed to parse) produced no findings, so
-        a changed-lines gate passed it silently. Naming them lets the gate say
-        "not checked" instead of "clean"; under --strict they are a coverage
-        gap."""
+        A changed source file that discovery dropped (size or file limit,
+        minified/bundled, failed to parse, outside the root) produced no
+        findings, so a changed-lines gate passed it silently. Naming them lets
+        the gate say "not checked" instead of "clean"; under --strict they are
+        a coverage gap.
+
+        ``source_extensions`` bounds the promise: a changed file whose suffix
+        no registered adapter claims (Markdown, YAML, TOML, JSON, lockfiles) was
+        never in scope, so it is neither a gap nor listed. Without the bound
+        (``None``) every unanalyzed manifest path counts, which made a
+        docs-only or CI-only pull request exit 3 under ``--strict``."""
         analyzed = set(analyzed_paths)
-        return tuple(sorted(path for path in self.files if path not in analyzed))
+        in_scope = None if source_extensions is None else {ext.lower() for ext in source_extensions}
+        return tuple(
+            sorted(
+                path
+                for path in self.files
+                if path not in analyzed
+                and (in_scope is None or Path(path).suffix.lower() in in_scope)
+            )
+        )
 
     def summary(
         self,
