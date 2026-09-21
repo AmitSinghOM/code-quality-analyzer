@@ -2,6 +2,24 @@
 
 All notable changes are documented in this file. Versions follow semantic versioning for the analyzer CLI and independent semantic versions for report and ruleset contracts.
 
+## 3.4.1 - 2026-09-21
+
+### Precision
+
+- **A docs-only or config-only pull request no longer fails a strict
+  changed-lines gate.** Since 3.3.0 (review 5, A7) every manifest file no
+  analyzer saw counted as `files_not_analyzed`, and under `--strict` as a
+  coverage gap (exit 3) -- including files whose extension no adapter
+  registers (Markdown, YAML, TOML, JSON, lockfiles). With the GitHub
+  Action's defaults (`strict: true`, `changed-lines: auto`) that failed any
+  pull request touching only documentation or CI configuration; the
+  analyzer's own CI-only PR #49 was the first to hit it once the action
+  installed 3.4.0. `files_not_analyzed` is now scoped to files the analyzer
+  promised to check: a changed file with a registered source extension that
+  discovery dropped (size or file limit, minified/bundled, failed to parse,
+  outside the root) is still a gap and still named. Report schema 1.14.0
+  unchanged (same keys, narrower population); ruleset 2.27.0 unchanged.
+
 ## 3.4.0 - 2026-09-21
 
 Review 6 (Staff, Product, Security, CTO; record in
