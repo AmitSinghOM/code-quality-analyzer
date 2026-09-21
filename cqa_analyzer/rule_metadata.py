@@ -1253,7 +1253,7 @@ _NOT_WHEN: dict[str, tuple[str, ...]] = {
     ),
     "PY-SEC-005": (
         "The bound name or keyword does not match the secret-shaped pattern "
-        "(languages/_security.SECRET_NAME); `counter = random.randint(...)` is fine.",
+        "(languages/_security.is_secret_name); `counter = random.randint(...)` is fine.",
         "The expression mentions SystemRandom, or uses the secrets module.",
     ),
     "GO-SEC-001": (_SECURITY_TEST_PATH_DOWNGRADE,),
@@ -1263,7 +1263,7 @@ _NOT_WHEN: dict[str, tuple[str, ...]] = {
     ),
     "GO-SEC-003": (
         "The file does not import math/rand (crypto/rand is fine), or the bound "
-        "name is not secret-shaped (languages/_security.SECRET_NAME).",
+        "name is not secret-shaped (languages/_security.is_secret_name).",
     ),
     "JAVA-SEC-001": (_SECURITY_TEST_PATH_DOWNGRADE,),
     "KT-SEC-001": (_SECURITY_TEST_PATH_DOWNGRADE,),

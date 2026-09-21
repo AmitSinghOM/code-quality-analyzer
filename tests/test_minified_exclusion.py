@@ -162,3 +162,53 @@ def test_preview_mirrors_the_name_rule_and_documents_the_content_rule(tmp_path: 
     assert "docs/assets/main.js" in planned
     plan = plan_file("src/vendor.min.js", create_default_registry(), load_config(root), root=root)
     assert (plan.selected, plan.reason) == (False, "minified_name")
+
+
+# ---- Review 5, A4: the content rule is JS/TS-only -----------------------------
+# On 3.2.1 these two hand-written files came back "minified_content" and were
+# silently left out of every rule, including the security family.
+
+
+def _one_long_literal(prefix: str, suffix: str, lines_around: int) -> str:
+    body = "\n".join(f"{prefix}{i}{suffix}" for i in range(lines_around))
+    return f'{body}\nBLOB = "{"A" * 6_000}"\n'
+
+
+@pytest.mark.parametrize(
+    "name, source",
+    [
+        ("constants.py", _one_long_literal("x", " = 1", 2)),
+        (
+            "schema.go",
+            "package db\n\nconst ddl = `"
+            + "CREATE TABLE t (id int); " * 300
+            + "`\n"
+            + "var _ = ddl\n" * 8,
+        ),
+        ("Blob.java", 'class Blob { static final String B = "' + "A" * 6_000 + '"; }\n'),
+        ("blob.rs", 'const B: &str = "' + "A" * 6_000 + '";\n'),
+    ],
+)
+def test_hand_written_non_js_files_with_one_long_literal_are_analyzed(name, source):
+    assert generated_reason(name, source) is None
+
+
+@pytest.mark.parametrize("name", ["main.js", "app.mjs", "widget.tsx", "lib.cts"])
+def test_js_family_content_rule_still_applies(name):
+    assert generated_reason(name, _bundle()) == "minified_content"
+
+
+def test_non_js_long_literal_file_is_scanned_by_the_cli(tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    blob = "A" * 6_000
+    (root / "constants.py").write_text(
+        "import subprocess\n"
+        f'BLOB = "{blob}"\n'
+        "def f(u):\n"
+        '    subprocess.run("ls " + u, shell=True)\n'
+    )
+    result = run(["--output-format", "json", "--offline", str(root)])
+    payload = json.loads(result.output)
+    assert payload["scan_health"]["excluded_generated"] == {}
+    assert "PY-SEC-002" in {f["rule_id"] for f in payload["findings"]}

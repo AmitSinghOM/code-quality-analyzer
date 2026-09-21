@@ -14,6 +14,8 @@ from .findings import Finding
 from .safe_io import SafeReadError, read_bounded_text
 
 CHANGED_LINES_SCHEMA_VERSION = "1.0.0"
+NOT_ANALYZED_EXAMPLE_LIMIT = 10
+"""Bound on manifest paths named in files_not_analyzed_examples."""
 MAX_MANIFEST_SIZE = 5 * 1024 * 1024
 MAX_FILES = 20_000
 MAX_RANGES = 100_000
@@ -65,14 +67,33 @@ class ChangedLineSelection:
                 selected.append(finding)
         return tuple(selected)
 
-    def summary(self, input_findings: int, selected_findings: int) -> dict:
-        """Return aggregate-only report metadata."""
+    def not_analyzed(self, analyzed_paths: Iterable[str]) -> tuple[str, ...]:
+        """Manifest files no analyzer saw (review 5, A7).
+
+        A changed file that discovery dropped (unsupported extension, size or
+        file limit, minified/bundled, failed to parse) produced no findings, so
+        a changed-lines gate passed it silently. Naming them lets the gate say
+        "not checked" instead of "clean"; under --strict they are a coverage
+        gap."""
+        analyzed = set(analyzed_paths)
+        return tuple(sorted(path for path in self.files if path not in analyzed))
+
+    def summary(
+        self,
+        input_findings: int,
+        selected_findings: int,
+        not_analyzed: tuple[str, ...] = (),
+    ) -> dict:
+        """Return aggregate-only report metadata (plus bounded examples of
+        manifest files that were not analyzed)."""
         return {
             "schema_version": CHANGED_LINES_SCHEMA_VERSION,
             "file_count": self.file_count,
             "range_count": self.range_count,
             "input_findings": input_findings,
             "selected_findings": selected_findings,
+            "files_not_analyzed": len(not_analyzed),
+            "files_not_analyzed_examples": list(not_analyzed[:NOT_ANALYZED_EXAMPLE_LIMIT]),
         }
 
 

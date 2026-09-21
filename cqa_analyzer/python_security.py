@@ -9,12 +9,13 @@ an f-string, ``%``/``.format``/``+`` — is dynamic.
 from __future__ import annotations
 
 import ast
+import contextvars
 import re
 from collections.abc import Iterable
 
 from .findings import Finding, Location
 from .languages._parity import is_test_path
-from .languages._security import SECRET_NAME
+from .languages._security import is_secret_name
 
 _SAFE_YAML_LOADERS = frozenset({"SafeLoader", "CSafeLoader", "BaseLoader", "CBaseLoader"})
 _UNSAFE_LOADS = {
@@ -50,13 +51,75 @@ _RANDOM_FUNCTIONS = frozenset(
         "triangular",
     }
 )
-_SECRET_NAME = SECRET_NAME
 _TLS_ATTRIBUTES = frozenset({"_create_unverified_context", "CERT_NONE"})
 _CERT_NONE_CONTEXT = re.compile(r"(?i)cert_?reqs|verify_?mode")
 
 
+_MODULE_CONSTANTS: contextvars.ContextVar[frozenset[str]] = contextvars.ContextVar(
+    "cqa_module_constants", default=frozenset()
+)
+
+
+def module_constants(tree: ast.AST) -> frozenset[str]:
+    """Names bound exactly once, at module level, to a string literal.
+
+    ``CMD = "ls -la"`` at the top of a file makes ``subprocess.run(CMD,
+    shell=True)`` a literal command, not a runtime one. A name assigned
+    anywhere else in the module (a second assignment, a loop target, an
+    augmented assignment, a ``global`` rebinding) is not a constant.
+    """
+    stores = _store_counts(tree)
+    constants: set[str] = set()
+    for statement in getattr(tree, "body", []):
+        binding = _single_target_binding(statement)
+        if binding is None:
+            continue
+        target, value = binding
+        if (
+            isinstance(target, ast.Name)
+            and isinstance(value, ast.Constant)
+            and isinstance(value.value, str)
+            and stores.get(target.id) == 1
+        ):
+            constants.add(target.id)
+    return frozenset(constants)
+
+
+def _store_counts(tree: ast.AST) -> dict[str, int]:
+    """How many times each name is assigned anywhere in the module."""
+    stores: dict[str, int] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            stores[node.id] = stores.get(node.id, 0) + 1
+    return stores
+
+
+def _single_target_binding(statement: ast.stmt) -> tuple[ast.expr, ast.expr] | None:
+    """``(target, value)`` for ``NAME = value`` / ``NAME: T = value``, else None."""
+    if isinstance(statement, ast.Assign) and len(statement.targets) == 1:
+        return statement.targets[0], statement.value
+    if isinstance(statement, ast.AnnAssign) and statement.value is not None:
+        return statement.target, statement.value
+    return None
+
+
+def _shlex_safe(node: ast.expr) -> bool:
+    """``shlex.join(...)``, ``shlex.quote(...)``, or an f-string whose every
+    interpolation is ``shlex.quote(...)``: quoted by construction."""
+    if isinstance(node, ast.Call):
+        return _attr(node.func) in {("shlex", "join"), ("shlex", "quote")}
+    if isinstance(node, ast.JoinedStr):
+        holes = [part for part in node.values if isinstance(part, ast.FormattedValue)]
+        return bool(holes) and all(_shlex_safe(hole.value) for hole in holes)
+    return False
+
+
 def _is_dynamic(node: ast.expr | None) -> bool:
-    return node is not None and not isinstance(node, ast.Constant)
+    if node is None or isinstance(node, ast.Constant):
+        return False
+    if isinstance(node, ast.Name) and node.id in _MODULE_CONSTANTS.get():
+        return False
+    return not _shlex_safe(node)
 
 
 def _attr(node: ast.expr) -> tuple[str, str] | None:
@@ -98,6 +161,20 @@ class _SecurityRule:
         identity_path = identity_path or path
         in_tests = self.downgrade_in_tests and is_test_path(identity_path)
         seen: set[int] = set()
+        reset_handle = _MODULE_CONSTANTS.set(module_constants(tree))
+        try:
+            yield from self._walk(tree, path, identity_path, in_tests, seen)
+        finally:
+            _MODULE_CONSTANTS.reset(reset_handle)
+
+    def _walk(
+        self,
+        tree: ast.AST,
+        path: str,
+        identity_path: str,
+        in_tests: bool,
+        seen: set[int],
+    ) -> Iterable[Finding]:
         for node in ast.walk(tree):
             hit = self.classify(node)
             if hit is None or node.lineno in seen:
@@ -277,7 +354,7 @@ class InsecureRandomForSecretRule(_SecurityRule):
         if binding is None:
             return None
         names, value = binding
-        secret = next((n for n in names if n and _SECRET_NAME.search(n)), None)
+        secret = next((n for n in names if n and is_secret_name(n)), None)
         if secret is None or not _uses_random(value):
             return None
         return f"'{secret}' is produced by the non-cryptographic random module (CWE-330)."
@@ -294,7 +371,7 @@ def _binding(node: ast.AST) -> tuple[list[str], ast.expr] | None:
 
 def _random_keyword(node: ast.Call) -> str | None:
     for keyword in node.keywords:
-        if keyword.arg and _SECRET_NAME.search(keyword.arg) and _uses_random(keyword.value):
+        if keyword.arg and is_secret_name(keyword.arg) and _uses_random(keyword.value):
             return (
                 f"Argument '{keyword.arg}' is produced by the non-cryptographic "
                 "random module (CWE-330)."

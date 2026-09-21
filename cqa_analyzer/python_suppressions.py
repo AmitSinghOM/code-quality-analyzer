@@ -14,9 +14,9 @@ _DIRECTIVE = re.compile(
 )
 
 
-def suppression_lines(source: str) -> frozenset[tuple[int, str]]:
-    """Return valid ``(line, rule_id)`` suppressions without reason text."""
-    suppressions = set()
+def suppressions(source: str) -> dict[tuple[int, str], str]:
+    """Return ``{(line, rule_id): reason}`` for every valid directive."""
+    found: dict[tuple[int, str], str] = {}
     try:
         tokens = tokenize.generate_tokens(io.StringIO(source).readline)
         for token in tokens:
@@ -25,14 +25,19 @@ def suppression_lines(source: str) -> frozenset[tuple[int, str]]:
             match = _DIRECTIVE.fullmatch(token.string.strip())
             if match is None:
                 continue
-            reason = match.group("double") or match.group("single") or ""
-            if not reason.strip():
+            reason = (match.group("double") or match.group("single") or "").strip()
+            if not reason:
                 continue
             for rule_id in match.group("rules").split(","):
-                suppressions.add((token.start[0], rule_id.strip()))
+                found[(token.start[0], rule_id.strip())] = reason
     except (IndentationError, tokenize.TokenError):
-        return frozenset()
-    return frozenset(suppressions)
+        return {}
+    return found
+
+
+def suppression_lines(source: str) -> frozenset[tuple[int, str]]:
+    """Return valid ``(line, rule_id)`` suppressions without reason text."""
+    return frozenset(suppressions(source))
 
 
 def comment_lines(source: str) -> frozenset[int]:

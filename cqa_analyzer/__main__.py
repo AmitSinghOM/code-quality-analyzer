@@ -58,6 +58,9 @@ EXIT_FINDINGS = 4
 EXIT_SCORE_NOT_APPLICABLE = 5
 EXIT_CONFIG_MISMATCH = 6
 
+ANONYMIZED_REASON = "[redacted]"
+"""Stands in for a suppression reason under --anonymize (author-written free text)."""
+
 
 class CliError(Exception):
     """A fatal, expected error: printed as ``Error: <message>`` and exit 1.
@@ -245,6 +248,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="code-quality-analyzer",
         description="Analyze a project without sending source outside the machine.",
+        # click never matched flag prefixes; argparse does by default, which would
+        # let ``--off``/``--output-form`` work today and break the moment a flag
+        # sharing that prefix is added (review 5, A5).
+        allow_abbrev=False,
     )
     parser.add_argument(
         "--version",
@@ -438,9 +445,14 @@ def _run_analysis(
             reported_findings = list(changed_line_selection.select(baseline_selected_findings))
         except ChangedLinesError as error:
             raise CliError(str(error)) from error
+        not_analyzed = changed_line_selection.not_analyzed(scanner.analyzed_paths)
+        if anonymizer is not None:
+            # Manifest paths are as sensitive as source paths (review 5, R2).
+            not_analyzed = tuple(anonymizer.file(path) for path in not_analyzed)
         changed_lines_summary = changed_line_selection.summary(
             input_findings=len(baseline_selected_findings),
             selected_findings=len(reported_findings),
+            not_analyzed=not_analyzed,
         )
     baseline_summary = (
         comparison.as_dict()
@@ -532,7 +544,32 @@ def _run_analysis(
         complexity_health=complexity_health,
         findings=reported_findings,
         fail_on=fail_on,
+        changed_lines_summary=changed_lines_summary,
     )
+
+
+def _suppressed_payload(scanner: CodeScanner, anonymizer) -> list[dict]:
+    """Findings an in-source directive removed, each with its justification.
+
+    Review 5, A6: a suppression is visible evidence, not an absence. Neither
+    the score nor the exit code counts these (they never reach
+    ``reported_findings``); they are reported so a reviewer can tell a clean
+    file from a silenced one, and so SARIF can mark them suppressed."""
+    payload = []
+    for entry in scanner.suppressions.entries:
+        if anonymizer:
+            item = anonymizer.finding(entry.finding)
+            # Free text written by the repository author; a shareable report
+            # must not carry it verbatim.
+            item["suppression_reason"] = ANONYMIZED_REASON
+        else:
+            item = entry.finding.as_dict()
+            item["suppression_reason"] = entry.reason
+        payload.append(item)
+    payload.sort(
+        key=lambda item: (item["location"]["path"], item["location"]["line"], item["rule_id"])
+    )
+    return payload
 
 
 def _exit_code(
@@ -544,12 +581,17 @@ def _exit_code(
     complexity_health: dict | None = None,
     findings=None,
     fail_on: str | None = None,
+    changed_lines_summary: dict | None = None,
 ) -> int:
     if scanner.discovery.source_candidates == 0:
         return EXIT_NOTHING_ANALYZED
     if scanner.files_successfully_analyzed == 0:
         return EXIT_COVERAGE_GAP
-    if strict and (scanner.has_coverage_gaps or _health_has_gaps(complexity_health)):
+    if strict and (
+        scanner.has_coverage_gaps
+        or _health_has_gaps(complexity_health)
+        or bool((changed_lines_summary or {}).get("files_not_analyzed"))
+    ):
         return EXIT_COVERAGE_GAP
     if fail_under is not None and not signal_scope["applicable"]:
         return EXIT_SCORE_NOT_APPLICABLE
@@ -683,6 +725,7 @@ def _build_sarif_run(
         baseline_selection=baseline_selection,
         changed_line_selection=changed_lines_summary,
         findings=findings,
+        suppressed=tuple(_suppressed_payload(scanner, anonymizer)),
     )
 
 
@@ -765,6 +808,7 @@ def _build_json_report(
         ),
         "finding_summary": _finding_summary(reported_findings),
         "findings": finding_payload,
+        "suppressed_findings": _suppressed_payload(scanner, anonymizer),
         "dsa_patterns": _pattern_payload(
             dsa_found,
             _signal_definitions(scanner, "architecture.dsa", DSA_PATTERNS),
@@ -907,6 +951,7 @@ def _emit_text(
     _print_package_intelligence(package_payload)
     _print_baseline_summary(baseline_summary)
     _print_changed_lines_summary(changed_lines_summary)
+    _print_not_analyzed(changed_lines_summary)
     _print_findings(finding_payload)
     _print_pattern_table(
         "DSA Patterns Detected",
@@ -970,6 +1015,33 @@ def _print_scan_health(scan_health, scanner):
             "part of the project only (raise --max-files)"
         )
     _print_excluded_generated(scan_health)
+    _print_suppressed(scan_health)
+
+
+def _print_not_analyzed(changed_lines_summary):
+    summary = changed_lines_summary or {}
+    count = summary.get("files_not_analyzed", 0)
+    if not count:
+        return
+    console.print(
+        f"[yellow]![/yellow] {count} changed file(s) in the manifest were not analyzed "
+        "(unsupported, excluded or unparsed) - they are unchecked, not clean; "
+        "--strict treats this as a coverage gap"
+    )
+    for path in summary.get("files_not_analyzed_examples", []):
+        console.print(f"    - {_safe(path)}")
+
+
+def _print_suppressed(scan_health):
+    suppressed = scan_health.get("suppressed") or {}
+    count = suppressed.get("count", 0)
+    if not count:
+        return
+    by_rule = ", ".join(f"{rule}={n}" for rule, n in suppressed.get("by_rule", {}).items())
+    console.print(
+        f"[dim]i[/dim] {count} finding(s) suppressed by in-source directives "
+        f"({_safe(by_rule)}); listed under suppressed_findings in JSON/SARIF"
+    )
 
 
 def _print_excluded_generated(scan_health):

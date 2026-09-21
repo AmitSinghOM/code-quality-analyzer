@@ -23,7 +23,8 @@ from ..protocols import (
     SourceFile,
 )
 from ..python_rules import PythonRuleAnalyzer
-from ..python_suppressions import comment_lines, suppression_lines
+from ..python_suppressions import comment_lines, suppressions
+from ..suppression_ledger import drop_suppressed
 from ..registry import PluginRegistry
 from ..signals import FileSignals, extract_signals, pattern_is_present
 
@@ -139,7 +140,7 @@ class PythonRulePack:
 
     rule_pack_id = PYTHON_RULE_PACK_ID
     language_id = "python"
-    ruleset_version = "2.15.0"
+    ruleset_version = "2.16.0"
     plugin_api_version = PLUGIN_API_VERSION
 
     def __init__(self, analyzer: PythonRuleAnalyzer | None = None) -> None:
@@ -155,12 +156,11 @@ class PythonRulePack:
             parsed.source.display_path,
             identity_path=parsed.source.identity_path,
         )
-        suppressed = suppression_lines(parsed.source.content)
+        suppressed = suppressions(parsed.source.content)
         documented = comment_lines(parsed.source.content)
         return tuple(
             _downgrade_documented_swallow(finding, documented)
-            for finding in findings
-            if (finding.location.line, finding.rule_id) not in suppressed
+            for finding in drop_suppressed(findings, suppressed)
         )
 
 
@@ -228,8 +228,8 @@ class PythonPackageProvider:
             for path, parsed in project.parsed_files.items()
             if isinstance(parsed.artifact, ast.AST)
         }
-        suppressions = {
-            path: suppression_lines(parsed.source.content)
+        suppressions_by_path = {
+            path: suppressions(parsed.source.content)
             for path, parsed in project.parsed_files.items()
             if isinstance(parsed.artifact, ast.AST)
         }
@@ -237,7 +237,7 @@ class PythonPackageProvider:
             project.root,
             artifacts,
             redact_paths=project.redact_paths,
-            suppressions_by_path=suppressions,
+            suppressions_by_path=suppressions_by_path,
         )
         payload = analyzer.analyze()
         return ProviderResult(
@@ -262,7 +262,7 @@ class PythonDuplicationProvider:
             path: (
                 parsed.source.display_path,
                 parsed.artifact,
-                suppression_lines(parsed.source.content),
+                suppressions(parsed.source.content),
             )
             for path, parsed in project.parsed_files.items()
             if isinstance(parsed.artifact, ast.AST)

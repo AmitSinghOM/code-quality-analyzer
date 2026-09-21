@@ -37,12 +37,79 @@ from ._sql import PREFIXED_QUOTE, find_closer
 
 Interpolates = Callable[[str, str, str], bool]
 
-SECRET_NAME = re.compile(
-    r"(?i)(?:^|_|[a-z])(?:token|secret|passw(?:or)?d|nonce|salt|otp|api_?key|"
-    r"session_?(?:id|key)|csrf|auth_?code|verification_?code|reset_?code)",
+_SEGMENT = re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|\d+")
+
+_SECRET_SEGMENTS = frozenset(
+    {
+        "token",
+        "tokens",
+        "secret",
+        "secrets",
+        "password",
+        "passwd",
+        "passphrase",
+        "nonce",
+        "salt",
+        "otp",
+        "apikey",
+        "csrf",
+        "sessionid",
+    }
 )
-"""Identifier shapes that hold a security-relevant value. Kept deliberately
-short: a broad list is how ``random``-for-secrets rules earn their reputation."""
+_SECRET_PAIRS = frozenset(
+    {
+        ("api", "key"),
+        ("session", "id"),
+        ("session", "key"),
+        ("auth", "code"),
+        ("verification", "code"),
+        ("reset", "code"),
+    }
+)
+_QUANTITY_SEGMENTS = frozenset(
+    {
+        "max",
+        "min",
+        "num",
+        "count",
+        "len",
+        "length",
+        "size",
+        "index",
+        "idx",
+        "per",
+        "rate",
+        "limit",
+        "budget",
+        "delay",
+        "timeout",
+        "ttl",
+        "rounds",
+        "offset",
+        "position",
+        "pos",
+    }
+)
+
+
+def is_secret_name(name: str) -> bool:
+    """Whether ``name`` is an identifier that holds a security-relevant value.
+
+    Identifiers are split into snake/camel segments and matched as WHOLE
+    segments (``reset_token``, ``sessionKey``, ``API_KEY``), never as
+    substrings: ``max_tokens``, ``footprint`` and ``hotplug_delay`` used to
+    fire on ``token``/``otp``. A name that also carries a quantity or position
+    word (``max_tokens``, ``token_index``, ``salt_rounds``) is a count, not a
+    secret, and stays silent. Kept deliberately short: a broad list is how
+    ``random``-for-secrets rules earn their reputation.
+    """
+    segments = [segment.lower() for segment in _SEGMENT.findall(name)]
+    if not segments or _QUANTITY_SEGMENTS.intersection(segments):
+        return False
+    if _SECRET_SEGMENTS.intersection(segments):
+        return True
+    return any(pair in _SECRET_PAIRS for pair in zip(segments, segments[1:], strict=False))
+
 
 SHELL_BINARIES = frozenset(
     {
@@ -207,6 +274,9 @@ def classify_argument(
         return Argument("empty")
     literal = _read_literal(source, start, end)
     if literal is None:
+        constant = constant_literal(parsed, source[start:end])
+        if constant is not None:
+            return Argument("literal", constant)
         return Argument("dynamic")
     delimiter, prefix, content, close = literal
     absorbed = _absorb_adjacent_literals(source, close, end, content)
@@ -218,6 +288,92 @@ def classify_argument(
     if interpolates is not None and interpolates(delimiter, prefix, content):
         return Argument("dynamic")
     return Argument("literal", content)
+
+
+# ---- constant resolution ----------------------------------------------------
+
+_IDENTIFIER = re.compile(r"[A-Za-z_]\w*\Z")
+
+_CONSTANT_KEYWORDS = (
+    r"(?:const\s+val|const\s+string|static\s+final\s+String|final\s+String|"
+    r"static\s+const\s+char\s*\*\s*|const\s+char\s*\*\s*|const)"
+)
+"""Kotlin, C#, Java, C/C++ and the shared ``const`` of Go, TS/JS and Rust."""
+
+MAX_CONSTANT_SCAN = 200_000
+"""Files past this many characters skip constant resolution: the scan is a
+handful of regexes but the benefit on a generated file is nil."""
+
+
+def _constant_definition(name: str) -> re.Pattern:
+    escaped = re.escape(name)
+    return re.compile(
+        r"(?m)^[ \t]*(?:export\s+|public\s+|private\s+|internal\s+|pub(?:\(crate\))?\s+)?"
+        rf"{_CONSTANT_KEYWORDS}\s+{escaped}(?:\s*:\s*&(?:'static\s+)?str)?"
+        r"[ \t]*(?P<eq>=)[ \t]*;?[ \t]*$"
+    )
+
+
+def _define_directive(name: str) -> re.Pattern:
+    return re.compile(rf"(?m)^[ \t]*#[ \t]*define[ \t]+{re.escape(name)}[ \t]+(?=[\"'])")
+
+
+def _rebinding(name: str) -> re.Pattern:
+    return re.compile(rf"\b{re.escape(name)}\s*(?:\+=|:=|=(?!=))")
+
+
+def constant_literal(parsed: ParsedFile, text: str) -> str | None:
+    """The string a bare identifier names when it is a file-level constant.
+
+    ``exec.Command("sh", "-c", script)`` with ``const script = "echo hi"`` at
+    the top of the file is a literal command, not a runtime one. Resolution
+    is deliberately narrow: same file, one ``const``-style definition at the
+    start of a line whose right-hand side is a single string literal, and no
+    other assignment to that name anywhere in the file. Anything else stays
+    ``dynamic`` -- the rule's job is to be right when it fires, not to
+    understand the program.
+    """
+    name = text.strip()
+    if _IDENTIFIER.fullmatch(name) is None:
+        return None
+    source = parsed.source.content
+    if len(source) > MAX_CONSTANT_SCAN:
+        return None
+    literal_start = _single_definition_end(name, source, parsed.facts.code_text)
+    if literal_start is None or len(_rebinding(name).findall(parsed.facts.code_text)) > 1:
+        return None
+    return _bare_literal_to_line_end(source, literal_start)
+
+
+def _single_definition_end(name: str, source: str, code_text: str) -> int | None:
+    """Offset just after ``=`` (or the ``#define NAME``) of the one definition
+    of ``name``; ``None`` when there is none or more than one.
+
+    ``code_text`` blanks strings in place, so a definition line reading
+    ``const NAME =`` followed by nothing had a bare literal on the right."""
+    definitions = list(_constant_definition(name).finditer(code_text))
+    if len(definitions) == 1:
+        return definitions[0].end("eq")
+    if definitions:
+        return None
+    directives = list(_define_directive(name).finditer(source))
+    return directives[0].end() if len(directives) == 1 else None
+
+
+def _bare_literal_to_line_end(source: str, start: int) -> str | None:
+    """The content of a string literal at ``start`` when nothing but
+    whitespace or ``;`` follows it on the line."""
+    line_end = source.find("\n", start)
+    line_end = len(source) if line_end < 0 else line_end
+    while start < line_end and source[start] in " \t":
+        start += 1
+    literal = _read_literal(source, start, line_end)
+    if literal is None:
+        return None
+    _delimiter, _prefix, content, close = literal
+    if source[close:line_end].strip(" \t;\r"):
+        return None
+    return content
 
 
 # ---- detector shapes --------------------------------------------------------
@@ -359,7 +515,7 @@ def secret_random_findings(
     code_text = parsed.facts.code_text
     for match in assignment.finditer(code_text):
         name = match.group("name")
-        if SECRET_NAME.search(name) is None:
+        if not is_secret_name(name):
             continue
         end = _statement_end(code_text, match.end())
         expression = code_text[match.end() : end]
@@ -368,7 +524,7 @@ def secret_random_findings(
         yield security_finding(
             rule_id,
             parsed,
-            match.start(),
+            match.start("name"),  # not match.start(): a leading `{` sits on the previous line
             message,
             remediation,
             confidence="medium",

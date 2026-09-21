@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 from cqa_analyzer.languages._security import (
-    SECRET_NAME,
+    is_secret_name,
     Argument,
     classify_argument,
     split_arguments,
@@ -430,12 +430,84 @@ def test_classify_argument(language, call, expected):
     "name", ["token", "apiKey", "SESSION_ID", "csrf_token", "reset_code", "password"]
 )
 def test_secret_names_match(name):
-    assert SECRET_NAME.search(name)
+    assert is_secret_name(name)
 
 
 @pytest.mark.parametrize("name", ["counter", "retries", "index", "delay_ms", "shuffle_seed"])
 def test_ordinary_names_do_not_match(name):
-    assert not SECRET_NAME.search(name)
+    assert not is_secret_name(name)
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "max_tokens",  # a sampling parameter, not a credential
+        "maxTokens",
+        "tokens_per_second",
+        "token_index",
+        "tokenIndex",
+        "salt_rounds",
+        "footprint",  # used to match on the 'otp' inside it
+        "hotplug_delay",
+        "secretary",
+        "tokenizer",
+    ],
+)
+def test_secret_shaped_substrings_are_not_secrets(name):
+    """Whole segments only: ``token`` in ``max_tokens`` is a count, ``otp`` in
+    ``footprint`` is three letters. This is the false-positive class a
+    random-for-secrets rule earns its reputation on."""
+    assert not is_secret_name(name)
+
+
+@pytest.mark.parametrize(
+    "name", ["reset_token", "sessionKey", "API_KEY", "csrfToken", "passphrase"]
+)
+def test_segmented_secret_names_match(name):
+    assert is_secret_name(name)
+
+
+SAMPLING_PY = (
+    "import random\n\n\n"
+    "def sample(n):\n"
+    "    max_tokens = random.randint(1, 10)\n"
+    "    footprint = random.random()\n"
+    "    token_index = random.choice(range(n))\n"
+    "    salt_rounds = random.randint(1, 3)\n"
+    "    hotplug_delay = random.uniform(0, 1)\n"
+    "    return max_tokens, footprint, token_index, salt_rounds, hotplug_delay\n\n\n"
+    "def real_bug():\n"
+    "    reset_token = random.getrandbits(64)\n"
+    "    return reset_token\n"
+)
+
+SAMPLING_GO = (
+    "package sampling\n\n"
+    'import "math/rand"\n\n'
+    "func Sample(n int) (int, float64, int) {\n"
+    "\tmaxTokens := rand.Intn(10)\n"
+    "\tfootprint := rand.Float64()\n"
+    "\ttokenIndex := rand.Intn(n)\n"
+    "\treturn maxTokens, footprint, tokenIndex\n"
+    "}\n\n"
+    "func RealBug() int64 {\n"
+    "\tsessionKey := rand.Int63()\n"
+    "\treturn sessionKey\n"
+    "}\n"
+)
+
+
+def test_py_sec_005_precision_on_sampling_code():
+    """Five benign random draws with token-like names and one real bug: exactly
+    the bug is reported. On 3.2.1 this file produced six findings."""
+    found = py(SAMPLING_PY, "PY-SEC-005")
+    assert [f.location.line for f in found] == [14]
+
+
+def test_go_sec_003_precision_on_sampling_code():
+    found = findings("go", SAMPLING_GO, "GO-SEC-003")
+    assert len(found) == 1
+    assert "sessionKey" in SAMPLING_GO.splitlines()[found[0].location.line - 1]
 
 
 # ---- SARIF --------------------------------------------------------------------
@@ -477,3 +549,116 @@ def test_quality_rules_carry_no_security_properties():
     descriptor = _rule_descriptor(rule_metadata("PY-MAINT-001"))
     assert "security-severity" not in descriptor["properties"]
     assert "tags" not in descriptor["properties"]
+
+
+# ---- A3: literal constants and quoted-by-construction arguments ---------------
+# Review 5 (docs/reviews/2026-09-20-four-seat-review-3.2.1.md, A3). On 3.2.1 a
+# bare identifier bound to a string literal at module/package level was treated
+# as dynamic, so these four files produced nine findings, five of them false.
+
+SHELL_PY = """import subprocess, os, shlex
+
+CMD = "ls -la"
+SAFE_CMD = ("git", "status")
+
+
+def benign(path):
+    subprocess.run(CMD, shell=True)                 # module constant, literal upstream
+    subprocess.run(["ls", path])                    # list form, no shell
+    subprocess.run(shlex.join(["ls", path]), shell=True)  # quoted via shlex
+    os.system("make clean")                         # literal
+    subprocess.run(f"echo {shlex.quote(path)}", shell=True)  # quoted interpolation
+    return "subprocess.run(cmd, shell=True) is dangerous"    # string mentioning it
+
+
+def bug(user):
+    subprocess.run("ls " + user, shell=True)
+"""
+
+RUN_GO = """package run
+
+import "os/exec"
+
+const script = "echo hi"
+
+func benign(path string) {
+\texec.Command("sh", "-c", script)      // package constant
+\texec.Command("ls", "-la", path)       // no shell
+\texec.Command(path)                    // binary is the variable, no -c
+\t_ = `exec.Command("sh", "-c", cmd) is bad`
+}
+
+func bug(user string) { exec.Command("sh", "-c", "ls "+user) }
+"""
+
+DOM_TS = """const template = "<b>hi</b>";
+enum Mode { eval = "eval", exec = "exec" }
+function benign(el: HTMLElement, n: number) {
+  el.innerHTML = template;                 // module constant literal
+  el.innerHTML = "";                       // clear
+  el.innerHTML = DOMPurify.sanitize(user); // sanitized
+  el.textContent = user;                   // safe sink
+  const evalResult = model.eval(batch);    // method named eval on a tensor lib
+  const s = "eval(x) is unsafe";           // string
+  return `${n}`;
+}
+function bug(el: HTMLElement, user: string) { el.innerHTML = "<p>" + user; }
+"""
+
+SER_JAVA = """class Ser {
+  static final String NOTE = "new ObjectInputStream(in) is unsafe";
+  Object benign(java.io.InputStream in) throws Exception {
+    // new ObjectInputStream(in).readObject() -- commented out
+    return new java.io.DataInputStream(in).readInt();
+  }
+  Object bug(java.io.InputStream in) throws Exception { return new java.io.ObjectInputStream(in).readObject(); }
+}
+"""
+
+
+def test_py_sec_002_module_constant_and_shlex_are_not_dynamic():
+    """Exactly the concatenated command is reported; the module constant, the
+    shlex-joined string and the shlex-quoted f-string are quoted by construction."""
+    found = py(SHELL_PY, "PY-SEC-002")
+    assert [f.location.line for f in found] == [17]
+
+
+def test_go_sec_002_package_constant_is_not_dynamic():
+    found = findings("go", RUN_GO, "GO-SEC-002")
+    assert [f.location.line for f in found] == [14]
+
+
+def test_ts_sec_003_module_constant_is_not_dynamic():
+    found = findings("typescript", DOM_TS, "TS-SEC-003")
+    assert [f.location.line for f in found] == [12]
+    assert findings("typescript", DOM_TS, "TS-SEC-001") == []
+
+
+def test_java_sec_001_strings_and_comments_do_not_fire():
+    found = findings("java", SER_JAVA, "JAVA-SEC-001")
+    assert [f.location.line for f in found] == [7]
+
+
+@pytest.mark.parametrize(
+    "language, source, rule_id",
+    [
+        # Reassigned or twice-defined constants stay dynamic.
+        (
+            "go",
+            'package p\nimport "os/exec"\nconst s = "a"\nfunc f(){ s = x; exec.Command("sh","-c", s) }\n',
+            "GO-SEC-002",
+        ),
+        (
+            "typescript",
+            'let t = "<b>";\nt = user;\nfunction f(el: HTMLElement){ el.innerHTML = t; }\n',
+            "TS-SEC-003",
+        ),
+    ],
+)
+def test_rebound_constants_remain_dynamic(language, source, rule_id):
+    assert len(findings(language, source, rule_id)) == 1
+
+
+def test_python_rebound_module_constant_remains_dynamic():
+    source = 'import subprocess\nCMD = "ls"\ndef f(x):\n    global CMD\n    CMD = x\n    subprocess.run(CMD, shell=True)\n'
+    assert len(py(source, "PY-SEC-002")) == 1

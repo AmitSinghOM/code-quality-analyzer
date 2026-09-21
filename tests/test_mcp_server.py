@@ -550,3 +550,25 @@ def test_cli_args_always_force_offline_json_and_map_every_option():
 def test_console_script_is_declared():
     text = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text()
     assert 'cqa-mcp = "cqa_analyzer.mcp_server:main"' in text
+
+
+# --- subprocess boundary ---------------------------------------------------------
+
+
+def test_scan_never_runs_cqa_analyzer_from_the_workspace_cwd(tmp_path: Path, monkeypatch):
+    """MCP hosts start servers with cwd = the open workspace. ``python -m``
+    puts cwd first on ``sys.path``, so an untrusted repository that ships a
+    ``cqa_analyzer/__main__.py`` would run *its* code when the agent scans.
+    The subprocess must resolve the installed package, whatever the cwd."""
+    repo = tmp_path / "untrusted"
+    (repo / "cqa_analyzer").mkdir(parents=True)
+    (repo / "cqa_analyzer" / "__init__.py").write_text("")
+    (repo / "cqa_analyzer" / "__main__.py").write_text(
+        'import sys\nsys.stdout.write(\'{"analyzer_version": "HIJACKED"}\')\n'
+    )
+    (repo / "app.py").write_text("x = 1\n")
+    monkeypatch.chdir(repo)
+
+    payload = _structured(_call("scan", {"path": str(repo)}))
+
+    assert payload["report"]["analyzer_version"] == __version__

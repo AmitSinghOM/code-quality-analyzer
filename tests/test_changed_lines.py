@@ -5,11 +5,12 @@ import json
 import pytest
 from clirunner import CliRunner
 
-from cqa_analyzer.__main__ import EXIT_FINDINGS, EXIT_OK, main
+from cqa_analyzer.__main__ import EXIT_COVERAGE_GAP, EXIT_FINDINGS, EXIT_OK, main
 from cqa_analyzer.changed_lines import (
     ChangedLinesError,
     LineRange,
     load_changed_lines,
+    parse_changed_lines,
 )
 from cqa_analyzer.findings import Finding, Location
 
@@ -25,10 +26,7 @@ def _write_manifest(path, files):
 def _file(path, *ranges):
     return {
         "path": path,
-        "ranges": [
-            {"start_line": start, "end_line": end}
-            for start, end in ranges
-        ],
+        "ranges": [{"start_line": start, "end_line": end} for start, end in ranges],
     }
 
 
@@ -57,10 +55,13 @@ def _finding(
 
 
 def test_manifest_canonicalizes_paths_and_merges_adjacent_ranges(tmp_path):
-    manifest = _write_manifest(tmp_path / "changed.json", [
-        _file("z.py", (9, 10), (2, 4), (4, 8)),
-        _file("a.py", (7, 7)),
-    ])
+    manifest = _write_manifest(
+        tmp_path / "changed.json",
+        [
+            _file("z.py", (9, 10), (2, 4), (4, 8)),
+            _file("a.py", (7, 7)),
+        ],
+    )
 
     selection = load_changed_lines(manifest)
 
@@ -74,13 +75,13 @@ def test_manifest_canonicalizes_paths_and_merges_adjacent_ranges(tmp_path):
         "range_count": 2,
         "input_findings": 5,
         "selected_findings": 1,
+        "files_not_analyzed": 0,
+        "files_not_analyzed_examples": [],
     }
 
 
 def test_empty_manifest_selects_no_findings(tmp_path):
-    selection = load_changed_lines(
-        _write_manifest(tmp_path / "changed.json", [])
-    )
+    selection = load_changed_lines(_write_manifest(tmp_path / "changed.json", []))
 
     assert selection.select([_finding("module.py", 1)]) == ()
     assert selection.file_count == 0
@@ -89,9 +90,12 @@ def test_empty_manifest_selects_no_findings(tmp_path):
 
 def test_selection_uses_inclusive_spans_and_hidden_identity_paths(tmp_path):
     selection = load_changed_lines(
-        _write_manifest(tmp_path / "changed.json", [
-            _file("a/service.py", (5, 5)),
-        ])
+        _write_manifest(
+            tmp_path / "changed.json",
+            [
+                _file("a/service.py", (5, 5)),
+            ],
+        )
     )
     findings = [
         _finding("a/service.py", 3, end_line=5, display_path="service.py"),
@@ -169,10 +173,12 @@ def test_manifest_rejects_unsafe_paths_without_echoing_them(
         },
         {
             "schema_version": "1.0.0",
-            "files": [{
-                "path": "a.py",
-                "ranges": [{"start_line": True, "end_line": 1}],
-            }],
+            "files": [
+                {
+                    "path": "a.py",
+                    "ranges": [{"start_line": True, "end_line": 1}],
+                }
+            ],
         },
     ],
 )
@@ -185,10 +191,13 @@ def test_manifest_rejects_invalid_shapes_and_ranges(tmp_path, payload):
 
 
 def test_manifest_rejects_duplicate_paths(tmp_path):
-    manifest = _write_manifest(tmp_path / "changed.json", [
-        _file("a.py", (1, 1)),
-        _file("a.py", (2, 2)),
-    ])
+    manifest = _write_manifest(
+        tmp_path / "changed.json",
+        [
+            _file("a.py", (1, 1)),
+            _file("a.py", (2, 2)),
+        ],
+    )
 
     with pytest.raises(ChangedLinesError, match="duplicate path"):
         load_changed_lines(manifest)
@@ -209,10 +218,13 @@ def test_manifest_enforces_bounded_counts(tmp_path, monkeypatch):
     import cqa_analyzer.changed_lines as changed_lines
 
     monkeypatch.setattr(changed_lines, "MAX_FILES", 1)
-    too_many_files = _write_manifest(tmp_path / "files.json", [
-        _file("a.py", (1, 1)),
-        _file("b.py", (1, 1)),
-    ])
+    too_many_files = _write_manifest(
+        tmp_path / "files.json",
+        [
+            _file("a.py", (1, 1)),
+            _file("b.py", (1, 1)),
+        ],
+    )
     with pytest.raises(ChangedLinesError, match="too many files"):
         load_changed_lines(too_many_files)
 
@@ -227,31 +239,41 @@ def test_manifest_enforces_bounded_counts(tmp_path, monkeypatch):
 
 
 def test_cli_filters_json_and_gate_to_changed_lines(project, tmp_path):
-    root = project({
-        "a.py": "def existing(items=[]):\n    return items\n",
-        "b.py": "def changed(cache={}):\n    return cache\n",
-    })
+    root = project(
+        {
+            "a.py": "def existing(items=[]):\n    return items\n",
+            "b.py": "def changed(cache={}):\n    return cache\n",
+        }
+    )
     manifest = _write_manifest(
         tmp_path / "private-selection.json",
         [_file("b.py", (1, 1))],
     )
 
-    result = CliRunner().invoke(main, [
-        str(root), "-f", "json", "--changed-lines-manifest", str(manifest),
-        "--fail-on", "warning",
-    ])
+    result = CliRunner().invoke(
+        main,
+        [
+            str(root),
+            "-f",
+            "json",
+            "--changed-lines-manifest",
+            str(manifest),
+            "--fail-on",
+            "warning",
+        ],
+    )
     payload = json.loads(result.output)
 
     assert result.exit_code == EXIT_FINDINGS
-    assert [item["location"]["path"] for item in payload["findings"]] == [
-        "b.py"
-    ]
+    assert [item["location"]["path"] for item in payload["findings"]] == ["b.py"]
     assert payload["changed_lines"] == {
         "schema_version": "1.0.0",
         "file_count": 1,
         "range_count": 1,
         "input_findings": 2,
         "selected_findings": 1,
+        "files_not_analyzed": 0,
+        "files_not_analyzed_examples": [],
     }
     assert "private-selection.json" not in result.output
 
@@ -260,15 +282,26 @@ def test_empty_changed_selection_does_not_weaken_analysis_authority(
     project,
     tmp_path,
 ):
-    root = project({
-        "a.py": "def existing(items=[]):\n    return items\n",
-    })
+    root = project(
+        {
+            "a.py": "def existing(items=[]):\n    return items\n",
+        }
+    )
     manifest = _write_manifest(tmp_path / "changed.json", [])
 
-    result = CliRunner().invoke(main, [
-        str(root), "-f", "json", "--changed-lines-manifest", str(manifest),
-        "--fail-on", "warning", "--strict",
-    ])
+    result = CliRunner().invoke(
+        main,
+        [
+            str(root),
+            "-f",
+            "json",
+            "--changed-lines-manifest",
+            str(manifest),
+            "--fail-on",
+            "warning",
+            "--strict",
+        ],
+    )
     payload = json.loads(result.output)
 
     assert result.exit_code == EXIT_OK
@@ -283,13 +316,20 @@ def test_changed_lines_intersect_new_findings_without_partial_baseline(
     project,
     tmp_path,
 ):
-    root = project({
-        "existing.py": "def existing(items=[]):\n    return items\n",
-    })
+    root = project(
+        {
+            "existing.py": "def existing(items=[]):\n    return items\n",
+        }
+    )
     baseline = tmp_path / "baseline.json"
-    initial = CliRunner().invoke(main, [
-        str(root), "--write-baseline", str(baseline),
-    ])
+    initial = CliRunner().invoke(
+        main,
+        [
+            str(root),
+            "--write-baseline",
+            str(baseline),
+        ],
+    )
     assert initial.exit_code == EXIT_OK
 
     (root / "selected.py").write_text(
@@ -305,11 +345,21 @@ def test_changed_lines_intersect_new_findings_without_partial_baseline(
         [_file("selected.py", (1, 1))],
     )
     filtered_baseline = tmp_path / "filtered-baseline.json"
-    result = CliRunner().invoke(main, [
-        str(root), "-f", "json", "--baseline", str(baseline),
-        "--new-findings-only", "--changed-lines-manifest", str(manifest),
-        "--write-baseline", str(filtered_baseline),
-    ])
+    result = CliRunner().invoke(
+        main,
+        [
+            str(root),
+            "-f",
+            "json",
+            "--baseline",
+            str(baseline),
+            "--new-findings-only",
+            "--changed-lines-manifest",
+            str(manifest),
+            "--write-baseline",
+            str(filtered_baseline),
+        ],
+    )
     payload = json.loads(result.output)
 
     assert result.exit_code == EXIT_OK
@@ -324,28 +374,31 @@ def test_cli_sarif_changed_selection_is_aggregate_and_deterministic(
     project,
     tmp_path,
 ):
-    root = project({
-        "private/a.py": (
-            "def proprietary(secret_items=[]):\n"
-            "    return secret_items\n"
-        ),
-        "private/b.py": "def internal(cache={}):\n    return cache\n",
-    })
-    first = _write_manifest(tmp_path / "first-private.json", [
-        _file("private/b.py", (3, 3), (1, 1), (2, 2)),
-        _file("private/a.py", (1, 1)),
-    ])
-    second = _write_manifest(tmp_path / "second-private.json", [
-        _file("private/a.py", (1, 1)),
-        _file("private/b.py", (1, 3)),
-    ])
+    root = project(
+        {
+            "private/a.py": ("def proprietary(secret_items=[]):\n" "    return secret_items\n"),
+            "private/b.py": "def internal(cache={}):\n    return cache\n",
+        }
+    )
+    first = _write_manifest(
+        tmp_path / "first-private.json",
+        [
+            _file("private/b.py", (3, 3), (1, 1), (2, 2)),
+            _file("private/a.py", (1, 1)),
+        ],
+    )
+    second = _write_manifest(
+        tmp_path / "second-private.json",
+        [
+            _file("private/a.py", (1, 1)),
+            _file("private/b.py", (1, 3)),
+        ],
+    )
 
     outputs = []
     for manifest in (first, second):
-        result = CliRunner().invoke(main, [
-            str(root), "-f", "sarif", "--anonymize", "--offline",
-            "--changed-lines-manifest", str(manifest),
-        ])
+        args = [str(root), "-f", "sarif", "--anonymize", "--offline"]
+        result = CliRunner().invoke(main, [*args, "--changed-lines-manifest", str(manifest)])
         assert result.exit_code == EXIT_OK
         outputs.append(result.output)
 
@@ -358,6 +411,8 @@ def test_cli_sarif_changed_selection_is_aggregate_and_deterministic(
         "range_count": 2,
         "input_findings": 2,
         "selected_findings": 2,
+        "files_not_analyzed": 0,
+        "files_not_analyzed_examples": [],
     }
     for sensitive in (
         "private/a.py",
@@ -375,9 +430,14 @@ def test_cli_changed_manifest_error_is_clean_and_generic(project, tmp_path):
     manifest = tmp_path / "private-manifest-name.json"
     manifest.write_text("secret invalid content", encoding="utf-8")
 
-    result = CliRunner().invoke(main, [
-        str(root), "--changed-lines-manifest", str(manifest),
-    ])
+    result = CliRunner().invoke(
+        main,
+        [
+            str(root),
+            "--changed-lines-manifest",
+            str(manifest),
+        ],
+    )
 
     assert result.exit_code != EXIT_OK
     assert "not readable valid UTF-8 JSON" in result.output
@@ -393,9 +453,14 @@ def test_text_report_shows_aggregate_changed_line_summary(project, tmp_path):
         [_file("module.py", (1, 1))],
     )
 
-    result = CliRunner().invoke(main, [
-        str(root), "--changed-lines-manifest", str(manifest),
-    ])
+    result = CliRunner().invoke(
+        main,
+        [
+            str(root),
+            "--changed-lines-manifest",
+            str(manifest),
+        ],
+    )
 
     assert result.exit_code == EXIT_OK
     assert "Changed-Line Selection" in result.output
@@ -406,10 +471,12 @@ def test_text_report_shows_aggregate_changed_line_summary(project, tmp_path):
 
 
 def test_changed_selection_does_not_change_written_baseline(project, tmp_path):
-    root = project({
-        "a.py": "def first(items=[]):\n    return items\n",
-        "b.py": "def second(cache={}):\n    return cache\n",
-    })
+    root = project(
+        {
+            "a.py": "def first(items=[]):\n    return items\n",
+            "b.py": "def second(cache={}):\n    return cache\n",
+        }
+    )
     manifest = _write_manifest(
         tmp_path / "changed.json",
         [_file("a.py", (1, 1))],
@@ -417,13 +484,24 @@ def test_changed_selection_does_not_change_written_baseline(project, tmp_path):
     full = tmp_path / "full.json"
     selected = tmp_path / "selected.json"
 
-    first = CliRunner().invoke(main, [
-        str(root), "--write-baseline", str(full),
-    ])
-    second = CliRunner().invoke(main, [
-        str(root), "--changed-lines-manifest", str(manifest),
-        "--write-baseline", str(selected),
-    ])
+    first = CliRunner().invoke(
+        main,
+        [
+            str(root),
+            "--write-baseline",
+            str(full),
+        ],
+    )
+    second = CliRunner().invoke(
+        main,
+        [
+            str(root),
+            "--changed-lines-manifest",
+            str(manifest),
+            "--write-baseline",
+            str(selected),
+        ],
+    )
 
     assert first.exit_code == EXIT_OK
     assert second.exit_code == EXIT_OK
@@ -450,3 +528,125 @@ def test_manifest_rejects_duplicate_json_keys(tmp_path):
 
     with pytest.raises(ChangedLinesError, match="duplicate JSON key"):
         load_changed_lines(manifest)
+
+
+# ---- Review 5, A7: a manifest file nobody analyzed is unchecked, not clean ----
+# On 3.2.1 a changed-lines gate over a file discovery dropped (unsupported
+# extension, minified, unparsed) reported zero findings and passed silently.
+
+
+def _gate_project(tmp_path):
+    root = tmp_path / "proj"
+    (root / "src").mkdir(parents=True)
+    (root / "src" / "app.py").write_text("x = 1\n")
+    (root / "src" / "vendor.min.js").write_text("var a=1;\n")
+    (root / "README.md").write_text("hello\n")
+    manifest = tmp_path / "m.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0.0",
+                "files": [
+                    _file("src/app.py", (1, 1)),
+                    _file("src/vendor.min.js", (1, 1)),
+                    _file("README.md", (1, 1)),
+                ],
+            }
+        )
+    )
+    return root, manifest
+
+
+def test_manifest_files_not_analyzed_are_reported(tmp_path):
+    root, manifest = _gate_project(tmp_path)
+
+    result = CliRunner().invoke(
+        main, [str(root), "-f", "json", "--offline", "--changed-lines-manifest", str(manifest)]
+    )
+    summary = json.loads(result.output)["changed_lines"]
+
+    assert result.exit_code == EXIT_OK, "without --strict the exit code is unchanged"
+    assert summary["files_not_analyzed"] == 2
+    assert summary["files_not_analyzed_examples"] == ["README.md", "src/vendor.min.js"]
+
+
+def test_strict_gate_fails_when_a_changed_file_was_not_analyzed(tmp_path):
+    root, manifest = _gate_project(tmp_path)
+
+    result = CliRunner().invoke(
+        main, [str(root), "--offline", "--strict", "--changed-lines-manifest", str(manifest)]
+    )
+
+    assert result.exit_code == EXIT_COVERAGE_GAP
+    assert "2 changed file(s) in the manifest were not analyzed" in result.output
+    assert "    - README.md" in result.output and "    - src/vendor.min.js" in result.output
+
+
+def test_strict_gate_passes_when_every_changed_file_was_analyzed(tmp_path):
+    root, manifest = _gate_project(tmp_path)
+    manifest.write_text(
+        json.dumps({"schema_version": "1.0.0", "files": [_file("src/app.py", (1, 1))]})
+    )
+
+    result = CliRunner().invoke(
+        main,
+        [
+            str(root),
+            "-f",
+            "json",
+            "--offline",
+            "--strict",
+            "--changed-lines-manifest",
+            str(manifest),
+        ],
+    )
+
+    assert result.exit_code == EXIT_OK
+    assert json.loads(result.output)["changed_lines"]["files_not_analyzed"] == 0
+
+
+def test_not_analyzed_examples_are_bounded():
+    selection = parse_changed_lines(
+        {
+            "schema_version": "1.0.0",
+            "files": [_file(f"gen/f{i:02d}.txt", (1, 1)) for i in range(25)],
+        }
+    )
+    missing = selection.not_analyzed(analyzed_paths=set())
+    summary = selection.summary(input_findings=0, selected_findings=0, not_analyzed=missing)
+
+    assert summary["files_not_analyzed"] == 25
+    assert len(summary["files_not_analyzed_examples"]) == 10
+    assert summary["files_not_analyzed_examples"][0] == "gen/f00.txt"
+
+
+def test_anonymized_not_analyzed_examples_are_tokenized(tmp_path):
+    """Closing-pass R2: a manifest path is as sensitive as a source path. With
+    --anonymize the unanalyzed example must be a stable token in JSON and SARIF."""
+    root = tmp_path / "proj"
+    (root / "private").mkdir(parents=True)
+    (root / "private" / "app.py").write_text("x = 1\n")
+    (root / "private" / "customer_list.txt").write_text("k\n")
+    manifest = tmp_path / "m.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0.0",
+                "files": [
+                    _file("private/app.py", (1, 1)),
+                    _file("private/customer_list.txt", (1, 1)),
+                ],
+            }
+        )
+    )
+    common = [str(root), "--offline", "--anonymize", "--changed-lines-manifest", str(manifest)]
+
+    as_json = CliRunner().invoke(main, [*common, "-f", "json"])
+    as_sarif = CliRunner().invoke(main, [*common, "-f", "sarif"])
+
+    assert as_json.exit_code == EXIT_OK and as_sarif.exit_code == EXIT_OK
+    summary = json.loads(as_json.output)["changed_lines"]
+    assert summary["files_not_analyzed"] == 1
+    assert summary["files_not_analyzed_examples"] == ["file-0001"]
+    for output in (as_json.output, as_sarif.output):
+        assert "customer_list" not in output and "private/" not in output

@@ -9,9 +9,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import tomllib
+from collections.abc import Collection
 
 from .findings import Finding, Location
 from .safe_io import SafeReadError, read_bounded_text
+from .suppression_ledger import _reason, record
 
 MAX_PYPROJECT_SIZE = 1024 * 1024
 
@@ -60,9 +62,7 @@ class PythonPackageAnalyzer:
         root: Path,
         parsed_files: dict[str, ast.AST],
         redact_paths: bool = False,
-        suppressions_by_path: (
-            dict[str, frozenset[tuple[int, str]]] | None
-        ) = None,
+        suppressions_by_path: (dict[str, frozenset[tuple[int, str]]] | None) = None,
     ) -> None:
         self.root = root
         self.parsed_files = parsed_files
@@ -95,28 +95,29 @@ class PythonPackageAnalyzer:
             redact_paths=self.redact_paths,
         )
         self.result.import_graph = {
-            module: sorted(targets)
-            for module, targets in sorted(graph.items())
+            module: sorted(targets) for module, targets in sorted(graph.items())
         }
         self.result.circular_imports = _strongly_connected_cycles(graph)
-        self.findings.extend(
-            _cycle_findings(self.result.circular_imports, locations)
-        )
+        self.findings.extend(_cycle_findings(self.result.circular_imports, locations))
         for path in sorted(module_paths.values()):
-            self.findings.extend(_public_api_findings(
-                path,
-                self.parsed_files[path],
-                self.suppressions_by_path.get(path, frozenset()),
-                redact_paths=self.redact_paths,
-            ))
+            self.findings.extend(
+                _public_api_findings(
+                    path,
+                    self.parsed_files[path],
+                    self.suppressions_by_path.get(path, frozenset()),
+                    redact_paths=self.redact_paths,
+                )
+            )
         if metadata is not None:
             self.findings.extend(_entry_point_findings(metadata, module_paths))
-            self.findings.extend(_package_data_findings(
-                self.root,
-                metadata,
-                module_paths,
-                namespace_discovery,
-            ))
+            self.findings.extend(
+                _package_data_findings(
+                    self.root,
+                    metadata,
+                    module_paths,
+                    namespace_discovery,
+                )
+            )
         self.findings.sort(key=_finding_key)
         return self.result
 
@@ -126,18 +127,19 @@ class PythonPackageAnalyzer:
     def _invalid_metadata_finding(self) -> None:
         self.result.metadata_valid = False
         self.errors += 1
-        self.findings.append(Finding(
-            rule_id="PY-PKG-003",
-            category="package-health",
-            severity="error",
-            confidence="high",
-            message="pyproject.toml could not be read as bounded valid TOML.",
-            location=Location("pyproject.toml", 1, 1),
-            remediation=(
-                "Use a regular project-local UTF-8 TOML file no larger than "
-                "1 MiB."
-            ),
-        ))
+        self.findings.append(
+            Finding(
+                rule_id="PY-PKG-003",
+                category="package-health",
+                severity="error",
+                confidence="high",
+                message="pyproject.toml could not be read as bounded valid TOML.",
+                location=Location("pyproject.toml", 1, 1),
+                remediation=(
+                    "Use a regular project-local UTF-8 TOML file no larger than " "1 MiB."
+                ),
+            )
+        )
 
     def _read_metadata(self) -> dict | None:
         path = self.root / "pyproject.toml"
@@ -165,12 +167,8 @@ class PythonPackageAnalyzer:
         project = _table(data.get("project"))
         build_system = _table(data.get("build-system"))
         self.result.project_name = _optional_string(project.get("name"))
-        self.result.requires_python = _optional_string(
-            project.get("requires-python")
-        )
-        self.result.build_backend = _optional_string(
-            build_system.get("build-backend")
-        )
+        self.result.requires_python = _optional_string(project.get("requires-python"))
+        self.result.build_backend = _optional_string(build_system.get("build-backend"))
         self.result.dependencies = _string_list(project.get("dependencies"))
         optional_dependencies = _table(project.get("optional-dependencies"))
         self.result.optional_dependencies = {
@@ -180,9 +178,7 @@ class PythonPackageAnalyzer:
         }
         scripts = _table(project.get("scripts"))
         self.result.scripts = {
-            str(name): target
-            for name, target in sorted(scripts.items())
-            if isinstance(target, str)
+            str(name): target for name, target in sorted(scripts.items()) if isinstance(target, str)
         }
         return data
 
@@ -238,10 +234,7 @@ class _AllSafetyVisitor(ast.NodeVisitor):
         return
 
     def visit_Call(self, node: ast.Call) -> None:
-        if (
-            isinstance(node.func, ast.Name)
-            and node.func.id in {"exec", "globals", "locals"}
-        ):
+        if isinstance(node.func, ast.Name) and node.func.id in {"exec", "globals", "locals"}:
             self.unsafe = True
         self.generic_visit(node)
 
@@ -314,7 +307,7 @@ class _ModuleBindingVisitor(ast.NodeVisitor):
 def _public_api_findings(
     path: str,
     tree: ast.AST,
-    suppressions: frozenset[tuple[int, str]],
+    suppressions: Collection[tuple[int, str]],
     redact_paths: bool = False,
 ) -> list[Finding]:
     exports = _literal_all_exports(tree)
@@ -345,8 +338,10 @@ def _public_api_findings(
                 path,
                 redact_paths,
             )
-        if (node.lineno, finding.rule_id) not in suppressions:
-            findings.append(finding)
+        if (node.lineno, finding.rule_id) in suppressions:
+            record(finding, _reason(suppressions, (node.lineno, finding.rule_id)))
+            continue
+        findings.append(finding)
     return findings
 
 
@@ -355,11 +350,7 @@ def _literal_all_exports(
 ) -> list[tuple[str, ast.Constant]] | None:
     if not isinstance(tree, ast.Module):
         return None
-    candidates = [
-        statement
-        for statement in tree.body
-        if _is_direct_all_assignment(statement)
-    ]
+    candidates = [statement for statement in tree.body if _is_direct_all_assignment(statement)]
     if len(candidates) != 1:
         return None
 
@@ -374,10 +365,7 @@ def _literal_all_exports(
         return None
     exports = []
     for element in value.elts:
-        if not (
-            isinstance(element, ast.Constant)
-            and isinstance(element.value, str)
-        ):
+        if not (isinstance(element, ast.Constant) and isinstance(element.value, str)):
             return None
         exports.append((element.value, element))
     return exports
@@ -412,9 +400,7 @@ def _public_api_finding(
         column=node.col_offset + 1,
         end_line=getattr(node, "end_lineno", None),
         end_column=(
-            node.end_col_offset + 1
-            if getattr(node, "end_col_offset", None) is not None
-            else None
+            node.end_col_offset + 1 if getattr(node, "end_col_offset", None) is not None else None
         ),
         identity_path=path,
     )
@@ -424,14 +410,10 @@ def _public_api_finding(
             category="package-health",
             severity="error",
             confidence="high",
-            message=(
-                f"Literal __all__ export '{name}' has no module-level "
-                "binding."
-            ),
+            message=(f"Literal __all__ export '{name}' has no module-level " "binding."),
             location=location,
             remediation=(
-                "Define or import the exported name at module scope, or "
-                "remove it from __all__."
+                "Define or import the exported name at module scope, or " "remove it from __all__."
             ),
         )
     return Finding(
@@ -495,27 +477,32 @@ def _package_data_findings(
             parts = _literal_package_data_parts(target)
             if parts is None:
                 continue
-            if _package_data_target_status(
-                root,
-                package_directory,
-                parts,
-            ) != "missing":
+            if (
+                _package_data_target_status(
+                    root,
+                    package_directory,
+                    parts,
+                )
+                != "missing"
+            ):
                 continue
-            findings.append(Finding(
-                rule_id="PY-PKG-006",
-                category="package-health",
-                severity="warning",
-                confidence="high",
-                message=(
-                    f"Static package-data declaration for '{package}' names "
-                    f"missing source file '{target}'."
-                ),
-                location=Location("pyproject.toml", 1, 1),
-                remediation=(
-                    "Add the file, correct the literal path, or disable the "
-                    "rule when a documented build step generates it."
-                ),
-            ))
+            findings.append(
+                Finding(
+                    rule_id="PY-PKG-006",
+                    category="package-health",
+                    severity="warning",
+                    confidence="high",
+                    message=(
+                        f"Static package-data declaration for '{package}' names "
+                        f"missing source file '{target}'."
+                    ),
+                    location=Location("pyproject.toml", 1, 1),
+                    remediation=(
+                        "Add the file, correct the literal path, or disable the "
+                        "rule when a documented build step generates it."
+                    ),
+                )
+            )
     return findings
 
 
@@ -544,10 +531,7 @@ def _package_data_declarations(
         and _SETUPTOOLS_REQUIREMENT.fullmatch(requirements[0].strip())
     ):
         return None
-    if any(
-        path.exists() or path.is_symlink()
-        for path in (root / "setup.py", root / "setup.cfg")
-    ):
+    if any(path.exists() or path.is_symlink() for path in (root / "setup.py", root / "setup.cfg")):
         return None
     if "cmdclass" in setuptools or "package-dir" in setuptools:
         return None
@@ -624,31 +608,22 @@ def _add_namespace_package_directories(
     discovery: _NamespaceDiscovery,
 ) -> None:
     path_parts = source.parts
-    if not any(
-        path_parts[:len(root)] == root
-        for root in discovery.roots
-    ):
+    if not any(path_parts[: len(root)] == root for root in discovery.roots):
         return
     if not any(
-        module == prefix or module.startswith(f"{prefix}.")
-        for prefix in discovery.prefixes
+        module == prefix or module.startswith(f"{prefix}.") for prefix in discovery.prefixes
     ):
         return
 
     module_parts = module.split(".")
-    package_count = (
-        len(module_parts)
-        if source.name == "__init__.py"
-        else len(module_parts) - 1
-    )
+    package_count = len(module_parts) if source.name == "__init__.py" else len(module_parts) - 1
     if package_count <= 0:
         return
     root_parts = source.parent.parts[:-package_count]
     for count in range(1, package_count + 1):
         package = ".".join(module_parts[:count])
         if not any(
-            package == prefix or package.startswith(f"{prefix}.")
-            for prefix in discovery.prefixes
+            package == prefix or package.startswith(f"{prefix}.") for prefix in discovery.prefixes
         ):
             continue
         directory = Path(*root_parts, *module_parts[:count])
@@ -765,9 +740,9 @@ def _namespace_root(value) -> tuple[str, ...] | None:
 
 def _roots_overlap(roots: list[tuple[str, ...]]) -> bool:
     for index, root in enumerate(roots):
-        for other in roots[index + 1:]:
+        for other in roots[index + 1 :]:
             shorter, longer = sorted((root, other), key=len)
-            if longer[:len(shorter)] == shorter:
+            if longer[: len(shorter)] == shorter:
                 return True
     return False
 
@@ -813,14 +788,13 @@ def _namespace_module_paths(
     for path in paths:
         path_parts = Path(path).parts
         for root in discovery.roots:
-            if path_parts[:len(root)] != root:
+            if path_parts[: len(root)] != root:
                 continue
-            module = _module_name(list(path_parts[len(root):]))
+            module = _module_name(list(path_parts[len(root) :]))
             if module is None:
                 continue
             if any(
-                module == prefix or module.startswith(f"{prefix}.")
-                for prefix in discovery.prefixes
+                module == prefix or module.startswith(f"{prefix}.") for prefix in discovery.prefixes
             ):
                 modules[module] = path
             break
@@ -848,11 +822,7 @@ def _flat_source_roots(
     unmatched = False
     for path in module_paths.values():
         path_parts = Path(path).parts
-        matches = [
-            root
-            for root in discovery.roots
-            if path_parts[:len(root)] == root
-        ]
+        matches = [root for root in discovery.roots if path_parts[: len(root)] == root]
         if matches:
             roots.update("/".join(root) or "." for root in matches)
         else:
@@ -904,9 +874,7 @@ def _build_import_graph(
                         end_line=getattr(node, "end_lineno", None),
                         end_column=(
                             node.end_col_offset + 1
-                            if getattr(
-                                node, "end_col_offset", None
-                            ) is not None
+                            if getattr(node, "end_col_offset", None) is not None
                             else None
                         ),
                         identity_path=path,
@@ -930,11 +898,7 @@ def _import_targets(
 
     base = _from_import_base(node, current, is_package)
     for alias in node.names:
-        specific = (
-            f"{base}.{alias.name}"
-            if base and alias.name != "*"
-            else base
-        )
+        specific = f"{base}.{alias.name}" if base and alias.name != "*" else base
         target = _nearest_local_module(specific, modules)
         if target is None:
             target = _nearest_local_module(base, modules)
@@ -951,11 +915,7 @@ def _from_import_base(
     if node.level == 0:
         return node.module or ""
 
-    package_parts = (
-        current.split(".")
-        if is_package
-        else current.split(".")[:-1]
-    )
+    package_parts = current.split(".") if is_package else current.split(".")[:-1]
     parents_to_remove = node.level - 1
     if parents_to_remove:
         package_parts = package_parts[:-parents_to_remove]
@@ -1036,18 +996,20 @@ def _cycle_findings(
             ),
             Location(path=".", line=1, column=1),
         )
-        findings.append(Finding(
-            rule_id="PY-PKG-001",
-            category="package-health",
-            severity="warning",
-            confidence="high",
-            message=f"Circular import group detected: {', '.join(cycle)}.",
-            location=location,
-            remediation=(
-                "Move shared contracts to a lower-level module or invert the "
-                "dependency between these modules."
-            ),
-        ))
+        findings.append(
+            Finding(
+                rule_id="PY-PKG-001",
+                category="package-health",
+                severity="warning",
+                confidence="high",
+                message=f"Circular import group detected: {', '.join(cycle)}.",
+                location=location,
+                remediation=(
+                    "Move shared contracts to a lower-level module or invert the "
+                    "dependency between these modules."
+                ),
+            )
+        )
     return findings
 
 
@@ -1063,21 +1025,19 @@ def _entry_point_findings(
             continue
         module = target.partition(":")[0].strip()
         if module and module not in module_paths:
-            findings.append(Finding(
-                rule_id="PY-PKG-002",
-                category="package-health",
-                severity="error",
-                confidence="high",
-                message=(
-                    f"Console script '{name}' targets missing local module "
-                    f"'{module}'."
-                ),
-                location=Location("pyproject.toml", 1, 1),
-                remediation=(
-                    "Correct the entry-point module or include it "
-                    "in the package."
-                ),
-            ))
+            findings.append(
+                Finding(
+                    rule_id="PY-PKG-002",
+                    category="package-health",
+                    severity="error",
+                    confidence="high",
+                    message=(
+                        f"Console script '{name}' targets missing local module " f"'{module}'."
+                    ),
+                    location=Location("pyproject.toml", 1, 1),
+                    remediation=("Correct the entry-point module or include it " "in the package."),
+                )
+            )
     return findings
 
 

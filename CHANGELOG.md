@@ -4,6 +4,66 @@ All notable changes are documented in this file. Versions follow semantic versio
 
 ## Unreleased
 
+## 3.3.0 - 2026-09-21
+
+Four-seat review of 3.2.1 (Staff, Product, Security, CTO; record in
+`docs/reviews/2026-09-20-four-seat-review-3.2.1.md`, with the candidates that
+were dismissed and why). Every fix ships with a test proven to fail on 3.2.1.
+
+### Security
+
+- The MCP server ran the analyzer as `python -m cqa_analyzer` from the host's
+  working directory, and `-m` puts that directory first on `sys.path`; a scanned
+  repository containing a `cqa_analyzer/__main__.py` therefore ran its own code
+  the moment an agent called `scan`, `gate` or `preview`. The subprocess now runs
+  with `-P`. The README's `python -m` troubleshooting tip carries the same advice.
+
+### Precision (false positives removed, no rule IDs changed)
+
+- Secret-shaped names for `PY-SEC-005`/`GO-SEC-003` are matched by whole
+  identifier segment, and names carrying a quantity or position word (`max`,
+  `index`, `rounds`, `delay`, ...) are counts, not secrets. `max_tokens`,
+  `footprint`, `hotplug_delay`, `token_index`, `salt_rounds` and their camelCase
+  forms no longer fire; on a sampling-code fixture 3.2.1 produced ten findings,
+  eight false. Regex-language findings are anchored at the name, not at a
+  preceding `{`.
+- A bare identifier bound once to a string literal at module or package level
+  (Go/TS/Java/Kotlin/C#/Rust `const`-style forms, C `#define`, Python module
+  constants) is resolved before the shell, `eval`, `innerHTML` and
+  deserialization rules classify the argument; Python additionally treats
+  `shlex.join`, `shlex.quote` and f-strings whose every hole is `shlex.quote`
+  as quoted by construction. Rebound or twice-defined names stay dynamic.
+
+### Coverage (false negatives removed)
+
+- The minified-content exclusion applied to every language, so a three-line
+  `constants.py` holding one base64 blob or a `schema.go` with one DDL string
+  was silently left out of every rule. The content rule now applies to
+  JavaScript/TypeScript names only.
+
+### Visibility
+
+- In-source suppressions are reported: `scan_health.suppressed`
+  (`count`, `by_rule`), a `suppressed_findings` list carrying each suppressed
+  finding and its `suppression_reason`, SARIF results with
+  `suppressions: [{kind: inSource, justification}]`, and a text summary line.
+  Suppressed findings never reach the score, the exit code or baselines; the
+  reason is redacted under `--anonymize`; package-level (`PY-PKG-*`) and
+  duplication (`PY-DUP-001`) suppressions are recorded too. Report schema 1.12.0 -> 1.13.0
+  (`docs/report-schema-1.13.0.json`).
+- A changed-lines manifest file no analyzer saw (unsupported, excluded,
+  unparsed) is reported as `files_not_analyzed` with bounded examples and named
+  in the text report (paths tokenized under `--anonymize`); under `--strict` it
+  is a coverage gap (exit 3). Such a
+  file was previously passed as clean.
+
+### CLI
+
+- Flags match exactly. argparse's default prefix matching let `--off` and
+  `--output-form` work where click (2.x) never did; `allow_abbrev=False`.
+- Directive line numbers in the regex-language suppression parser are counted
+  incrementally rather than from offset zero per directive.
+
 ## 3.2.1 - 2026-09-19
 
 Minified and bundled assets are left out of discovery. The 3.2.0 calibration
