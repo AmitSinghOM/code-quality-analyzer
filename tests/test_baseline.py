@@ -49,7 +49,7 @@ def test_baseline_contains_only_hashed_fingerprints(tmp_path):
     assert payload["fingerprints"] == [finding_fingerprint(finding)]
     assert "pkg/service.py" not in content
     assert "mutable list" not in content
-    assert load_baseline(path) == {finding_fingerprint(finding)}
+    assert load_baseline(path).fingerprints == {finding_fingerprint(finding)}
 
 
 def test_identity_path_keeps_redacted_fingerprint_stable():

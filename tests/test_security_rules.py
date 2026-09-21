@@ -662,3 +662,24 @@ def test_rebound_constants_remain_dynamic(language, source, rule_id):
 def test_python_rebound_module_constant_remains_dynamic():
     source = 'import subprocess\nCMD = "ls"\ndef f(x):\n    global CMD\n    CMD = x\n    subprocess.run(CMD, shell=True)\n'
     assert len(py(source, "PY-SEC-002")) == 1
+
+
+# --- PY-SEC-001 round-trip exemption (review 6, P3; 7 of 7 hits on
+# psf/requests were ``pickle.loads(pickle.dumps(x))`` picklability tests).
+
+
+def test_deserializing_bytes_produced_in_the_same_expression_is_silent():
+    assert py("import pickle\nr = pickle.loads(pickle.dumps(obj))\n", "PY-SEC-001") == []
+    assert py("import dill\nr = dill.loads(dill.dumps(obj))\n", "PY-SEC-001") == []
+    assert py("import marshal\nr = marshal.loads(marshal.dumps(obj))\n", "PY-SEC-001") == []
+
+
+def test_round_trip_exemption_requires_a_direct_dumps_payload():
+    # bytes bound to a name may come from anywhere
+    assert len(py("import pickle\nb = pickle.dumps(x)\nr = pickle.loads(b)\n", "PY-SEC-001")) == 1
+    # a call that is not dumps produces unknown bytes
+    assert len(py("import pickle\nr = pickle.loads(fetch())\n", "PY-SEC-001")) == 1
+    # dumps() as a later argument is not the payload
+    assert len(py("import pickle\nr = pickle.loads(data, pickle.dumps(x))\n", "PY-SEC-001")) == 1
+    # file-based load has no payload expression to inspect
+    assert len(py("import pickle\nr = pickle.load(fh)\n", "PY-SEC-001")) == 1

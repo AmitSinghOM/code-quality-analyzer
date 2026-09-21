@@ -11,7 +11,7 @@ from pathlib import Path
 from types import MappingProxyType
 
 from .findings import Finding
-from .safe_io import SafeReadError, read_bounded_text
+from .safe_io import SafeReadError, read_bounded_text, read_failure_message
 
 CHANGED_LINES_SCHEMA_VERSION = "1.0.0"
 NOT_ANALYZED_EXAMPLE_LIMIT = 10
@@ -105,14 +105,8 @@ def load_changed_lines(path: Path) -> ChangedLineSelection:
             object_pairs_hook=_strict_object,
         )
     except SafeReadError as error:
-        if error.reason == "not_regular_file":
-            raise ChangedLinesError("Changed-lines manifest must be a regular file.") from error
-        if error.reason == "too_large":
-            raise ChangedLinesError(
-                "Changed-lines manifest exceeds the 5 MB safety limit."
-            ) from error
         raise ChangedLinesError(
-            "Changed-lines manifest is not readable valid UTF-8 JSON."
+            read_failure_message(error, "Changed-lines manifest", "5 MB")
         ) from error
     except (FileNotFoundError, json.JSONDecodeError) as error:
         raise ChangedLinesError(

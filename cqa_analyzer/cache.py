@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import os
 import stat
+import sys
 import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 
+from . import __version__
 from .protocols import (
     PLUGIN_API_VERSION,
     ParsedArtifactCodec,
@@ -51,12 +54,38 @@ def _canonical_json(value: object) -> bytes:
     ).encode("utf-8")
 
 
+@functools.cache
+def _module_source_sha256(module_name: str) -> str:
+    """Digest of the module that implements a codec.
+
+    A cached artifact is the output of the adapter's lexer, so a lexer fix
+    must invalidate every entry that language wrote -- even when the
+    adapter's hand-maintained ``adapter_version`` was not bumped (3.3.0
+    shipped three lexer fixes and none of the fourteen version constants
+    moved). Hashing the module source makes that invalidation correct by
+    construction; the digest is memoized so it costs one read per process.
+    Modules without a readable source file (frozen or in-memory) contribute a
+    sentinel, which still keys on ``analyzer_version`` below.
+    """
+    module = sys.modules.get(module_name)
+    path = getattr(module, "__file__", None) if module is not None else None
+    if not path:
+        return "no-source"
+    try:
+        with open(path, "rb") as handle:
+            return hashlib.sha256(handle.read()).hexdigest()
+    except OSError:
+        return "unreadable-source"
+
+
 def _codec_metadata(codec: ParsedArtifactCodec, source: SourceFile) -> dict:
     return {
         "schema_version": CACHE_SCHEMA_VERSION,
         "plugin_api_version": PLUGIN_API_VERSION,
+        "analyzer_version": __version__,
         "language_id": codec.language_id,
         "adapter_version": codec.adapter_version,
+        "adapter_source_sha256": _module_source_sha256(type(codec).__module__),
         "codec_version": codec.cache_codec_version,
         "runtime_version": codec.cache_runtime_version,
         "identity_path": source.identity_path,

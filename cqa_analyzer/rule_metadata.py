@@ -1073,14 +1073,26 @@ _NOT_WHEN: dict[str, tuple[str, ...]] = {
     ),
     "PY-COR-002": (
         "The handler catches a specific exception class rather than Exception or "
-        "BaseException, or is a bare `except:` handled by PY-COR-003.",
-        "The handler re-raises or logs: breadth is the finding, not silence.",
+        "BaseException.",
+        "The handler body is only `pass`/`...` (a bare `except:`, `except "
+        "Exception: pass`, ...): PY-COR-003 reports the swallow and one handler "
+        "yields one finding, not two.",
+        "The handler ends with a bare `raise` or `raise <bound name>` (no `from`): "
+        "`except BaseException: cleanup(); raise` is a `finally` with access to the "
+        "exception and the only way to guarantee cleanup on KeyboardInterrupt; "
+        "ruff BLE001 exempts the same shape. Logging without re-raising, or "
+        "wrapping in a new exception type, is still reported.",
     ),
     "PY-COR-003": (
         "The handler body contains any statement other than `pass` or `...`; a "
         "logged or re-raised failure is not swallowed.",
         "The suppression is a deliberate `contextlib.suppress` or carries a "
         "recognised inline suppression (python_suppressions.py).",
+        "Every caught type is ImportError, ModuleNotFoundError, StopIteration or "
+        "StopAsyncIteration (the optional-dependency probe and iterator "
+        "exhaustion): still reported, but at note severity with a message naming "
+        "the idiom. A bare `except:`, Exception, or a tuple mixing in any other "
+        "type keeps the warning.",
     ),
     "PY-COR-004": (
         "The statement after return/raise/break/continue is in a different block "
@@ -1234,6 +1246,10 @@ _NOT_WHEN: dict[str, tuple[str, ...]] = {
         "CBaseLoader (positionally or by keyword); yaml.safe_load is never reported.",
         "The call is not one of the fixed pickle/cPickle/_pickle/marshal/shelve/dill/"
         "yaml.unsafe_load targets (python_security._UNSAFE_LOADS).",
+        "The payload is a direct `dumps(...)`/`dump(...)` call in the same "
+        "expression (`pickle.loads(pickle.dumps(x))`): the bytes were produced "
+        "right there, so no attacker input reaches the deserializer. A name bound "
+        "elsewhere is still reported.",
         _SECURITY_TEST_PATH_DOWNGRADE,
     ),
     "PY-SEC-002": (

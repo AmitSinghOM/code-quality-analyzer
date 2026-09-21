@@ -164,14 +164,27 @@ class CodeScanner:
             self.package_health = dict(result.health)
         return result
 
-    def _add_findings(self, findings) -> None:
-        """Apply language-neutral rule policy before storing findings."""
+    def _add_findings(self, findings, content: str | None = None) -> None:
+        """Apply language-neutral rule policy before storing findings.
+
+        When ``content`` is given (per-file rule packs), each finding's
+        location is stamped with the whitespace-normalised text of its line so
+        baselines can identify it independently of its line number.
+        """
+        lines = content.splitlines() if content is not None else None
         for finding in findings:
             policy = self.configuration.policy_for(finding.rule_id)
             if not policy.enabled:
                 continue
             if policy.severity is not None:
                 finding = replace(finding, severity=policy.severity)
+            if lines is not None and finding.location.context is None:
+                context = _line_context(lines, finding.location.line)
+                if context is not None:
+                    finding = replace(
+                        finding,
+                        location=replace(finding.location, context=context),
+                    )
             self.findings.append(finding)
 
     def _sort_findings(self) -> None:
@@ -224,7 +237,7 @@ class CodeScanner:
         self.analyzed_paths.add(internal_path)
         self.parsed_files.setdefault(adapter.language_id, {})[internal_path] = parsed
         for rule_pack in self.registry.rule_packs_for(adapter.language_id):
-            self._add_findings(rule_pack.evaluate(parsed))
+            self._add_findings(rule_pack.evaluate(parsed), content)
 
         for provider in self.registry.signal_providers_for(
             adapter.language_id,
@@ -361,3 +374,11 @@ class CodeScanner:
                 for result in self.project_results.values()
             )
         )
+
+
+def _line_context(lines: list[str], line: int) -> str | None:
+    """Whitespace-collapsed text of a one-based line, or ``None`` if absent."""
+    if line < 1 or line > len(lines):
+        return None
+    text = " ".join(lines[line - 1].split())
+    return text or None

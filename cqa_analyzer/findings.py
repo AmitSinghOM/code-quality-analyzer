@@ -19,6 +19,14 @@ class Location:
         repr=False,
         compare=False,
     )
+    # Whitespace-normalised text of the reported line. Used only to build
+    # line-independent baseline fingerprints; never serialised, so it can
+    # never reach a report, a baseline file, or an anonymized payload.
+    context: str | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+    )
 
     def as_dict(self) -> dict:
         payload = {

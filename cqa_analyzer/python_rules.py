@@ -185,7 +185,11 @@ class BroadExceptionRule:
             if isinstance(node, ast.ExceptHandler)
         ):
             caught = _broad_exception(handler.type)
-            if caught is None:
+            if caught is None or _reraises(handler):
+                continue
+            if _silently_discards(handler.body):
+                # PY-COR-003 owns the swallow; reporting breadth as well
+                # scored one handler twice (7 of 20 hits on pallets/click).
                 continue
             yield Finding(
                 rule_id=self.rule_id,
@@ -227,6 +231,21 @@ class SwallowedExceptionRule:
             if isinstance(node, ast.ExceptHandler)
         ):
             if not _silently_discards(handler.body):
+                continue
+            if _only_expected_exceptions(handler.type):
+                yield Finding(
+                    rule_id=self.rule_id,
+                    category=self.category,
+                    severity="note",
+                    confidence=self.confidence,
+                    message=(
+                        "Exception handler swallows an expected control-flow "
+                        "exception (optional import or exhausted iterator); "
+                        "confirm nothing else can raise inside the try."
+                    ),
+                    location=_node_location(handler, path, identity_path),
+                    remediation=self.remediation,
+                )
                 continue
             yield Finding(
                 rule_id=self.rule_id,
@@ -279,6 +298,57 @@ class UnreachableCodeRule:
                     location=_node_location(statement, path, identity_path),
                     remediation=self.remediation,
                 )
+
+
+_EXPECTED_SWALLOWED = frozenset(
+    {"ImportError", "ModuleNotFoundError", "StopIteration", "StopAsyncIteration"}
+)
+
+
+def _only_expected_exceptions(caught: ast.expr | None) -> bool:
+    """True when every caught type is one raised as normal control flow.
+
+    ``except ImportError: pass`` is the optional-dependency probe (requests'
+    compat.py, __init__.py and utils.py all do it) and ``except StopIteration:
+    pass`` is how a hand-driven iterator signals exhaustion. Swallowing them
+    is the documented way to use them, so the finding stays visible at note
+    weight rather than warning. A bare ``except:`` or any broader type keeps
+    the warning: those swallow real failures too.
+    """
+    if caught is None:
+        return False
+    types = caught.elts if isinstance(caught, ast.Tuple) else [caught]
+    if not types:
+        return False
+    for node in types:
+        name = node.id if isinstance(node, ast.Name) else getattr(node, "attr", None)
+        if name not in _EXPECTED_SWALLOWED:
+            return False
+    return True
+
+
+def _reraises(handler: ast.ExceptHandler) -> bool:
+    """True when the handler ends by re-raising what it caught.
+
+    ``except BaseException: cleanup(); raise`` is the idiom for guaranteed
+    cleanup that must also run on KeyboardInterrupt/SystemExit -- it is a
+    ``finally`` with access to the exception, not a broad catch. ruff's
+    BLE001 exempts the same shape. Only a bare ``raise`` or ``raise <name>``
+    of the bound exception as the final statement qualifies; wrapping the
+    error in a new type is a different decision and still reported.
+    """
+    if not handler.body:
+        return False
+    last = handler.body[-1]
+    if not isinstance(last, ast.Raise) or last.cause is not None:
+        return False
+    if last.exc is None:
+        return True
+    return (
+        handler.name is not None
+        and isinstance(last.exc, ast.Name)
+        and last.exc.id == handler.name
+    )
 
 
 def _broad_exception(node: ast.expr | None) -> str | None:

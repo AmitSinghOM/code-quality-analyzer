@@ -891,3 +891,56 @@ def test_oversized_pyproject_is_rejected_without_parsing(project):
     assert scanner.package_intelligence.project_name is None
     assert scanner.package_health == {"errors": 1, "complete": False}
     assert any(item.rule_id == "PY-PKG-003" for item in scanner.findings)
+
+
+# --- P4 (review 6): TYPE_CHECKING imports never execute and cannot close a
+# cycle. psf/requests' _types.py imports the models it annotates only under
+# that guard and was reported as an 8-module circular-import group.
+
+
+def test_type_checking_guarded_import_does_not_close_a_cycle(project):
+    root = project({
+        "pkg/__init__.py": "",
+        "pkg/a.py": "from . import b\n",
+        "pkg/b.py": (
+            "from typing import TYPE_CHECKING\n"
+            "if TYPE_CHECKING:\n"
+            "    from . import a\n"
+        ),
+        "pkg/c.py": "from . import d\n",
+        "pkg/d.py": (
+            "import typing\n"
+            "if typing.TYPE_CHECKING:\n"
+            "    from . import c\n"
+        ),
+    })
+
+    scanner = CodeScanner(root)
+    scanner.scan()
+
+    assert scanner.package_intelligence.circular_imports == []
+    assert [item for item in scanner.findings if item.rule_id == "PY-PKG-001"] == []
+
+
+def test_type_checking_else_branch_and_nested_runtime_imports_still_count(project):
+    root = project({
+        "pkg/__init__.py": "",
+        "pkg/a.py": "from . import b\n",
+        "pkg/b.py": (
+            "from typing import TYPE_CHECKING\n"
+            "if TYPE_CHECKING:\n"
+            "    pass\n"
+            "else:\n"
+            "    from . import a\n"
+        ),
+        "pkg/c.py": "from . import d\n",
+        "pkg/d.py": "def f():\n    from . import c\n    return c\n",
+    })
+
+    scanner = CodeScanner(root)
+    scanner.scan()
+
+    assert scanner.package_intelligence.circular_imports == [
+        ["pkg.a", "pkg.b"],
+        ["pkg.c", "pkg.d"],
+    ]
