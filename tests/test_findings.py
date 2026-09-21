@@ -233,3 +233,42 @@ def test_new_rules_use_reason_required_same_line_suppressions(project):
     scanner.scan()
 
     assert scanner.findings == []
+
+
+# --- PY-COR-002 re-raise exemption (review 6, P5; found on psf/requests
+# utils.atomic_open: ``except BaseException: os.remove(tmp); raise``).
+
+
+def test_broad_handler_that_reraises_after_cleanup_is_not_reported():
+    findings = findings_for(
+        "try:\n    write()\n"
+        "except BaseException:\n    os.remove(tmp)\n    raise\n"
+        "try:\n    other()\n"
+        "except Exception as exc:\n    log(exc)\n    raise exc\n"
+    )
+
+    assert [f.rule_id for f in findings if f.rule_id == "PY-COR-002"] == []
+
+
+def test_broad_handler_exemption_requires_a_final_bare_reraise():
+    findings = findings_for(
+        # swallowed: still breadth
+        "try:\n    a()\n"
+        "except BaseException:\n    pass\n"
+        # wrapped in a new type: a different decision, still reported
+        "try:\n    b()\n"
+        "except Exception as exc:\n    raise Wrapped() from exc\n"
+        # raise of a different name, not the bound exception
+        "try:\n    c()\n"
+        "except Exception as exc:\n    raise other\n"
+        # re-raise that is not the final statement
+        "try:\n    d()\n"
+        "except Exception:\n    if flag:\n        raise\n    recover()\n"
+    )
+
+    assert [f.rule_id for f in findings if f.rule_id == "PY-COR-002"] == [
+        "PY-COR-002",
+        "PY-COR-002",
+        "PY-COR-002",
+        "PY-COR-002",
+    ]
