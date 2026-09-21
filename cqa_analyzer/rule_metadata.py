@@ -1085,6 +1085,11 @@ _NOT_WHEN: dict[str, tuple[str, ...]] = {
         "logged or re-raised failure is not swallowed.",
         "The suppression is a deliberate `contextlib.suppress` or carries a "
         "recognised inline suppression (python_suppressions.py).",
+        "Every caught type is ImportError, ModuleNotFoundError, StopIteration or "
+        "StopAsyncIteration (the optional-dependency probe and iterator "
+        "exhaustion): still reported, but at note severity with a message naming "
+        "the idiom. A bare `except:`, Exception, or a tuple mixing in any other "
+        "type keeps the warning.",
     ),
     "PY-COR-004": (
         "The statement after return/raise/break/continue is in a different block "

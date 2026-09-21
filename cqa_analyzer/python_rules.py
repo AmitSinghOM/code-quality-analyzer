@@ -228,6 +228,21 @@ class SwallowedExceptionRule:
         ):
             if not _silently_discards(handler.body):
                 continue
+            if _only_expected_exceptions(handler.type):
+                yield Finding(
+                    rule_id=self.rule_id,
+                    category=self.category,
+                    severity="note",
+                    confidence=self.confidence,
+                    message=(
+                        "Exception handler swallows an expected control-flow "
+                        "exception (optional import or exhausted iterator); "
+                        "confirm nothing else can raise inside the try."
+                    ),
+                    location=_node_location(handler, path, identity_path),
+                    remediation=self.remediation,
+                )
+                continue
             yield Finding(
                 rule_id=self.rule_id,
                 category=self.category,
@@ -279,6 +294,33 @@ class UnreachableCodeRule:
                     location=_node_location(statement, path, identity_path),
                     remediation=self.remediation,
                 )
+
+
+_EXPECTED_SWALLOWED = frozenset(
+    {"ImportError", "ModuleNotFoundError", "StopIteration", "StopAsyncIteration"}
+)
+
+
+def _only_expected_exceptions(caught: ast.expr | None) -> bool:
+    """True when every caught type is one raised as normal control flow.
+
+    ``except ImportError: pass`` is the optional-dependency probe (requests'
+    compat.py, __init__.py and utils.py all do it) and ``except StopIteration:
+    pass`` is how a hand-driven iterator signals exhaustion. Swallowing them
+    is the documented way to use them, so the finding stays visible at note
+    weight rather than warning. A bare ``except:`` or any broader type keeps
+    the warning: those swallow real failures too.
+    """
+    if caught is None:
+        return False
+    types = caught.elts if isinstance(caught, ast.Tuple) else [caught]
+    if not types:
+        return False
+    for node in types:
+        name = node.id if isinstance(node, ast.Name) else getattr(node, "attr", None)
+        if name not in _EXPECTED_SWALLOWED:
+            return False
+    return True
 
 
 def _reraises(handler: ast.ExceptHandler) -> bool:

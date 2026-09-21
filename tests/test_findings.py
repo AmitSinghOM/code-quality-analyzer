@@ -272,3 +272,57 @@ def test_broad_handler_exemption_requires_a_final_bare_reraise():
         "PY-COR-002",
         "PY-COR-002",
     ]
+
+
+# --- PY-COR-003 expected-exception note tier (review 6, P6; requests'
+# compat.py/__init__.py `except ImportError: pass` and sessions.py
+# `except StopIteration: pass`).
+
+
+def _cor003(findings):
+    tiers = {
+        "Exception handler swallows an expected": "expected",
+        "Exception handler silently discards": "silent",
+        "Exception handler swallows the failure with a comment": "documented",
+    }
+    out = []
+    for f in findings:
+        if f.rule_id != "PY-COR-003":
+            continue
+        tier = next(v for k, v in tiers.items() if f.message.startswith(k))
+        out.append((f.severity, tier))
+    return out
+
+
+def test_swallowed_optional_import_and_iterator_exhaustion_are_notes():
+    findings = findings_for(
+        "try:\n    import simplejson as json\n"
+        "except ImportError:\n    pass\n"
+        "try:\n    nxt = next(it)\n"
+        "except StopIteration:\n    pass\n"
+        "try:\n    import a\n"
+        "except (ImportError, ModuleNotFoundError):\n    ...\n"
+    )
+
+    assert _cor003(findings) == [
+        ("note", "expected"),
+        ("note", "expected"),
+        ("note", "expected"),
+    ]
+
+
+def test_expected_exception_tier_requires_every_caught_type_to_qualify():
+    findings = findings_for(
+        "try:\n    a()\n"
+        "except (ImportError, AttributeError):\n    pass\n"
+        "try:\n    b()\n"
+        "except Exception:\n    pass\n"
+        "try:\n    c()\n"
+        "except:\n    pass\n"
+    )
+
+    assert _cor003(findings) == [
+        ("warning", "silent"),
+        ("warning", "silent"),
+        ("warning", "silent"),
+    ]
