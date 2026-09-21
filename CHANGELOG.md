@@ -2,10 +2,15 @@
 
 All notable changes are documented in this file. Versions follow semantic versioning for the analyzer CLI and independent semantic versions for report and ruleset contracts.
 
-## Unreleased
+## 3.4.0 - 2026-09-21
 
-Review 6 (Staff, Product, Security, CTO) over surfaces no earlier review
-reached. Every fix ships with a test proven to fail on 3.3.0.
+Review 6 (Staff, Product, Security, CTO; record in
+`docs/reviews/2026-09-21-four-seat-review-6.md`, with the candidates that
+were dismissed and why) over surfaces no earlier review reached. Every fix
+ships with a test proven to fail on 3.3.0. Analyzer 3.3.0 -> 3.4.0; ruleset
+2.26.0 -> 2.27.0 (Python pack 2.16.0 -> 2.17.0: rule behaviour changed for the
+precision fixes below; other packs unchanged); report schema 1.13.0 -> 1.14.0;
+baseline schema 1.0.0 -> 2.0.0 (1.0.0 still loads).
 
 ### Baselines
 
