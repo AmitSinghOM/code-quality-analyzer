@@ -53,6 +53,10 @@ after each fix.
   that import it and was reported as an 8-module circular group with no
   runtime edge. The guard's `else` branch and function-local imports still
   count.
+- **PY-COR-002** no longer fires on a handler whose body is only `pass`/`...`:
+  PY-COR-003 reports the swallow, so one handler yields one finding. On
+  pallets/click 7 of 20 PY-COR-002 hits were the same line as a PY-COR-003
+  hit, scoring the handler twice.
 - **PY-COR-003** grades `except ImportError: pass` (optional-dependency probe)
   and `except StopIteration: pass` (iterator exhaustion) as `note` with a
   message naming the idiom, instead of `warning` (3 of 9 hits on requests).
