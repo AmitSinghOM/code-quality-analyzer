@@ -18,7 +18,10 @@ reached. Every fix ships with a test proven to fail on 3.3.0.
   are baselined individually and deleting one never resurrects the other.
   Existing 1.0.0 baselines still load and compare with the legacy hash; new
   baselines are written as 2.0.0. The report's `baseline.schema_version` now
-  states which hashing was used.
+  states which hashing was used. Findings that carry no line text (package
+  and duplication provider findings) keep their line-and-column identity and
+  take an ordinal only among findings at the same position, so fixing one
+  never renumbers the others.
 
 ### Report contract (1.13.0 -> 1.14.0, additive)
 
