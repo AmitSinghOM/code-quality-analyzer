@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import tomllib
-from collections.abc import Collection
+from collections.abc import Collection, Iterable
 
 from .findings import Finding, Location
 from .safe_io import SafeReadError, read_bounded_text
@@ -838,6 +838,33 @@ def _layout(module_paths: dict[str, str]) -> str:
     return "flat" if module_paths else "none"
 
 
+def _is_type_checking_guard(test: ast.expr) -> bool:
+    if isinstance(test, ast.Name):
+        return test.id == "TYPE_CHECKING"
+    return isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
+
+
+def _runtime_import_nodes(tree: ast.AST) -> Iterable[ast.Import | ast.ImportFrom]:
+    """Yield the import statements that execute at runtime.
+
+    ``if TYPE_CHECKING:`` bodies exist only for type checkers and are never
+    executed, so an import there cannot participate in a circular-import
+    failure; treating it as an edge produced an 8-module false cycle on
+    psf/requests (``_types.py`` importing the models it annotates). The
+    ``else`` branch of such a guard still runs and is still walked.
+    """
+    stack: list[ast.AST] = [tree]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, ast.If) and _is_type_checking_guard(node.test):
+            stack.extend(node.orelse)
+            continue
+        if isinstance(node, ast.Import | ast.ImportFrom):
+            yield node
+            continue
+        stack.extend(ast.iter_child_nodes(node))
+
+
 def _build_import_graph(
     parsed_files: dict[str, ast.AST],
     module_paths: dict[str, str],
@@ -846,16 +873,13 @@ def _build_import_graph(
     path_to_module = {path: module for module, path in module_paths.items()}
     graph = {module: set() for module in module_paths}
     locations: dict[tuple[str, str], Location] = {}
-    import_nodes = ast.Import | ast.ImportFrom
 
     for path, tree in sorted(parsed_files.items()):
         source = path_to_module.get(path)
         if source is None:
             continue
         is_package = Path(path).name == "__init__.py"
-        for node in ast.walk(tree):
-            if not isinstance(node, import_nodes):
-                continue
+        for node in _runtime_import_nodes(tree):
             for target in _import_targets(
                 node,
                 source,
