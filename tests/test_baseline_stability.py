@@ -224,6 +224,32 @@ def test_fingerprints_for_assigns_ordinals_in_order():
     assert len(set(hashes)) == 3
 
 
+def test_context_less_findings_do_not_share_an_ordinal_counter():
+    """Provider findings (no line text) are keyed by position, not by count.
+
+    PY-PKG/PY-DUP findings carry no scanner context, so their identity already
+    includes line and column. If they shared one ordinal counter per file,
+    fixing the first would renumber every survivor and re-report it as new --
+    the churn schema 2.0.0 exists to remove. Only true co-located duplicates
+    (same rule, path, line and column) may take ordinals 0, 1, 2 ...
+    """
+    first = _finding(10, None)
+    second = _finding(40, None)
+    third = _finding(90, None)
+    before = fingerprints_for([first, second, third])
+    after_first_fixed = fingerprints_for([second, third])
+    assert after_first_fixed == before[1:]
+    comparison = compare_findings([second, third], Baseline(frozenset(before)))
+    assert comparison.new_findings == ()
+
+    # Genuine co-located duplicates are still told apart by ordinal.
+    twin_a = _finding(10, None)
+    twin_b = _finding(10, None)
+    twins = fingerprints_for([twin_a, twin_b])
+    assert twins[0] != twins[1]
+    assert twins[0] == before[0]
+
+
 def test_compare_accepts_bare_set_and_baseline_record():
     finding = _finding(4, "x()")
     known = {finding_fingerprint(finding)}

@@ -118,10 +118,23 @@ def fingerprints_for(
     """
     if schema_version == LEGACY_BASELINE_SCHEMA_VERSION:
         return [finding_fingerprint_v1(item) for item in findings]
-    seen: dict[tuple[str, str, str | None], int] = {}
+    seen: dict[tuple, int] = {}
     result: list[str] = []
     for item in findings:
-        key = (item.rule_id, _identity_path(item), item.location.context)
+        context = item.location.context
+        if context is not None:
+            key: tuple = (item.rule_id, _identity_path(item), context)
+        else:
+            # No line text: the identity already carries line and column, so
+            # the ordinal must only separate findings at that exact position.
+            # Sharing one counter per (rule, path) would renumber every
+            # provider finding in a file when an earlier one is fixed.
+            key = (
+                item.rule_id,
+                _identity_path(item),
+                item.location.line,
+                item.location.column,
+            )
         ordinal = seen.get(key, 0)
         seen[key] = ordinal + 1
         result.append(finding_fingerprint(item, ordinal))
