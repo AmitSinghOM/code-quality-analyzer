@@ -42,11 +42,21 @@ def test_module_inventory_is_non_trivial():
 @pytest.mark.parametrize("module", MODULES)
 def test_module_imports_cleanly_as_first_import(module):
     # Module names come from pkgutil over this package, not from any input.
+    # ``-P`` keeps the working directory off ``sys.path``, so the child imports
+    # whichever ``cqa_analyzer`` is installed. Printing the package's file and
+    # comparing it with this process's proves the child exercised the tree
+    # under test rather than a stale site-packages copy, which would let every
+    # case here pass without importing the code being checked.
+    program = f"import {module}, cqa_analyzer; print(cqa_analyzer.__file__)"
     proc = subprocess.run(  # noqa: S603
-        [sys.executable, "-P", "-c", f"import {module}"],
+        [sys.executable, "-P", "-c", program],
         capture_output=True,
         text=True,
         cwd=str(PACKAGE_ROOT.parent),
         timeout=60,
     )
     assert proc.returncode == 0, f"{module} failed as first import:\n{proc.stderr[-1500:]}"
+    imported = Path(proc.stdout.strip()).resolve()
+    assert imported == Path(cqa_analyzer.__file__).resolve(), (
+        f"child imported {imported}, not the package under test"
+    )

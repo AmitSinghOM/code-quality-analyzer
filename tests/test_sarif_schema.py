@@ -74,6 +74,7 @@ def test_anonymized_sarif_validates(project):
 def test_redacted_sarif_validates(project):
     document = _sarif(project(SUPPRESSED_AND_PLAIN), "--redact-paths")
 
+    assert document["runs"][0]["results"], "redacted run must still carry results"
     assert _schema_errors(document) == []
 
 
