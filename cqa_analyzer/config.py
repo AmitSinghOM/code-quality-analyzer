@@ -10,7 +10,7 @@ from pathlib import Path
 
 import tomllib
 
-from .safe_io import SafeReadError, read_bounded_text
+from .safe_io import SafeReadError, read_bounded_text, read_failure_message
 
 CONFIG_NAME = ".code-quality.toml"
 MAX_CONFIG_SIZE = 256 * 1024
@@ -229,11 +229,7 @@ def _read_bounded_file(path: Path, root: Path, label: str) -> str:
     try:
         return read_bounded_text(path, MAX_CONFIG_SIZE, root=root)
     except SafeReadError as error:
-        if error.reason == "not_regular_file":
-            raise ConfigError(f"{label} must be a regular file.") from error
-        if error.reason == "too_large":
-            raise ConfigError(f"{label} exceeds the 256 KiB safety limit.") from error
-        raise ConfigError(f"{label} could not be read safely.") from error
+        raise ConfigError(read_failure_message(error, label, "256 KiB")) from error
     except (FileNotFoundError, ValueError) as error:
         raise ConfigError(f"{label} could not be read safely.") from error
 

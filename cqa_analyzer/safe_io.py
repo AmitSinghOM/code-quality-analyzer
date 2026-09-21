@@ -93,3 +93,24 @@ def read_bounded_text(
     except UnicodeDecodeError as error:
         raise SafeReadError("undecodable") from error
 
+
+_READ_FAILURE_PHRASES = {
+    "symbolic_link": "is a symbolic link; pass the real file",
+    "not_regular_file": "must be a regular file",
+    "outside_project_root": "resolves outside the project root",
+    "too_large": "exceeds the {limit} safety limit",
+    "undecodable": "is not valid UTF-8",
+    "file_changed": "changed while it was being read",
+    "stat_failed": "could not be inspected",
+    "read_failed": "could not be read",
+}
+
+
+def read_failure_message(error: SafeReadError, label: str, limit: str) -> str:
+    """One sentence naming why ``label`` was refused, e.g. for a CLI error.
+
+    Every :class:`SafeReadError` reason gets its own phrase so a symlinked or
+    oversized file is not reported as malformed JSON.
+    """
+    phrase = _READ_FAILURE_PHRASES.get(error.reason, "could not be read safely")
+    return f"{label} {phrase.format(limit=limit)}."

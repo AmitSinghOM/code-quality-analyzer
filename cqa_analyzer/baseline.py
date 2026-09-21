@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .findings import Finding
-from .safe_io import SafeReadError, read_bounded_text
+from .safe_io import SafeReadError, read_bounded_text, read_failure_message
 
 BASELINE_SCHEMA_VERSION = "2.0.0"
 LEGACY_BASELINE_SCHEMA_VERSION = "1.0.0"
@@ -167,9 +167,7 @@ def load_baseline(path: Path) -> Baseline:
     try:
         payload = json.loads(read_bounded_text(path, MAX_BASELINE_SIZE))
     except SafeReadError as error:
-        if error.reason == "too_large":
-            raise BaselineError("Baseline exceeds the 5 MB safety limit.") from error
-        raise BaselineError("Baseline is not readable valid JSON.") from error
+        raise BaselineError(read_failure_message(error, "Baseline", "5 MB")) from error
     except (FileNotFoundError, json.JSONDecodeError) as error:
         raise BaselineError("Baseline is not readable valid JSON.") from error
 
