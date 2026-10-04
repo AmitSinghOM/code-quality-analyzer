@@ -25,16 +25,19 @@ SARIF contains only normalized actionable findings plus the built-in rule
 catalog, analysis health, privacy state, effective-configuration fingerprint,
 and baseline-selection metadata. It omits architecture evidence, package
 intelligence, complexity data, source snippets, command lines, environment
-variables, timestamps, fixes, finding fingerprints, and repository metadata.
+variables, timestamps, fixes, and repository metadata. Normal SARIF may include
+partial finding fingerprints and suppression metadata; anonymized SARIF omits
+fingerprints.
 Artifact locations are percent-encoded project-relative URIs, never absolute or
 `file://` URIs.
 
-When changed-line selection is enabled, every format adds only its schema
-version and aggregate file, canonical-range, input-finding, and selected-finding
-counts. That selection metadata omits the manifest path, manifest source paths,
-raw ranges, content, and hash. Selected findings retain the format's normal or
-anonymized path behavior. Selection uses hidden project-relative identities
-before any path redaction or anonymization.
+When changed-line selection is enabled, every format adds schema and aggregate
+selection counts, plus up to ten project-relative `files_not_analyzed_examples`
+for changed source files the analyzer could not check. These examples are
+opaque tokens under `--anonymize`; path redaction alone does not minimize them.
+The manifest filename, raw ranges, content, and hash are omitted. Selected
+findings retain the format's normal or anonymized path behavior. Selection
+uses hidden project-relative identities before presentation changes.
 
 `--redact-paths` removes directory components from report paths, but it is not full anonymization. Basenames, identifiers, messages, package metadata, and architecture signals can still be sensitive.
 
@@ -88,3 +91,24 @@ rendering is local and performs no network access. Baselines and cache entries
 are written with atomic replacement. Python, package-management,
 shell-redirection, and CI tools may independently create caches, build
 artifacts, or logs outside the analyzer's control.
+
+## MCP and CI hosts
+
+MCP `scan` and `gate` launch the installed CLI with `--offline`, but normal
+results contain the report data listed above. Pass `anonymize: true` to minimize
+those results; errors for anonymized scans/gates do not echo input paths or CLI
+stderr. Delegate tools still return paths and have no anonymization option.
+Host inputs and outputs are outside the analyzer's egress control. A hosted
+agent can forward them to a model provider. Treat project-derived tool content
+as untrusted data, not instructions. Hosts must authorize roots and explicit
+input paths; MCP does not restrict the user account's filesystem access.
+
+`diff_to_manifest` writes only when `write_to` is explicitly provided. It can
+create a JSON manifest or replace an existing valid changed-lines manifest;
+this is a filesystem effect requiring host approval, not a read-only tool.
+
+The GitHub Action installs packages, may fetch Git revisions, and writes
+finding paths/messages into GitHub's job summary. SARIF upload is optional.
+These CI/network/artifact surfaces are separate from offline analysis. Review
+visibility and retention before using sensitive source; offline does not mean
+that CI artifacts or agent-host results remain on your workstation.

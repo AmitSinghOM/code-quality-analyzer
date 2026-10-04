@@ -15,7 +15,7 @@ on:
       - ".pre-commit-hooks.yaml"
       - "LICENSE"
       - "SECURITY.md"
-      - ".github/workflows/ci.yml"
+      - ".github/workflows/*.yml"
       - ".code-quality-baseline.json"
   pull_request:
     paths:
@@ -30,7 +30,7 @@ on:
       - ".pre-commit-hooks.yaml"
       - "LICENSE"
       - "SECURITY.md"
-      - ".github/workflows/ci.yml"
+      - ".github/workflows/*.yml"
   workflow_dispatch:
 
 permissions:

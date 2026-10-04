@@ -2,6 +2,21 @@
 
 All notable changes are documented in this file. Versions follow semantic versioning for the analyzer CLI and independent semantic versions for report and ruleset contracts.
 
+## Unreleased
+
+- Parse unified diff records on LF only, preserving Unicode separators and control
+  characters inside source lines without corrupting changed-line selection.
+- Fix full-suite canary installs to include `jsonschema` without pinning drift
+  dependencies; remove unused canary Ruff installation and validate workflow
+  changes through normal CI.
+- Validate MCP envelopes and advertised tool arguments before dispatch. Ignore
+  notifications without tool effects; reject duplicate keys/non-finite JSON;
+  contain malformed input and close oversized frames at 32 MiB.
+- Add explicit MCP `anonymize` passthrough for scan/gate and minimize error
+  details when requested. Document host disclosure, explicit gate thresholds,
+  baseline identity limits, and CI artifact boundaries. CLI defaults, finding
+  rules, and baseline/report schema versions are unchanged.
+
 ## 3.4.1 - 2026-09-21
 
 ### Precision

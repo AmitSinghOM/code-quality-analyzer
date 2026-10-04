@@ -28,7 +28,18 @@ code-quality-analyzer . \
 
 Do not regenerate a baseline merely to make CI pass. Review resolved, moved, and newly accepted findings before updating it. Baseline writes use an atomic replacement so an interrupted write does not leave a partial file.
 
-A finding fingerprint includes its rule ID, hidden project-relative identity path, location, and message. Report path redaction does not change this identity. Moving code or changing a finding's meaning can intentionally cause it to appear as new.
+Schema 2.0.0 hashes the rule ID, hidden project-relative path, whitespace-collapsed
+text of the reported line, and an ordinal among identical occurrences. Line
+shifts and message wording do not change that identity. Findings without line
+context fall back to line/column identity. Legacy schema 1.0.0 still compares
+using location and message. Redaction and anonymization do not change identity.
+
+This is not semantic matching or universal formatter stability: punctuation
+spacing, multiline wrapping, changed reported text, and file renames can create
+new fingerprints. Identical occurrences are distinguished by count/order, not
+surrounding function identity; replacing an occurrence elsewhere with identical
+text may remain known. Review that trade-off rather than refreshing baselines
+automatically. Test both harmless-edit noise and newly introduced defects.
 
 ## Safety limits
 

@@ -344,7 +344,7 @@ def diff_to_manifest(diff_text: str, *, include_deletions: bool = True) -> dict:
         raise ChangedLinesError("Diff text exceeds the 5 MB safety limit.")
 
     parser = _DiffWalker(include_deletions)
-    for raw_line in diff_text.splitlines():
+    for raw_line in diff_text.removesuffix("\n").split("\n"):
         parser.feed(raw_line)
     return _manifest_payload(parser.finish())
 
