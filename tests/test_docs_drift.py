@@ -6,6 +6,7 @@ import re
 import tomllib
 from pathlib import Path
 
+import cqa_analyzer
 from cqa_analyzer import __main__ as cli
 
 ROOT = Path(__file__).parents[1]
@@ -94,3 +95,12 @@ def test_readme_pattern_catalog_totals_add_up():
     assert f"### DSA Patterns ({dsa} patterns)" in readme
     assert f"### System Design Patterns ({design} patterns)" in readme
     assert f"{dsa + design} patterns: {dsa} DSA + {design} system-design" in readme
+
+
+def test_pre_commit_examples_pin_the_current_release_tag():
+    tag = f"rev: v{cqa_analyzer.__version__}"
+
+    assert tag in (ROOT / "README.md").read_text(encoding="utf-8")
+    pre_commit = (DOCS / "PRE_COMMIT.md").read_text(encoding="utf-8")
+    assert tag in pre_commit
+    assert "Replace after the first signed release" not in pre_commit

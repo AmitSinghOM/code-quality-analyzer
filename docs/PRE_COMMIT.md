@@ -7,7 +7,7 @@ branch:
 ```yaml
 repos:
   - repo: https://github.com/AmitSinghOM/code-quality-analyzer
-    rev: <released-tag>  # Replace after the first signed release is published
+    rev: v3.4.2
     hooks:
       - id: code-quality-analyzer
 ```

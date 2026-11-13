@@ -2,20 +2,80 @@
 
 All notable changes are documented in this file. Versions follow semantic versioning for the analyzer CLI and independent semantic versions for report and ruleset contracts.
 
-## Unreleased
+## 3.4.2 - 2026-11-13
 
-- Parse unified diff records on LF only, preserving Unicode separators and control
-  characters inside source lines without corrupting changed-line selection.
-- Fix full-suite canary installs to include `jsonschema` without pinning drift
-  dependencies; remove unused canary Ruff installation and validate workflow
-  changes through normal CI.
-- Validate MCP envelopes and advertised tool arguments before dispatch. Ignore
-  notifications without tool effects; reject duplicate keys/non-finite JSON;
-  contain malformed input and close oversized frames at 32 MiB.
+Patch release: hardening of the MCP and diff boundaries, a privacy fix for
+`--anonymize`, hostile-input resilience, and metadata/doc corrections. CLI
+defaults, finding rules, exit codes (0-6), and baseline/report schema
+versions are unchanged. Analyzer 3.4.1 -> 3.4.2.
+
+### Security and privacy
+
+- **`--anonymize` no longer leaks source paths through provider health.**
+  `scan_health.project_analysis[<provider>]` and
+  `project_analyses[<provider>].health` were verbatim copies of each project
+  provider's discovery summary, so a file the complexity provider skipped
+  (`too_many_functions`) kept its real path in a report whose `privacy`
+  block said `paths_redacted: true`. Every provider health block is now
+  tokenized like the top-level examples. Needs `--complexity`, which
+  `cqa-action` never passes.
+- **Hostile nested TOML/JSON no longer crashes the CLI.** A 20000-deep
+  `[[[[` in `.code-quality.toml`, `pyproject.toml`, a changed-lines
+  manifest, a baseline, `Cargo.toml`, `package.json` or a Gradle version
+  catalog escaped as an uncaught `RecursionError` (exit 1 with a
+  traceback, which the MCP `gate` then mislabelled as a score failure).
+  Each parser now reports exactly what it reports for any other
+  unreadable input: same message, same exit code, no traceback.
+
+### Changed
+
+- The MCP server now rejects unknown tool arguments and wrong-typed values
+  with `isError`. 3.4.1 ignored unknown keys and coerced types
+  (`int(params.get("timeout_seconds"))`, `bool(params.get("check_disk"))`);
+  keys outside the advertised schema were never supported, hence
+  patch-level. Clients that relied on coercion must send the declared
+  types.
+- Parse unified diff records on LF only, preserving Unicode separators and
+  control characters inside source lines without corrupting changed-line
+  selection.
+- Fix full-suite canary installs to include `jsonschema` without pinning
+  drift dependencies; remove unused canary Ruff installation and validate
+  workflow changes through normal CI.
+- Validate MCP envelopes and advertised tool arguments before dispatch.
+  Ignore notifications without tool effects; reject duplicate keys/non-finite
+  JSON; contain malformed input and close oversized frames at 32 MiB.
 - Add explicit MCP `anonymize` passthrough for scan/gate and minimize error
-  details when requested. Document host disclosure, explicit gate thresholds,
-  baseline identity limits, and CI artifact boundaries. CLI defaults, finding
-  rules, and baseline/report schema versions are unchanged.
+  details when requested. Document host disclosure, explicit gate
+  thresholds, baseline identity limits, and CI artifact boundaries.
+- The pre-commit hook triggers for every registered language (Python, Go,
+  TypeScript/JavaScript, Java, Kotlin, C#, C/C++, Rust), the manifests the
+  adapters read at any depth, and the root policy files; it previously
+  matched only `.py`/`.go` plus two root manifests.
+- PyPI metadata: the summary names the eight languages and the SARIF,
+  baseline, changed-line gate and MCP surfaces (it said "for Python
+  packages"); keywords, `Changelog` and `GitHub Action` project URLs, and
+  the `Python :: 3 :: Only`, `Topic :: Security` and `Topic :: Software
+  Development :: Testing` classifiers are added.
+- `complexity.py`: `_detect_recursion_pattern` drops an unused parameter.
+
+### Release machinery
+
+- `publish.yml` gains a `dry_run` dispatch input (build and `twine check`
+  only, no upload); release tooling is installed from a hashed
+  `requirements-release.txt`.
+
+### Documentation
+
+- `docs/MAINTENANCE.md` said two pinned runtime dependencies (`click`,
+  `rich`); there are zero. `docs/ROADMAP.md` opens with the current
+  eight-language matrix and keeps the original Python + Go-pilot table as
+  history. The README exit-code table lists exit 6
+  (`--expect-config-fingerprint`) and states that 31 DSA + 31
+  system-design = 62 patterns. New `docs/README.md` indexes every page,
+  ADR, review and history file. The root `Action-Plan guide.md` (August
+  2026, Python-only scope) moves to `docs/history/2026-08-action-plan.md`
+  with a historical banner. Pre-commit examples pin `rev: v3.4.2`.
+  Tests derive these claims from code so they cannot drift again.
 
 ## 3.4.1 - 2026-09-21
 

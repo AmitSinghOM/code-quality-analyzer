@@ -227,8 +227,8 @@ python3 -m pip install --upgrade cqa-analyzer
 python3 -m pip install --upgrade 'cqa-analyzer[deep]'   # with the optional extra
 
 # a specific version
-pipx install --force 'cqa-analyzer==3.4.1'
-python3 -m pip install 'cqa-analyzer==3.4.1'
+pipx install --force 'cqa-analyzer==3.4.2'
+python3 -m pip install 'cqa-analyzer==3.4.2'
 ```
 
 Check with `code-quality-analyzer --version`. If the number does not
@@ -303,7 +303,7 @@ Pin a released tag in `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/AmitSinghOM/code-quality-analyzer
-    rev: v2.29.0
+    rev: v3.4.2
     hooks:
       - id: code-quality-analyzer
 ```
