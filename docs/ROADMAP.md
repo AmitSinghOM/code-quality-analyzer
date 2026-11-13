@@ -9,6 +9,28 @@ cannot satisfy those invariants does not ship, regardless of value.
 
 ## Language support today
 
+Eight adapters ship with 95 rules (`docs/RULES.md`); every language
+contributes architecture signals to the score, and each registers a
+package-intelligence provider. Counts come from `rule_metadata` and the
+default plugin registry at 3.4.2.
+
+| Language | Rules | Duplication | Complexity | Package intelligence |
+|---|---|---|---|---|
+| Python | 24 | ✅ | ✅ experimental (`--complexity`) | ✅ `pyproject.toml` |
+| Go | 10 | ✅ `[deep]` | ✅ `[deep]` | ✅ `go.mod` package graph |
+| TypeScript/JavaScript | 11 | ❌ | ❌ | ✅ `package.json` |
+| Java | 8 | ❌ | ❌ | ✅ `pom.xml`, Gradle |
+| Kotlin | 10 | ❌ | ❌ | ✅ Gradle |
+| C# | 9 | ❌ | ❌ | ✅ `*.csproj` |
+| C/C++ | 11 | ✅ `[deep]` | ✅ `[deep]` | ✅ `CMakeLists.txt` |
+| Rust | 12 | ✅ `[deep]` | ✅ `[deep]` | ✅ `Cargo.toml` |
+
+See the README's "What it detects" section for the pattern catalog (31 DSA
++ 31 system-design = 62) and the per-language sections for each pilot's
+bounds. The numbered sections below record what shipped, in order.
+
+## Language support when this roadmap was written
+
 | Capability | Python | Go (pilot) |
 |---|---|---|
 | File discovery + safety bounds | ✅ | ✅ |
@@ -21,8 +43,8 @@ cannot satisfy those invariants does not ship, regardless of value.
 | Parse artifact | full AST | regex facts (package, imports) |
 
 Consequence, and the trigger for this roadmap: the architecture signal
-score is currently computed **from Python signals only**, so a Go-only
-project floors at 1.0 no matter how well it is built.
+score was then computed **from Python signals only**, so a Go-only
+project floored at 1.0 no matter how well it was built.
 
 ## 1. Score integrity for non-Python projects (✅ shipped in 2.29.0)
 

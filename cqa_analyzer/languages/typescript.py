@@ -1045,7 +1045,7 @@ def _load_manifest(root, directory: str) -> dict:
         manifest = json.loads(raw)
         if not isinstance(manifest, dict):
             raise ValueError("package.json is not an object")
-    except (SafeReadError, ValueError):
+    except (SafeReadError, ValueError, RecursionError):
         info["invalid"] = True
         return info
     if isinstance(manifest.get("name"), str):

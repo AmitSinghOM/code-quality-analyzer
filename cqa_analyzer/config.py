@@ -153,7 +153,9 @@ def _load_toml(path: Path, root: Path) -> dict:
     content = _read_bounded_file(path, root, "Configuration")
     try:
         data = tomllib.loads(content)
-    except tomllib.TOMLDecodeError as error:
+    except (tomllib.TOMLDecodeError, RecursionError) as error:
+        # tomllib recurses per nesting level; a hostile ``[[[[`` is as
+        # unreadable as a syntax error and must not escape as a traceback.
         raise ConfigError("Configuration is not valid TOML.") from error
     if not isinstance(data, dict):  # Defensive: TOML roots are mappings.
         raise ConfigError("Configuration root must be a TOML table.")

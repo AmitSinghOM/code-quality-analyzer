@@ -1,9 +1,9 @@
 - id: code-quality-analyzer
   name: code-quality-analyzer
-  description: Run privacy-first Python and Go code-quality analysis locally.
+  description: Run privacy-first code-quality analysis locally for Python, Go, TypeScript/JavaScript, Java, Kotlin, C#, C/C++ and Rust.
   entry: code-quality-analyzer . --offline
   language: python
   types: [file]
-  files: '(^|/)[^/]+\.(py|go)$|^(pyproject\.toml|go\.mod|\.code-quality\.toml|\.gitignore)$'
+  files: '(^|/)[^/]+\.(py|go|ts|tsx|js|jsx|mjs|cjs|java|kt|kts|cs|c|cc|cpp|cxx|h|hh|hpp|hxx|rs|csproj)$|(^|/)(pyproject\.toml|go\.mod|package\.json|pom\.xml|build\.gradle|build\.gradle\.kts|Cargo\.toml|CMakeLists\.txt)$|^(\.code-quality\.toml|\.gitignore)$'
   pass_filenames: false
   require_serial: true

@@ -5,6 +5,7 @@ from pathlib import Path
 import tomllib
 
 import cqa_analyzer
+from cqa_analyzer.plugins import create_default_registry
 
 ROOT = Path(__file__).parents[1]
 
@@ -18,7 +19,7 @@ def test_distribution_import_and_cli_identities_are_distinct_and_stable():
     metadata = _project_metadata()
 
     assert metadata["name"] == "cqa-analyzer"
-    assert cqa_analyzer.__version__ == "3.4.1"
+    assert cqa_analyzer.__version__ == "3.4.2"
     assert metadata["scripts"] == {
         "code-quality-analyzer": "cqa_analyzer.__main__:main",
         "cqa-mcp": "cqa_analyzer.mcp_server:main",
@@ -40,6 +41,36 @@ def test_public_package_metadata_is_complete():
     assert not any(classifier.startswith("License ::") for classifier in metadata["classifiers"])
     assert "Programming Language :: Python :: 3.11" in metadata["classifiers"]
     assert "Programming Language :: Python :: 3.10" not in metadata["classifiers"]
+
+
+def test_pypi_summary_describes_the_multi_language_product():
+    """The PyPI summary is the first line a visitor reads; keep it true.
+
+    Eight adapters ship; the summary must not say "Python packages", must
+    name every registered language, stay under PyPI's 512-character cap,
+    and link the changelog so the release history is one click away.
+    """
+    metadata = _project_metadata()
+    description = metadata["description"]
+    languages = create_default_registry().capabilities()["languages"]
+
+    assert len(languages) == 8, sorted(languages)
+    assert "Python packages" not in description
+    assert len(description) <= 512
+    for name in ("Python", "Go", "TypeScript", "Java", "Kotlin", "C#", "C/C++", "Rust"):
+        assert name in description, name
+    assert "offline" in description.lower()
+    assert "SARIF" in description
+    assert "MCP" in description
+
+    assert metadata["urls"]["Changelog"].endswith("/blob/main/CHANGELOG.md")
+    assert metadata["urls"]["GitHub Action"].endswith("/cqa-action")
+    assert {"static-analysis", "sarif", "mcp", "pre-commit"} <= set(metadata["keywords"])
+    assert "Programming Language :: Python :: 3 :: Only" in metadata["classifiers"]
+    assert "Topic :: Security" in metadata["classifiers"]
+    # No py.typed ships, so the package must not claim to be typed.
+    assert "Typing :: Typed" not in metadata["classifiers"]
+    assert not (ROOT / "cqa_analyzer" / "py.typed").exists()
 
 
 def test_readme_upgrade_example_pins_the_current_version():

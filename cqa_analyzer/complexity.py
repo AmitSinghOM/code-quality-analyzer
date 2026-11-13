@@ -579,7 +579,7 @@ class SymbolicExecutor(ast.NodeVisitor):
                     # e.g. `for child in node: walk(child)` — one textual call
                     # but an unknown branching factor.
                     self.recursion_in_loop = True
-                self._detect_recursion_pattern(node)
+                self._detect_recursion_pattern()
 
             # Check for expensive operations
             if func_name in BUILTIN_TIME_COMPLEXITY:
@@ -636,7 +636,7 @@ class SymbolicExecutor(ast.NodeVisitor):
         """Track generator iteration time without materialization space."""
         self._visit_comprehension(node, None)
 
-    def _detect_recursion_pattern(self, call_node: ast.Call):
+    def _detect_recursion_pattern(self):
         """Detect type of recursion (linear, binary, multiple, fan-out)."""
         if self.recursion_in_loop:
             # Branching factor is data-dependent — do not claim linear.

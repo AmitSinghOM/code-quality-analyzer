@@ -4,15 +4,17 @@ This document records what keeps the analyzer trustworthy over years,
 what rots without attention, and the minimum cadence that prevents it.
 It exists because the project's durability is a design feature: the
 same properties that make analysis air-gap-safe (no network, no
-toolchain execution, two runtime dependencies, stdlib analysis core)
+toolchain execution, zero runtime dependencies, stdlib analysis core)
 make an installed copy keep working long after release.
 
 ## What does not rot
 
 - **The shipped artifact.** Pure-Python wheels (`py3-none-any`) with
-  two pinned runtime dependencies (`click`, `rich`) install and run for
-  as long as a supported Python exists. There is no server, telemetry
-  endpoint, or external service whose shutdown can break analysis.
+  zero runtime dependencies (`dependencies = []`; the optional `[deep]`
+  extra is the only third-party code the package can load) install and
+  run for as long as a supported Python exists. There is no server,
+  telemetry endpoint, or external service whose shutdown can break
+  analysis.
 - **New Python syntax support.** Parsing uses the host interpreter's
   `ast`, so running under a newer Python parses that Python's syntax
   automatically.

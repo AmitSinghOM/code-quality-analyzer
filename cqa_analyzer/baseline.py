@@ -181,7 +181,8 @@ def load_baseline(path: Path) -> Baseline:
         payload = json.loads(read_bounded_text(path, MAX_BASELINE_SIZE))
     except SafeReadError as error:
         raise BaselineError(read_failure_message(error, "Baseline", "5 MB")) from error
-    except (FileNotFoundError, json.JSONDecodeError) as error:
+    except (FileNotFoundError, json.JSONDecodeError, RecursionError) as error:
+        # json recurses per nesting level; hostile depth is unreadable input.
         raise BaselineError("Baseline is not readable valid JSON.") from error
 
     if not isinstance(payload, dict):

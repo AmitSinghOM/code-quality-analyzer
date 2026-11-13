@@ -227,8 +227,8 @@ python3 -m pip install --upgrade cqa-analyzer
 python3 -m pip install --upgrade 'cqa-analyzer[deep]'   # with the optional extra
 
 # a specific version
-pipx install --force 'cqa-analyzer==3.4.1'
-python3 -m pip install 'cqa-analyzer==3.4.1'
+pipx install --force 'cqa-analyzer==3.4.2'
+python3 -m pip install 'cqa-analyzer==3.4.2'
 ```
 
 Check with `code-quality-analyzer --version`. If the number does not
@@ -303,7 +303,7 @@ Pin a released tag in `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/AmitSinghOM/code-quality-analyzer
-    rev: v2.29.0
+    rev: v3.4.2
     hooks:
       - id: code-quality-analyzer
 ```
@@ -512,6 +512,7 @@ selection metadata and whether the local parse cache was enabled; see
 | 3 | Source candidates produced no successful analysis, or `--strict` found incomplete analysis |
 | 4 | A reported finding met the `--fail-on` severity threshold |
 | 5 | `--fail-under` was set but the architecture signal score is not applicable (no signal-capable source analyzed) |
+| 6 | The effective configuration fingerprint does not match `--expect-config-fingerprint` |
 
 ## Analysis Authority
 
@@ -602,7 +603,7 @@ transport with no additional dependencies:
 
 | Tool | What it returns |
 |---|---|
-| `gate` | `pass`/`fail`, the reason, the CLI exit code, a flat list of findings with remediation, the score, and the configuration fingerprint. Accepts `fail_on`, `fail_under`, `changed_lines_manifest`, `baseline`, `new_findings_only`, `strict`, `expect_config_fingerprint`. |
+| `gate` | `pass`/`fail`, the reason, the CLI exit code, a flat list of findings with remediation, the score, and the configuration fingerprint. Accepts `fail_on`, `fail_under`, `changed_lines_manifest`, `baseline`, `new_findings_only`, `strict`, `expect_config_fingerprint`, `anonymize`. |
 | `scan` | The full JSON report (schema `REPORT_SCHEMA_VERSION`), verbatim. |
 | `explain_rule` | Title, description, severity, confidence, remediation and `not_when` (the conditions under which the detector deliberately stays silent) for one rule ID. |
 | `list_rules` | The built-in catalog, optionally filtered by language. |
@@ -618,6 +619,32 @@ version, scoring policy and configuration fingerprint. Pass the
 agent touched, and `expect_config_fingerprint` so a change to the gate's own
 configuration cannot pass silently. Rationale and the longevity plan behind
 this interface: [`docs/adr/004-positioning-and-longevity.md`](docs/adr/004-positioning-and-longevity.md).
+
+### MCP trust and request limits
+
+`gate` preserves CLI defaults: findings alone do not fail it unless `fail_on`
+is set. For a blocking gate, pass `fail_on: "warning"` and `strict: true`.
+The Action has its own defaults; parity requires identical policy arguments,
+source revision, analyzer version, and effective configuration.
+
+Pass `anonymize: true` to `scan` or `gate` to minimize returned paths and
+source-derived identifiers. This does not constrain the MCP host: a hosted
+agent may send tool results to its model provider. Treat every returned path,
+message, and project-derived string as untrusted data, never instructions.
+Delegate tools return paths and do not offer anonymization. The host must
+approve scan roots, explicit input files, and optional manifest writes; the
+server is not a filesystem sandbox. See [PRIVACY.md](docs/PRIVACY.md).
+
+Requests use newline-delimited JSON with a 32 MiB UTF-8 frame limit, including
+the newline. This accommodates the converter's 5 MiB diff after JSON escaping.
+Oversized frames receive an error and close the transport (exit 1), without
+draining an unbounded stream or dispatching a truncated request. Other malformed
+JSON or envelopes receive errors without preventing the next valid request.
+Duplicate JSON keys and non-finite JSON constants are rejected. Request IDs
+must be strings or integers (not booleans or null); notifications never invoke
+tools or receive replies. Tool arguments enforce the advertised required keys,
+types, bounds and enums before dispatch. Invalid tool inputs use `isError`;
+invalid RPC envelopes use JSON-RPC errors. No runtime dependency was added.
 
 ### Delegate mode
 
@@ -876,6 +903,9 @@ The confidence score indicates how reliable the complexity estimate is.
 ---
 
 ## What It Detects
+
+The catalog holds 62 patterns: 31 DSA + 31 system-design (scoring policy
+2.1.0).
 
 ### DSA Patterns (31 patterns)
 

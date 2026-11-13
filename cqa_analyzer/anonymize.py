@@ -51,21 +51,52 @@ class ReportAnonymizer:
         return payload
 
     def scan_health(self, health: dict) -> dict:
-        """Tokenize source paths in health examples."""
+        """Tokenize source paths in health examples, including provider health.
+
+        ``health["project_analysis"]`` carries one health block per project
+        provider; each is tokenized in place of its path-bearing example keys
+        and otherwise kept as-is, so a provider that records no examples keeps
+        its exact shape.
+        """
         payload = deepcopy(health)
-        examples = payload.get("skipped_examples", {})
-        payload["skipped_examples"] = {
+        payload["skipped_examples"] = self._example_map(
+            payload.get("skipped_examples", {})
+        )
+        payload["unparsed_examples"] = self._example_list(
+            payload.get("unparsed_examples", [])
+        )
+        payload["excluded_generated_examples"] = self._example_map(
+            payload.get("excluded_generated_examples", {})
+        )
+        providers = payload.get("project_analysis")
+        if isinstance(providers, dict):
+            payload["project_analysis"] = {
+                key: self.provider_health(value) if isinstance(value, dict) else value
+                for key, value in providers.items()
+            }
+        return payload
+
+    def provider_health(self, health: dict) -> dict:
+        """Tokenize whichever path-bearing example keys a provider health carries."""
+        payload = deepcopy(health)
+        if "skipped_examples" in payload:
+            payload["skipped_examples"] = self._example_map(payload["skipped_examples"])
+        if "unparsed_examples" in payload:
+            payload["unparsed_examples"] = self._example_list(payload["unparsed_examples"])
+        if "excluded_generated_examples" in payload:
+            payload["excluded_generated_examples"] = self._example_map(
+                payload["excluded_generated_examples"]
+            )
+        return payload
+
+    def _example_map(self, examples: dict) -> dict:
+        return {
             reason: [self.file(path) for path in paths]
             for reason, paths in examples.items()
         }
-        payload["unparsed_examples"] = [
-            self.file(path) for path in payload.get("unparsed_examples", [])
-        ]
-        payload["excluded_generated_examples"] = {
-            reason: [self.file(path) for path in paths]
-            for reason, paths in payload.get("excluded_generated_examples", {}).items()
-        }
-        return payload
+
+    def _example_list(self, paths) -> list[str]:
+        return [self.file(path) for path in paths]
 
     def package(self, package) -> dict:
         """Expose aggregate package facts without metadata or module names."""

@@ -160,7 +160,9 @@ class PythonPackageAnalyzer:
         self.result.pyproject_present = True
         try:
             data = tomllib.loads(content)
-        except tomllib.TOMLDecodeError:
+        except (tomllib.TOMLDecodeError, RecursionError):
+            # Deep nesting exhausts tomllib's recursion; treat it like any
+            # other unreadable metadata instead of crashing the scan.
             self._invalid_metadata_finding()
             return None
 

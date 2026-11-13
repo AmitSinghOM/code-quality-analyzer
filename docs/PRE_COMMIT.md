@@ -7,7 +7,7 @@ branch:
 ```yaml
 repos:
   - repo: https://github.com/AmitSinghOM/code-quality-analyzer
-    rev: <released-tag>  # Replace after the first signed release is published
+    rev: v3.4.2
     hooks:
       - id: code-quality-analyzer
 ```
@@ -20,8 +20,12 @@ code-quality-analyzer . --offline
 
 It sets `pass_filenames: false` because the analyzer accepts a project directory,
 not individual staged paths. A matching source or root policy change triggers
-one serial full-repository analysis. Python and Go files, `pyproject.toml`,
-`go.mod`, `.code-quality.toml`, and `.gitignore` trigger the hook. Documentation-
+one serial full-repository analysis. Source files of every registered language
+(Python, Go, TypeScript/JavaScript, Java, Kotlin, C#, C/C++, Rust), the
+manifests the adapters read at any depth (`pyproject.toml`, `go.mod`,
+`package.json`, `pom.xml`, `build.gradle`, `build.gradle.kts`, `*.csproj`,
+`Cargo.toml`, `CMakeLists.txt`), and the root `.code-quality.toml` and
+`.gitignore` trigger the hook. Documentation-
 only changes do not. Pre-commit does not pass deleted files as ordinary file
 inputs, so a deletion-only commit may not trigger this local hook; CI remains
 the full-project safety net.

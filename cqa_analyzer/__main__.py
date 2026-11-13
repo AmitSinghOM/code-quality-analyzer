@@ -741,12 +741,15 @@ def _build_sarif_run(
     )
 
 
-def _project_analysis_payload(scanner, anonymized: bool) -> dict:
+def _project_analysis_payload(scanner, anonymizer: ReportAnonymizer | None) -> dict:
     payload = {}
     for (language_id, capability), result in sorted(scanner.project_results.items()):
         key = f"{language_id}:{capability}"
         entry = {"health": dict(result.health)}
-        if not anonymized:
+        if anonymizer is not None:
+            # Provider health copies discovery examples that name real files.
+            entry["health"] = anonymizer.provider_health(entry["health"])
+        else:
             serializer = getattr(result.payload, "as_dict", None)
             if callable(serializer):
                 entry["result"] = serializer()
@@ -818,10 +821,7 @@ def _build_json_report(
         "analysis_health": analysis_health,
         "scan_health": health_payload,
         "package_intelligence": package_payload,
-        "project_analyses": _project_analysis_payload(
-            scanner,
-            anonymized=anonymizer is not None,
-        ),
+        "project_analyses": _project_analysis_payload(scanner, anonymizer),
         "finding_summary": _finding_summary(reported_findings),
         "findings": finding_payload,
         "suppressed_findings": _suppressed_payload(scanner, anonymizer),
