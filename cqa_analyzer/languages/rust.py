@@ -890,7 +890,13 @@ def _load_cargo_manifest(root: Path, directory: str) -> dict:
             root / directory / "Cargo.toml", max_bytes=MAX_MANIFEST_BYTES, root=root
         )
         data = tomllib.loads(text)
-    except (SafeReadError, OSError, tomllib.TOMLDecodeError, UnicodeDecodeError):
+    except (
+        SafeReadError,
+        OSError,
+        tomllib.TOMLDecodeError,
+        UnicodeDecodeError,
+        RecursionError,
+    ):
         info["unreadable"] = True
         return info
     if not isinstance(data, dict):

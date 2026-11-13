@@ -127,7 +127,8 @@ def load_changed_lines(path: Path) -> ChangedLineSelection:
         raise ChangedLinesError(
             read_failure_message(error, "Changed-lines manifest", "5 MB")
         ) from error
-    except (FileNotFoundError, json.JSONDecodeError) as error:
+    except (FileNotFoundError, json.JSONDecodeError, RecursionError) as error:
+        # json recurses per nesting level; hostile depth is unreadable input.
         raise ChangedLinesError(
             "Changed-lines manifest is not readable valid UTF-8 JSON."
         ) from error

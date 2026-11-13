@@ -803,7 +803,7 @@ def _parse_version_catalog(root, path) -> dict[str, set[tuple[str, str]]]:
     try:
         text = read_bounded_text(path, max_bytes=MAX_MANIFEST_BYTES, root=root)
         data = tomllib.loads(text)
-    except (SafeReadError, tomllib.TOMLDecodeError, UnicodeDecodeError):
+    except (SafeReadError, tomllib.TOMLDecodeError, UnicodeDecodeError, RecursionError):
         return {}
     libraries: dict[str, set[tuple[str, str]]] = {}
     for alias, spec in _flatten_aliases(data.get("libraries") or {}):
