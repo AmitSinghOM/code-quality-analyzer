@@ -596,6 +596,35 @@ def _tool_content(payload: dict[str, Any], is_error: bool = False) -> dict[str, 
     return result
 
 
+_TYPE_CHECKS = {
+    "string": lambda value: isinstance(value, str),
+    "boolean": lambda value: type(value) is bool,
+    "integer": lambda value: type(value) is int,
+    "number": lambda value: type(value) in (int, float),
+    "array": lambda value: isinstance(value, list),
+}
+
+
+def _validate_constraints(key: str, value: Any, spec: dict[str, Any]) -> None:
+    if "minimum" in spec and value < spec["minimum"]:
+        raise ToolError(f"{key} is below its minimum")
+    if "maximum" in spec and value > spec["maximum"]:
+        raise ToolError(f"{key} exceeds its maximum")
+    if "enum" in spec and value not in spec["enum"]:
+        raise ToolError(f"{key} is not an allowed value")
+
+
+def _validate_argument(key: str, value: Any, spec: dict[str, Any]) -> None:
+    kind = spec["type"]
+    if not _TYPE_CHECKS[kind](value):
+        raise ToolError(f"{key} must be a {kind}")
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ToolError(f"{key} must be finite")
+    _validate_constraints(key, value, spec)
+    if kind == "array" and not all(isinstance(item, str) for item in value):
+        raise ToolError(f"{key} must contain strings")
+
+
 def _validate_arguments(name: str, arguments: dict[str, Any]) -> None:
     schema = next(tool["inputSchema"] for tool in TOOLS if tool["name"] == name)
     properties = schema["properties"]
@@ -604,27 +633,29 @@ def _validate_arguments(name: str, arguments: dict[str, Any]) -> None:
     if any(key not in arguments for key in schema.get("required", ())):
         raise ToolError("missing required tool argument")
     for key, value in arguments.items():
-        spec = properties[key]
-        kind = spec["type"]
-        valid = {
-            "string": isinstance(value, str),
-            "boolean": type(value) is bool,
-            "integer": type(value) is int,
-            "number": type(value) in (int, float),
-            "array": isinstance(value, list),
-        }[kind]
-        if not valid:
-            raise ToolError(f"{key} must be a {kind}")
-        if isinstance(value, float) and not math.isfinite(value):
-            raise ToolError(f"{key} must be finite")
-        if "minimum" in spec and value < spec["minimum"]:
-            raise ToolError(f"{key} is below its minimum")
-        if "maximum" in spec and value > spec["maximum"]:
-            raise ToolError(f"{key} exceeds its maximum")
-        if "enum" in spec and value not in spec["enum"]:
-            raise ToolError(f"{key} is not an allowed value")
-        if kind == "array" and not all(isinstance(item, str) for item in value):
-            raise ToolError(f"{key} must contain strings")
+        _validate_argument(key, value, properties[key])
+
+
+def _handle_tool_call(request_id: str | int, params: dict[str, Any]) -> dict[str, Any]:
+    name = params.get("name")
+    if not isinstance(name, str) or name not in TOOL_HANDLERS:
+        return _error(request_id, INVALID_PARAMS, "unknown tool")
+    arguments = params.get("arguments", {})
+    if not isinstance(arguments, dict):
+        return _error(request_id, INVALID_PARAMS, "arguments must be an object")
+    try:
+        _validate_arguments(name, arguments)
+        return _result(request_id, _tool_content(TOOL_HANDLERS[name](arguments)))
+    except ToolError as exc:
+        error = str(exc)
+        if name in ("scan", "gate") and arguments.get("anonymize") is True:
+            error = "Analyzer request failed; inspect inputs locally for details."
+        return _result(request_id, _tool_content({"error": error}, is_error=True))
+    except Exception:  # cqa: ignore=PY-COR-002 reason="contain handler failures, leak nothing"
+        return _result(
+            request_id,
+            _tool_content({"error": "internal tool error"}, is_error=True),
+        )
 
 
 def handle_message(message: dict[str, Any]) -> dict[str, Any] | None:
@@ -671,25 +702,7 @@ def handle_message(message: dict[str, Any]) -> dict[str, Any] | None:
     if method == "tools/list":
         return _result(request_id, {"tools": TOOLS})
     if method == "tools/call":
-        name = params.get("name")
-        if not isinstance(name, str) or name not in TOOL_HANDLERS:
-            return _error(request_id, INVALID_PARAMS, "unknown tool")
-        arguments = params.get("arguments", {})
-        if not isinstance(arguments, dict):
-            return _error(request_id, INVALID_PARAMS, "arguments must be an object")
-        try:
-            _validate_arguments(name, arguments)
-            return _result(request_id, _tool_content(TOOL_HANDLERS[name](arguments)))
-        except ToolError as exc:
-            error = str(exc)
-            if name in ("scan", "gate") and arguments.get("anonymize") is True:
-                error = "Analyzer request failed; inspect inputs locally for details."
-            return _result(request_id, _tool_content({"error": error}, is_error=True))
-        except Exception:  # noqa: BLE001 - contain handler failures without leaking project data
-            return _result(
-                request_id,
-                _tool_content({"error": "internal tool error"}, is_error=True),
-            )
+        return _handle_tool_call(request_id, params)
     return _error(request_id, METHOD_NOT_FOUND, "method not found")
 
 
@@ -706,47 +719,59 @@ def _reject_constant(_value: str) -> None:
     raise ValueError("non-finite JSON number")
 
 
+def _write(writer: IO[str], response: dict[str, Any]) -> None:
+    writer.write(json.dumps(response, separators=(",", ":")) + "\n")
+    writer.flush()
+
+
+def _read_frame(reader: IO[str]) -> tuple[list[str], dict[str, Any] | None, bool]:
+    """Read one newline-delimited frame within the size limit.
+
+    Returns ``(parts, error_response, close)``. ``close`` is True when the
+    frame cannot be trusted to end where it claims (oversized, or invalid
+    UTF-8 without a terminating newline), so the server must answer and stop.
+    """
+    parts: list[str] = []
+    frame_bytes = 0
+    while chunk := reader.readline(min(8192, MAX_REQUEST_BYTES - frame_bytes + 1)):
+        try:
+            frame_bytes += len(chunk.encode("utf-8"))
+        except UnicodeError:
+            response = _error(None, PARSE_ERROR, "invalid UTF-8")
+            return parts, response, not chunk.endswith("\n")
+        if frame_bytes > MAX_REQUEST_BYTES:
+            return parts, _error(None, INVALID_REQUEST, "request exceeds size limit"), True
+        parts.append(chunk)
+        if chunk.endswith("\n"):
+            break
+    return parts, None, False
+
+
+def _respond_to_line(line: str) -> dict[str, Any] | None:
+    if not line.strip():
+        return None
+    try:
+        message = json.loads(
+            line, object_pairs_hook=_unique_object, parse_constant=_reject_constant
+        )
+    except (ValueError, RecursionError):
+        return _error(None, PARSE_ERROR, "invalid JSON")
+    return handle_message(message)
+
+
 def serve(reader: IO[str], writer: IO[str]) -> int:
     """Serve bounded newline-delimited JSON-RPC until EOF; close on oversized frames."""
     while True:
-        parts: list[str] = []
-        frame_bytes = 0
-        response: dict[str, Any] | None = None
-        while chunk := reader.readline(min(8192, MAX_REQUEST_BYTES - frame_bytes + 1)):
-            try:
-                frame_bytes += len(chunk.encode("utf-8"))
-            except UnicodeError:
-                response = _error(None, PARSE_ERROR, "invalid UTF-8")
-                if not chunk.endswith("\n"):
-                    writer.write(json.dumps(response, separators=(",", ":")) + "\n")
-                    writer.flush()
-                    return 1
-                break
-            if frame_bytes > MAX_REQUEST_BYTES:
-                response = _error(None, INVALID_REQUEST, "request exceeds size limit")
-                writer.write(json.dumps(response, separators=(",", ":")) + "\n")
-                writer.flush()
-                return 1
-            parts.append(chunk)
-            if chunk.endswith("\n"):
-                break
+        parts, response, close = _read_frame(reader)
+        if close:
+            _write(writer, response)
+            return 1
         if not parts and response is None:
             return 0
         if response is None:
-            line = "".join(parts)
-            if not line.strip():
-                continue
-            try:
-                message = json.loads(
-                    line, object_pairs_hook=_unique_object, parse_constant=_reject_constant
-                )
-            except (ValueError, RecursionError):
-                response = _error(None, PARSE_ERROR, "invalid JSON")
-            else:
-                response = handle_message(message)
+            response = _respond_to_line("".join(parts))
         if response is not None:
-            writer.write(json.dumps(response, separators=(",", ":")) + "\n")
-            writer.flush()
+            _write(writer, response)
 
 
 def main() -> int:

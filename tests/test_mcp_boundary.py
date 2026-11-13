@@ -90,28 +90,38 @@ def _arguments(tool):
     }
 
 
+def _key_deviations(valid, key, spec):
+    deviations = [{**valid, key: _WRONG[spec["type"]]}, {**valid, key: None}]
+    if "minimum" in spec:
+        deviations.append({**valid, key: 0})
+    if "maximum" in spec:
+        deviations.append({**valid, key: spec["maximum"] + 1})
+    if "enum" in spec:
+        deviations.append({**valid, key: "not-an-enum-value"})
+    if spec["type"] == "array":
+        deviations.append({**valid, key: [False]})
+    if spec["type"] == "number":
+        deviations.extend({**valid, key: value} for value in [float("nan"), float("inf")])
+    return deviations
+
+
+def _invalid_arguments(tool, valid):
+    """Every single-key deviation from ``valid`` the advertised schema must reject."""
+    invalid = [{**valid, "unexpected": True}]
+    for required in tool["inputSchema"].get("required", []):
+        invalid.append({key: value for key, value in valid.items() if key != required})
+    for key, spec in tool["inputSchema"]["properties"].items():
+        invalid.extend(_key_deviations(valid, key, spec))
+    return invalid
+
+
 @pytest.mark.parametrize("tool", mcp.TOOLS, ids=lambda tool: tool["name"])
 def test_advertised_schema_is_enforced_before_dispatch(tool, monkeypatch):
     name = tool["name"]
     handler = Mock(return_value={"ok": True})
     monkeypatch.setitem(mcp.TOOL_HANDLERS, name, handler)
     valid = _arguments(tool)
-    invalid = [{**valid, "unexpected": True}]
-    for required in tool["inputSchema"].get("required", []):
-        invalid.append({key: value for key, value in valid.items() if key != required})
-    for key, spec in tool["inputSchema"]["properties"].items():
-        invalid.extend([{**valid, key: _WRONG[spec["type"]]}, {**valid, key: None}])
-        if "minimum" in spec:
-            invalid.append({**valid, key: 0})
-        if "maximum" in spec:
-            invalid.append({**valid, key: spec["maximum"] + 1})
-        if "enum" in spec:
-            invalid.append({**valid, key: "not-an-enum-value"})
-        if spec["type"] == "array":
-            invalid.append({**valid, key: [False]})
-        if spec["type"] == "number":
-            invalid.extend({**valid, key: value} for value in [float("nan"), float("inf")])
-    for arguments in invalid:
+    for arguments in _invalid_arguments(tool, valid):
         result = mcp.handle_message(
             _request("tools/call", params={"name": name, "arguments": arguments})
         )
