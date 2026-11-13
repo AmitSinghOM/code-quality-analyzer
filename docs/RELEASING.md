@@ -47,13 +47,25 @@ Run every step from the package root with a clean working tree.
    version — `tests/test_release_metadata.py` fails if it is stale, so
    the gate in step 1 catches a forgotten bump.
 
-3. **Merge to main and publish a GitHub release** whose tag is
-   `vX.Y.Z` matching `__version__`. Publishing the release triggers
-   `publish.yml`, which rebuilds from the tagged source, verifies the
-   tag/version agreement, runs `twine check --strict`, and uploads to
-   PyPI through the `pypi` environment via OIDC.
+3. **Merge to main and push the tag** `vX.Y.Z` matching `__version__`
+   (do not publish the release yet).
 
-4. **Verify.** Watch the workflow run, then `pip install cqa-analyzer`
+4. **Dry-run the publish workflow.** In Actions → *Publish to PyPI* →
+   *Run workflow*, set `tag=vX.Y.Z` and leave `dry_run=true` (the
+   default). Confirm the `build` job passes its tag/version guard and
+   `twine check --strict`; the `publish` job is skipped. The build job
+   installs `build` and `twine` from the hash-pinned
+   `requirements-release.txt` (regenerate it with the command at the top
+   of `requirements-release.in` when bumping either tool). One residual:
+   `python -m build` still resolves the setuptools build backend into its
+   isolated environment from pyproject's `[build-system]` range, unhashed.
+
+5. **Publish the GitHub release** for that tag. The `release` event
+   runs `publish.yml` for real: it rebuilds from the tagged source,
+   verifies the tag/version agreement, runs `twine check --strict`, and
+   uploads to PyPI through the `pypi` environment via OIDC.
+
+6. **Verify.** Watch the workflow run, then `pip install cqa-analyzer`
    in a fresh venv, run one scan, and confirm the version. Update the
    README pre-commit `rev:` pin if this release should become the
    documented hook version.
@@ -67,6 +79,8 @@ Run every step from the package root with a clean working tree.
 
 - The tag must exactly equal `v` + `__version__`; the publish workflow
   fails closed on any mismatch.
+- A manual *Run workflow* dispatch only uploads when `dry_run` is
+  explicitly set to `false`.
 - Manual `twine upload` remains possible as a break-glass path with a
   short-lived project-scoped token, but Trusted Publishing is the
   supported flow.
