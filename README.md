@@ -512,6 +512,7 @@ selection metadata and whether the local parse cache was enabled; see
 | 3 | Source candidates produced no successful analysis, or `--strict` found incomplete analysis |
 | 4 | A reported finding met the `--fail-on` severity threshold |
 | 5 | `--fail-under` was set but the architecture signal score is not applicable (no signal-capable source analyzed) |
+| 6 | The effective configuration fingerprint does not match `--expect-config-fingerprint` |
 
 ## Analysis Authority
 
@@ -902,6 +903,9 @@ The confidence score indicates how reliable the complexity estimate is.
 ---
 
 ## What It Detects
+
+The catalog holds 62 patterns: 31 DSA + 31 system-design (scoring policy
+2.1.0).
 
 ### DSA Patterns (31 patterns)
 

@@ -1,3 +1,6 @@
+> **Historical (August 2026, Python-only scope).** Superseded by [docs/ROADMAP.md](../ROADMAP.md);
+> kept as the record of the original plan. Nothing below is current.
+
 # Code Quality Analyzer Action-Plan Guide
 
 **Status:** Proposed roadmap  
