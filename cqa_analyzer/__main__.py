@@ -33,6 +33,7 @@ from .plugins import create_default_registry
 from .rater import QualityRater, coverage_gap_ratio
 from .reporters import AnalysisReport, SarifRun
 from .findings import Finding
+from .rule_catalog import explain_lines, language_codes, list_lines, resolve_rule
 from .scanner import CodeScanner
 from .text_render import Panel, Table, escape, get_console
 
@@ -245,6 +246,28 @@ def _add_config_options(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_catalog_options(parser: argparse.ArgumentParser) -> None:
+    group = parser.add_argument_group("rule catalog (no analysis)")
+    group.add_argument(
+        "--explain",
+        metavar="RULE_ID",
+        default=None,
+        help="Print one rule's title, family, severity, confidence, CWE, "
+        "remediation, silent cases and documentation link, then exit 0",
+    )
+    group.add_argument(
+        "--list-rules",
+        action="store_true",
+        help="Print every built-in rule as 'ID  severity  title', then exit 0",
+    )
+    group.add_argument(
+        "--language",
+        metavar="LANG",
+        default=None,
+        help="With --list-rules: only rules for this language id",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     """The CLI contract. Flags, defaults and exit codes are unchanged from 2.x."""
     parser = argparse.ArgumentParser(
@@ -260,25 +283,60 @@ def build_parser() -> argparse.ArgumentParser:
         action="version",
         version=f"code-quality-analyzer, version {__version__}",
     )
-    parser.add_argument("project_path", type=_existing_directory, metavar="PROJECT_PATH")
+    # Optional only so --explain / --list-rules can run without a project;
+    # main() still demands it for an analysis (exit 2, argparse's own wording).
+    parser.add_argument("project_path", nargs="?", type=_existing_directory, metavar="PROJECT_PATH")
     for add in (
         _add_analysis_options,
         _add_privacy_options,
         _add_gate_options,
         _add_config_options,
+        _add_catalog_options,
     ):
         add(parser)
     return parser
+
+
+def _run_catalog(parser: argparse.ArgumentParser, options: argparse.Namespace) -> None:
+    """Serve --explain / --list-rules from rule metadata and exit 0 (usage errors exit 2)."""
+    if options.explain is not None and options.list_rules:
+        parser.error("--explain and --list-rules are mutually exclusive")
+    if options.project_path is not None:
+        parser.error("PROJECT_PATH is not used with --explain or --list-rules")
+    if options.list_rules:
+        if options.language is not None and options.language not in language_codes():
+            parser.error(
+                f"unknown language {options.language!r}; one of: {', '.join(language_codes())}"
+            )
+        lines = list_lines(options.language)
+    else:
+        try:
+            lines = explain_lines(resolve_rule(options.explain))
+        except LookupError as error:
+            parser.error(str(error))
+    console.print(escape("\n".join(lines)))
+    sys.exit(EXIT_OK)
+
+
+def _check_analysis_usage(parser: argparse.ArgumentParser, options: argparse.Namespace) -> None:
+    """Usage rules argparse cannot express on its own; each exits 2 through the parser."""
+    if options.project_path is None:
+        parser.error("the following arguments are required: PROJECT_PATH")
+    if options.language is not None:
+        parser.error("--language requires --list-rules")
+    if options.new_findings_only and options.baseline_path is None:
+        parser.error("--new-findings-only requires --baseline")
+    if options.config_path is not None and options.no_project_config:
+        parser.error("--config and --no-project-config are mutually exclusive")
 
 
 def main(argv: list[str] | None = None) -> None:
     """Parse arguments, run the analysis, and exit with the gate's code."""
     parser = build_parser()
     options = parser.parse_args(argv)
-    if options.new_findings_only and options.baseline_path is None:
-        parser.error("--new-findings-only requires --baseline")
-    if options.config_path is not None and options.no_project_config:
-        parser.error("--config and --no-project-config are mutually exclusive")
+    if options.explain is not None or options.list_rules:
+        _run_catalog(parser, options)
+    _check_analysis_usage(parser, options)
 
     try:
         with enforce_offline(options.offline):
