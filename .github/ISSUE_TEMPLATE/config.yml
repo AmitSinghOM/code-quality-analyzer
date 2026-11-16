@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/AmitSinghOM/code-quality-analyzer/blob/main/SECURITY.md
+    about: Do not open a public issue for a vulnerability. SECURITY.md describes the private reporting channel and what to include.
+  - name: Read the documentation first
+    url: https://github.com/AmitSinghOM/code-quality-analyzer/blob/main/docs/README.md
+    about: Rules, configuration, baselines, SARIF, privacy and the roadmap. Many questions are answered there.

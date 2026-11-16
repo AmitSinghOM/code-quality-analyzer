@@ -1,0 +1,96 @@
+name: Bug report
+description: The analyzer crashed, produced a wrong result, or behaved differently from its documentation.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a rule that flagged safe code, use the **False positive** form instead.
+        For a vulnerability, follow `SECURITY.md`; do not open a public issue.
+
+        **Never paste proprietary code, real paths, identifiers or credentials.**
+        Reproduce the problem with an invented file first; file the invented one.
+
+  - type: input
+    id: version
+    attributes:
+      label: Analyzer version
+      description: Output of `code-quality-analyzer --version`.
+      placeholder: code-quality-analyzer 3.4.2
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python version
+      description: Output of `python --version`.
+      placeholder: Python 3.12.3
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other (say which in the description)
+    validations:
+      required: true
+
+  - type: input
+    id: install
+    attributes:
+      label: How the analyzer was installed
+      description: pip / pipx / uv / pre-commit hook / cqa-action / MCP server. Add the `[deep]` extra if installed.
+      placeholder: pip install cqa-analyzer
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Exact command
+      description: The full command line, with every flag. Replace the project path with a placeholder such as `<dir>`.
+      render: shell
+      placeholder: code-quality-analyzer <dir> --offline --output-format sarif --strict
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal synthetic reproduction
+      description: The smallest invented file or files (plus `.code-quality.toml`, baseline or changed-lines manifest if the bug needs them) that reproduce the problem. Name each file.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What the documentation (`README.md`, `docs/`) says should happen, with the page or section if you found it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behaviour
+      description: What happened instead. Paste the output, the exit code (`echo $?`) and, for a crash, the full traceback. Check the paste for real paths first; `--redact-paths` or `--anonymize` helps.
+      render: text
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: synthetic-only
+    attributes:
+      label: Confirmation
+      options:
+        - label: The reproduction above is synthetic. It contains no proprietary code, real file paths, real identifiers, package names, credentials or customer data.
+          required: true
+        - label: I am on the latest release (`pip install -U cqa-analyzer`) and the problem is still there.
+          required: true
