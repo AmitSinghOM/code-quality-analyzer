@@ -23,6 +23,7 @@ pages hold the contracts it points at.
 
 ## Project
 
+- [ARCHITECTURE.md](ARCHITECTURE.md) — how a scan flows through the package and what every module is for.
 - [ROADMAP.md](ROADMAP.md) — language support today and the forward plan.
 - [MAINTENANCE.md](MAINTENANCE.md) — what rots, what does not, and the response cadence.
 - [RELEASING.md](RELEASING.md) — cutting a release to PyPI.

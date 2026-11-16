@@ -19,6 +19,73 @@ cannot leave the trusted development boundary: regulated industries,
 air-gapped networks, client codebases under NDA, and anyone who refuses to
 ship their source to a SaaS dashboard to learn whether it is healthy.
 
+## What a run looks like
+
+One command, one directory, nothing sent anywhere. This is the output of
+`code-quality-analyzer tests/fixtures/readme_sample --offline` on the small
+synthetic project committed under
+[`tests/fixtures/readme_sample/`](tests/fixtures/readme_sample/) — three
+Python files with three deliberate defects:
+
+```text
+Analyzing: readme_sample
+Privacy: anonymized=no | paths redacted=no | offline enforced=yes | cache enabled=no
+Configuration: 7f2042db6205d44e3ce413ff9080011ffc8edd6904b18c87b1268e1331ccdf62
+Analysis: authoritative=yes | complete=yes | successful=3/3
+┌─ Architecture Signal Score ────────────┐
+│ 3.0/10                                 │
+│ Below Average - Simple structures only │
+└────────────────────────────────────────┘
+
+Files scanned: 3 | Lines: 76 | Languages: python=3
+DSA Score: 4.43 | Design Score: 2.4 | Maturity: 0.05
+! Project is very small; pattern-based rating is noisy
+
+┌─ Package Intelligence ────┐
+│ Project: inventory-sync   │
+│ Layout: flat (.)          │
+│ Modules: 3                │
+│ Declared dependencies: 1  │
+│ Circular import groups: 0 │
+└───────────────────────────┘
+
+Actionable Findings
+Rule        Severity  Location                 Message                                                                Remediation
+──────────  ────────  ───────────────────────  ─────────────────────────────────────────────────────────────────────  ───────────────────────────────────────────────────────────────────────────────────────────────────────
+PY-COR-006  warning   inventory/sync.py:16:14  Resource from 'builtins.open' lacks guaranteed cleanup.                Use a context manager or guarantee cleanup with try/finally.
+PY-SEC-004  warning   inventory/sync.py:24:24  TLS certificate verification is disabled with verify=False (CWE-295).  Keep certificate verification on; pin a CA bundle (verify=<path>) or use a trust store for private CAs.
+PY-COR-002  warning   inventory/sync.py:27:16  Exception handler catches Exception.                                   Catch the narrow exception types the operation can recover from.
+
+DSA Patterns Detected
+Pattern           Description                                           Files
+────────────────  ────────────────────────────────────────────────────  ─────
+sorting           Sorting algorithms and ordered operations             1
+heap_priority     Heap/priority queue for efficient min/max operations  1
+lru_cache_manual  Manual LRU cache implementation                       1
+
+System Design Patterns Detected
+Pattern         Description                Files
+──────────────  ─────────────────────────  ─────
+error_handling  Structured error handling  1
+```
+
+Every finding has a stable rule ID, a `file:line:column` location, and a
+remediation. `-f json` gives the same report as versioned JSON and
+`-f sarif` as SARIF 2.1.0 for code scanning. The block above is not
+hand-written: `tests/test_readme_links.py` re-runs the analyzer on the
+fixture and fails when the README no longer matches.
+
+Try it on your own code:
+
+```bash
+pipx install cqa-analyzer            # or: python3 -m pip install cqa-analyzer
+code-quality-analyzer /path/to/project --offline
+```
+
+The catalog behind it: 95 rules and 62 architecture patterns across eight
+languages; the test suite reads those three counts from the code so they
+cannot go stale here.
+
 ## The privacy contract
 
 Most quality platforms want your code on their servers. This tool inverts
@@ -94,55 +161,6 @@ projects that have the new patterns. Every JSON report carries
 `scoring_policy_version`. See [Scoring](#scoring),
 [`docs/adr/002-scoring-policy-2-production-systems-catalog.md`](docs/adr/002-scoring-policy-2-production-systems-catalog.md)
 and [`docs/adr/003-scoring-policy-2-1-locking-hardening-labuladong.md`](docs/adr/003-scoring-policy-2-1-locking-hardening-labuladong.md).
-
-## Project Structure
-
-```
-code-quality-analyzer/
-├── cqa_analyzer/
-│   ├── __init__.py
-│   ├── __main__.py      # CLI entry point (argparse; no third-party dependencies)
-│   ├── mcp_server.py    # MCP server for coding agents (stdio, stdlib only)
-│   ├── text_render.py   # Deterministic plain-text panels and tables (stdlib)
-│   ├── baseline.py      # Hashed finding baselines and comparison
-│   ├── cache.py         # Bounded local parse-artifact cache
-│   ├── changed_lines.py # Bounded changed-line finding selection
-│   ├── config.py        # Bounded configuration, path, and rule policy
-│   ├── discovery.py     # Safe file discovery (limits, symlink guard)
-│   ├── duplication.py   # Cross-file duplicate function detection
-│   ├── findings.py      # Language-neutral actionable finding model
-│   ├── signals.py       # Per-file signal extraction + pattern matching
-│   ├── python_rules.py  # Source-located Python correctness rules
-│   ├── patterns.py      # DSA & System Design pattern definitions
-│   ├── go_patterns.py   # Go-idiom signal definitions for the shared catalog
-│   ├── ts_patterns.py   # TypeScript/JavaScript signal definitions
-│   ├── java_patterns.py # Java signal definitions
-│   ├── kotlin_patterns.py # Kotlin signal definitions (extends Java)
-│   ├── c_patterns.py    # C/C++ signal definitions (include-anchored)
-│   ├── production_patterns.py # Shared production-systems and GoF specs
-│   ├── csharp_patterns.py # C#/.NET signal definitions
-│   ├── manifests.py     # Shared nested-manifest discovery and hardened XML
-│   ├── package_intelligence.py # Metadata, modules, imports, cycles
-│   ├── protocols.py     # Source, parse, rule, provider, and reporter contracts
-│   ├── registry.py      # Versioned plugin and capability negotiation registry
-│   ├── plugins.py       # Built-in plugin assembly
-│   ├── reporters.py     # Registered text, JSON, and SARIF renderers
-│   ├── rule_metadata.py # Stable built-in rule catalog for standard reports
-│   ├── languages/       # Built-in language adapters and rule packs
-│   ├── scanner.py       # Language-neutral orchestration through plugins
-│   ├── complexity.py    # Time/space complexity analyzer
-│   └── rater.py         # Rating calculator (1-10)
-├── tests/               # Regression tests
-├── docs/                # Rule, workflow, and privacy guidance
-├── .pre-commit-hooks.yaml # Published local-analysis hook contract
-├── LICENSE
-├── SECURITY.md
-├── CHANGELOG.md
-├── MANIFEST.in
-├── pyproject.toml
-├── README.md
-└── .gitignore
-```
 
 ## Installation
 
@@ -1171,6 +1189,9 @@ duplication and complexity metrics for Go and C/C++.
 The test suite carries a regression test for each detection and safety bug
 fixed in 2.0, including symlink escape, FIFO reads, cross-file import leakage,
 and the complexity analyzer's scope handling.
+
+How a scan flows through the package, and what every module is for, is in
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## License
 
