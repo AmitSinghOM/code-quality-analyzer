@@ -64,6 +64,24 @@ versions are unchanged. Analyzer 3.4.1 -> 3.4.2.
   only, no upload); release tooling is installed from a hashed
   `requirements-release.txt`.
 
+### Compatibility
+
+- Python 3.15 (final since October 2026) joins the CI test matrix and the
+  trove classifiers; `requires-python` stays `>=3.11`. The `[deep]` extra is
+  still exercised on 3.11 and 3.14 because tree-sitter 0.26.1 has no 3.15
+  wheel yet (it builds from sdist).
+- The stdlib-only import test now recognises build-generated standard
+  library modules: CPython 3.15's `traceback` imports
+  `_missing_stdlib_info`, which lives in the stdlib directory but is absent
+  from `sys.stdlib_module_names`, so the monthly canary reported it as a
+  third-party import (the second failure behind issue #53). The probe
+  accepts a module whose file is under sysconfig's stdlib directory and not
+  under site-packages; two negative checks keep real third-party imports
+  reported.
+- The canary's pre-release job moves from `3.15-dev` to `3.16-dev`, and a
+  test now locks it to one minor above the newest CI matrix entry so a
+  Python release cannot again turn the pre-release job into a stable one.
+
 ### Documentation
 
 - `docs/MAINTENANCE.md` said two pinned runtime dependencies (`click`,

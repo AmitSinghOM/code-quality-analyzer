@@ -35,6 +35,26 @@ def test_grammar_canary_preserves_its_targeted_scope():
         assert f"tests/test_{name}.py" in job
 
 
+def test_python_prerelease_canary_is_one_minor_above_the_ci_matrix():
+    """The canary tests the NEXT Python; once that Python ships it joins CI.
+
+    3.15-dev silently became stable 3.15 in October 2026 and the canary kept
+    running it, so it stopped testing a pre-release at all. Lock the invariant:
+    the pre-release line is exactly one minor above the newest `test` matrix
+    entry, which must also carry a classifier.
+    """
+    ci = (ROOT / ".github/workflows/ci.yml").read_text()
+    matrix = re.search(r"^\s+python-version: \[(.*?)\]", _job(ci, "test"), re.M).group(1)
+    minors = sorted(int(v) for v in re.findall(r"'3\.(\d+)'", matrix))
+    newest = minors[-1]
+    assert minors == list(range(minors[0], newest + 1)), minors
+    canary = _job((ROOT / ".github/workflows/canary.yml").read_text(), "python-prerelease")
+    assert f"python-version: '3.{newest + 1}-dev'" in canary
+    pyproject = (ROOT / "pyproject.toml").read_text()
+    assert f'"Programming Language :: Python :: 3.{newest}"' in pyproject
+    assert f'"Programming Language :: Python :: 3.{newest + 1}"' not in pyproject
+
+
 def test_workflow_changes_trigger_push_and_pull_request_ci():
     workflow = (ROOT / ".github/workflows/ci.yml").read_text()
     for event in ["push", "pull_request"]:
