@@ -104,3 +104,37 @@ def test_pre_commit_examples_pin_the_current_release_tag():
     pre_commit = (DOCS / "PRE_COMMIT.md").read_text(encoding="utf-8")
     assert tag in pre_commit
     assert "Replace after the first signed release" not in pre_commit
+
+
+PRECISION = DOCS / "PRECISION.md"
+RECORD_ROW = re.compile(r"^\| `([A-Z0-9]+)` \| \[[^\]]+\]\(([^)]+)\) \|", re.MULTILINE)
+RULE_ID = re.compile(r"\b[A-Z]{1,5}-(?:SEC|COR|PKG|DUP|MAINT)-\d{3}\b")
+
+
+def _precision_citations() -> list[tuple[str, Path, int, int]]:
+    text = PRECISION.read_text(encoding="utf-8")
+    records = {alias: (DOCS / target).resolve() for alias, target in RECORD_ROW.findall(text)}
+    assert records, "PRECISION.md has no 'Records cited' table"
+    cite = re.compile(r"`(" + "|".join(map(re.escape, records)) + r"):(\d+)(?:-(\d+))?`")
+    return [
+        (alias, records[alias], int(first), int(last or first))
+        for alias, first, last in cite.findall(text)
+    ]
+
+
+def test_precision_page_citations_point_inside_their_records():
+    citations = _precision_citations()
+    assert len(citations) > 50, "the page cites by RECORD:line; expected many citations"
+    for alias, path, first, last in citations:
+        assert path.exists(), f"{alias} -> {path}"
+        lines = path.read_text(encoding="utf-8").count("\n") + 1
+        assert 1 <= first <= last <= lines, f"{alias}:{first}-{last} outside 1-{lines}"
+
+
+def test_precision_page_names_only_cataloged_rule_ids():
+    from cqa_analyzer.rule_metadata import builtin_rule_ids
+
+    known = set(builtin_rule_ids())
+    named = set(RULE_ID.findall(PRECISION.read_text(encoding="utf-8")))
+    assert named, "no rule ids on the precision page"
+    assert named <= known, sorted(named - known)
