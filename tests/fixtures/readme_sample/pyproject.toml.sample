@@ -1,0 +1,5 @@
+[project]
+name = "inventory-sync"
+version = "0.1.0"
+description = "Synthetic fixture for the README output sample. Not a real project."
+dependencies = ["requests"]

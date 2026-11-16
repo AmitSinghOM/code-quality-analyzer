@@ -1,0 +1,6 @@
+"""Synthetic project for the README output sample.
+
+Every defect in this package is deliberate. The README quotes the analyzer's
+output for this project verbatim, so changing any file here changes the
+sample. See ../README.md for how the files are stored and how to re-run it.
+"""
