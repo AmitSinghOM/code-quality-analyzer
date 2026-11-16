@@ -1,7 +1,9 @@
 # Release tooling for .github/workflows/publish.yml (build job).
 # `build` tracks the [dev] extra pin in pyproject.toml; a test locks them equal.
-# Regenerate the hashed lock with:
-#   uv pip compile --generate-hashes --python-version 3.12 \
+# Regenerate the hashed lock with (--universal: CI installs on ubuntu, so the
+# lock must pin keyring's Linux-only deps such as SecretStorage and jeepney
+# behind sys_platform markers, whatever host runs this command):
+#   uv pip compile --universal --generate-hashes --python-version 3.12 \
 #     requirements-release.in -o requirements-release.txt
 build==1.6.1
 twine==7.0.0

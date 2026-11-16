@@ -83,3 +83,19 @@ def test_release_build_pin_matches_the_dev_extra_pin():
     pins = _pinned_requirements(RELEASE_REQUIREMENTS.read_text())
     (release_build,) = [spec for spec in pins if spec.startswith("build==")]
     assert release_build == dev_build
+
+
+def test_release_lock_is_universal_and_pins_keyring_linux_deps():
+    # publish.yml installs on ubuntu with --require-hashes. A lock compiled for
+    # the host platform only (macOS) omits keyring's Linux-only dependencies,
+    # and pip then refuses: "all requirements must have their versions pinned
+    # with ==. These do not: SecretStorage>=3.2 ... (from keyring==...)".
+    text = RELEASE_REQUIREMENTS.read_text()
+    assert "uv pip compile --universal" in text.splitlines()[1]
+    markers = {}
+    for requirement in _pinned_requirements(text):
+        name, _, marker = requirement.partition(";")
+        markers[name.split("==")[0].strip()] = marker.strip()
+    for linux_only in ("secretstorage", "jeepney"):
+        assert linux_only in markers, f"{linux_only} is not pinned in the release lock"
+        assert "sys_platform == 'linux'" in markers[linux_only], linux_only
