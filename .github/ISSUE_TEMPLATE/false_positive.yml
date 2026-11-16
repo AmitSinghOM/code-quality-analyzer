@@ -1,0 +1,80 @@
+name: False positive
+description: A rule flagged code that is safe or correct. Every confirmed report becomes a test fixture.
+title: "[FP] <RULE-ID>: "
+labels: ["bug", "false-positive"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. A confirmed false positive is fixed by adding your snippet
+        (rewritten synthetically) as a fixture that the rule must leave alone,
+        beside a twin it must still flag. So this form asks for exactly what
+        that fixture needs. Rule reference: `docs/RULES.md`.
+
+        **Never paste proprietary code, real paths, identifiers or credentials.**
+        Rewrite the snippet with invented names. If you cannot, do not file it.
+
+  - type: input
+    id: rule-id
+    attributes:
+      label: Rule ID
+      description: The rule that fired, exactly as printed (for example `PY-SEC-001`).
+      placeholder: PY-SEC-001
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Analyzer version
+      description: Output of `code-quality-analyzer --version`.
+      placeholder: code-quality-analyzer 3.4.2
+    validations:
+      required: true
+
+  - type: textarea
+    id: snippet
+    attributes:
+      label: Minimal synthetic snippet that triggers the rule
+      description: The smallest invented file (or files) that reproduces the finding. Say the file name and language. This becomes the should-stay-silent fixture.
+      render: text
+      placeholder: |
+        # fixture.py
+        def handler(payload):
+            return payload.get("id")
+    validations:
+      required: true
+
+  - type: textarea
+    id: why-safe
+    attributes:
+      label: Why this code is safe or correct
+      description: What the rule misreads. Name the construct (a test helper, a constant the rule thinks is user input, a framework idiom, a comment, a string literal, a shadowed name) and why the reported risk cannot occur.
+    validations:
+      required: true
+
+  - type: textarea
+    id: verbose-evidence
+    attributes:
+      label: Analyzer output for the finding (run with `-v`)
+      description: Run `code-quality-analyzer <dir> -v --offline --redact-paths` on the synthetic snippet and paste the "Actionable Findings" row for this rule (rule, severity, location, message, remediation), or the finding object from `--output-format json` (it adds `confidence` and the exact column range). `--redact-paths` keeps directory names out; check the paste before submitting.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: should-still-fire
+    attributes:
+      label: A variant the rule should still flag (optional)
+      description: If you can, give a nearby snippet where the finding is a true positive. It keeps the fix from simply disabling the rule.
+      render: text
+
+  - type: checkboxes
+    id: synthetic-only
+    attributes:
+      label: Confirmation
+      options:
+        - label: Everything above is synthetic. It contains no proprietary code, real file paths, real identifiers, package names, credentials or customer data.
+          required: true
+        - label: I read the rule's `not_when` clauses in `docs/RULES.md` and this case is not already listed there.
+          required: true

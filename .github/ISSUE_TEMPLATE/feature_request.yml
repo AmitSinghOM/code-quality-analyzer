@@ -1,0 +1,63 @@
+name: Feature request
+description: A capability the analyzer lacks, or a documented limit you need lifted.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read `docs/ROADMAP.md` first. It lists what is planned, what is deferred,
+        and what was deliberately cut (for example: no ninth language, no new
+        architecture pattern without corpus evidence, no runtime dependency,
+        nothing that executes the analyzed project). A request that reopens a
+        cut item needs new evidence, not a new vote.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What you are trying to do and where the analyzer stops you. One concrete situation beats a general wish.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: The flag, config key, rule, output key or behaviour you have in mind. If it adds a key to the JSON report or SARIF, say so; that is a report-schema change.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you tried instead
+      description: Existing flags, `.code-quality.toml`, a baseline, a changed-lines manifest, suppressions, or another tool. Why each falls short.
+
+  - type: dropdown
+    id: contract
+    attributes:
+      label: Which contract does this touch?
+      description: Helps the maintainer judge the version bump (see CONTRIBUTING.md, "Version rules").
+      multiple: true
+      options:
+        - A rule (what is reported)
+        - The JSON report or SARIF output
+        - CLI flags or exit codes
+        - Configuration (.code-quality.toml)
+        - Baselines or changed-lines gating
+        - The MCP server
+        - Documentation only
+        - Not sure
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmation
+      options:
+        - label: I searched the roadmap and existing issues and this is not already planned, deferred or cut.
+          required: true
+        - label: This request does not require the analyzer to execute, import, build or fetch the project it analyzes, and does not add a runtime dependency.
+          required: true
+        - label: Any example above is synthetic and contains no proprietary code, paths or identifiers.
+          required: true
