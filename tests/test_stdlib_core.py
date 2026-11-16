@@ -22,23 +22,93 @@ def test_pyproject_declares_no_runtime_dependencies():
     assert "deep" in project["optional-dependencies"]
 
 
+# Classifier shared by the stdlib-only probe and its negative check. It runs in
+# a `-I` child, so it must stay self-contained. A module counts as standard
+# library when its top-level name is in sys.stdlib_module_names OR its file is
+# under sysconfig's stdlib/platstdlib directory and not under purelib/platlib
+# (a venv's site-packages lives inside its platstdlib, so the exclusion is
+# load-bearing). The path rule exists because CPython 3.15 generates
+# `_missing_stdlib_info` at build time (Tools/build/check_extension_modules.py,
+# installed next to the stdlib) and `traceback.py` imports it, yet the name is
+# absent from sys.stdlib_module_names.
+_STDLIB_CLASSIFIER = """\
+import sys, sysconfig
+from pathlib import Path
+std = set(sys.stdlib_module_names)
+def _resolved(key):
+    path = sysconfig.get_path(key)
+    return Path(path).resolve() if path else None
+stdlib_dirs = [p for p in (_resolved('stdlib'), _resolved('platstdlib')) if p]
+site_dirs = [p for p in (_resolved('purelib'), _resolved('platlib')) if p]
+def _under(file, dirs):
+    return any(file.is_relative_to(d) for d in dirs)
+def _is_stdlib(top):
+    if top in std:
+        return True
+    file = getattr(sys.modules.get(top), '__file__', None)
+    if not file:
+        return False
+    file = Path(file).resolve()
+    return _under(file, stdlib_dirs) and not _under(file, site_dirs)
+third = sorted({m.split('.')[0] for m in sys.modules
+    if not m.startswith('cqa_analyzer') and not m.startswith('__editable__')
+    and m.split('.')[0] not in
+        ('_distutils_hack', 'sitecustomize', 'usercustomize', '__main__')
+    and not _is_stdlib(m.split('.')[0])})
+print(','.join(third))
+"""
+
+
+def _run_stdlib_probe(setup: str) -> str:
+    """Run `setup` in a fresh isolated interpreter and return the non-stdlib modules it loaded."""
+    result = subprocess.run(  # noqa: S603 - fixed argv
+        [sys.executable, "-I", "-c", setup + _STDLIB_CLASSIFIER],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout.strip()
+
+
 def test_cli_imports_only_the_standard_library():
     """Import the CLI in a fresh interpreter and list every non-stdlib module loaded."""
-    probe = (
-        "import sys\n"
-        "import cqa_analyzer.__main__, cqa_analyzer.mcp_server, cqa_analyzer.text_render\n"
-        "std = set(sys.stdlib_module_names)\n"
-        "third = sorted({m.split('.')[0] for m in sys.modules\n"
-        "    if m.split('.')[0] not in std and not m.startswith('cqa_analyzer')\n"
-        "    and m.split('.')[0] not in\n"
-        "        ('_distutils_hack', 'sitecustomize', 'usercustomize', '__main__')\n"
-        "    and not m.startswith('__editable__')})\n"
-        "print(','.join(third))\n"
+    setup = "import cqa_analyzer.__main__, cqa_analyzer.mcp_server, cqa_analyzer.text_render\n"
+    assert _run_stdlib_probe(setup) == ""
+
+
+def test_stdlib_probe_still_reports_third_party_modules(tmp_path: Path):
+    """The sysconfig path rule must not swallow a real third-party import."""
+    site = tmp_path / "site-packages"
+    site.mkdir()
+    (site / "fakethirdparty.py").write_text("VALUE = 1\n")
+    setup = f"import sys\nsys.path.insert(0, {str(site)!r})\nimport fakethirdparty\n"
+    assert _run_stdlib_probe(setup) == "fakethirdparty"
+
+
+def test_stdlib_probe_excludes_site_packages_inside_the_stdlib_directory(tmp_path: Path):
+    """Every CPython layout nests site-packages under the stdlib directory.
+
+    Without the purelib/platlib exclusion the path rule would call every
+    installed package "standard library" and the probe would pass vacuously.
+    Point sysconfig at a fake layout with that nesting and check the module
+    under its site-packages is still reported.
+    """
+    lib = tmp_path / "lib" / "python3.x"
+    site = lib / "site-packages"
+    site.mkdir(parents=True)
+    (site / "fakethirdparty.py").write_text("VALUE = 1\n")
+    layout = {"stdlib": lib, "platstdlib": lib, "purelib": site, "platlib": site}
+    setup = (
+        "import sys, sysconfig\n"
+        f"_layout = {({k: str(v) for k, v in layout.items()})!r}\n"
+        "_real_get_path = sysconfig.get_path\n"
+        "sysconfig.get_path = lambda name, *a, **k: (\n"
+        "    _layout.get(name) or _real_get_path(name, *a, **k))\n"
+        f"sys.path.insert(0, {str(site)!r})\nimport fakethirdparty\n"
     )
-    result = subprocess.run(  # noqa: S603 - fixed argv
-        [sys.executable, "-I", "-c", probe], capture_output=True, text=True, check=True
-    )
-    assert result.stdout.strip() == "", result.stdout
+    # The real stdlib directory is hidden from the probe here, so on
+    # interpreters with build-generated stdlib modules more names may appear.
+    assert "fakethirdparty" in _run_stdlib_probe(setup).split(",")
 
 
 def test_parser_exposes_the_2x_flag_surface_unchanged():
