@@ -44,7 +44,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.11', '3.12', '3.13', '3.14']
+        python-version: ['3.11', '3.12', '3.13', '3.14', '3.15']
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -69,9 +69,11 @@ jobs:
 
   deep-test:
     # The optional [deep] extra (tree-sitter for Go, C/C++ and the gated Rust
-    # pilot) on the floor and ceiling interpreters. The default `test` job
-    # proves the pure-Python install still works, that tests/test_deep.py
-    # skips cleanly, and that Rust is not registered without its grammar.
+    # pilot) on the floor interpreter and the newest one with tree-sitter
+    # wheels (3.15 has none yet: tree-sitter 0.26.1 builds from sdist there).
+    # The default `test` job proves the pure-Python install still works, that
+    # tests/test_deep.py skips cleanly, and that Rust is not registered
+    # without its grammar.
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
