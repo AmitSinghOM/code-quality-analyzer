@@ -8,6 +8,7 @@ costs more trust than anywhere else.
 from __future__ import annotations
 
 import re
+import shutil
 from pathlib import Path
 
 from clirunner import CliRunner
@@ -18,9 +19,12 @@ ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
 ARCHITECTURE = ROOT / "docs" / "ARCHITECTURE.md"
 SAMPLE_FIXTURE = ROOT / "tests" / "fixtures" / "readme_sample"
+SAMPLE_SUFFIX = ".sample"
 
 # ](docs/...) and ](tests/...) targets, with any #fragment dropped.
 REPO_LINK = re.compile(r"\]\(((?:docs|tests)/[^)#\s]+)(?:#[^)]*)?\)")
+# File and directory names in the ARCHITECTURE.md tree, left of the comment.
+TREE_NAME = re.compile(r"[\w.-]+\.py|[\w.-]+/")
 
 
 def _readme() -> str:
@@ -43,8 +47,25 @@ def _readme_sample_block() -> str:
     return text[start:end]
 
 
-def test_readme_output_sample_is_the_analyzers_real_output():
-    result = CliRunner().invoke(main, [str(SAMPLE_FIXTURE), "--offline"])
+def materialize_sample(parent: Path) -> Path:
+    """Copy the fixture into ``parent/readme_sample`` with the ``.sample`` suffix removed.
+
+    The sources are stored with a non-source suffix so the repository's own
+    analyzer gate and ruff never read them; the analyzer runs on this copy.
+    """
+    root = parent / "readme_sample"
+    for source in sorted(SAMPLE_FIXTURE.rglob(f"*{SAMPLE_SUFFIX}")):
+        target = root / source.relative_to(SAMPLE_FIXTURE).with_suffix("")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, target)
+    return root
+
+
+def test_readme_output_sample_is_the_analyzers_real_output(tmp_path):
+    project = materialize_sample(tmp_path)
+    assert sorted(p.name for p in project.rglob("*.py")) == ["__init__.py", "cache.py", "sync.py"]
+
+    result = CliRunner().invoke(main, [str(project), "--offline"])
 
     assert result.exit_code == 0, result.output
     assert result.output.strip("\n") == _readme_sample_block()
@@ -56,6 +77,16 @@ def test_readme_output_sample_fits_the_first_screen():
     assert 25 <= len(lines) <= 40, len(lines)
     assert "Actionable Findings" in lines
     assert any(line.startswith("PY-SEC-") for line in lines), "no security finding shown"
+
+
+def test_sample_fixture_holds_no_source_the_repository_gate_would_read():
+    """A real .py here would be a new finding or a strict coverage gap in CI."""
+    stray = sorted(
+        path.relative_to(SAMPLE_FIXTURE).as_posix()
+        for path in SAMPLE_FIXTURE.rglob("*")
+        if path.is_file() and path.suffix not in {SAMPLE_SUFFIX, ".md"}
+    )
+    assert stray == [], stray
 
 
 def test_readme_first_screen_counts_match_the_code():
@@ -80,37 +111,49 @@ def test_readme_no_longer_carries_the_project_tree():
     assert "](docs/ARCHITECTURE.md)" in text
 
 
-def test_architecture_module_map_matches_the_package():
-    """Every module under cqa_analyzer/ is in the map; every name in the map exists."""
+def _names_in_architecture_map() -> set[str]:
     page = ARCHITECTURE.read_text(encoding="utf-8")
     tree = page.split("```\n", 1)[1].split("\n```", 1)[0]
-    # Names sit left of the "# ..." comment; comments mention things like C/C++.
-    entries = [line.split("#", 1)[0] for line in tree.splitlines()]
-    listed = set(re.findall(r"[\w.-]+\.py|[\w.-]+/", "\n".join(entries)))
+    # Comments mention things like C/C++ and TypeScript/JavaScript.
+    entries = "\n".join(line.split("#", 1)[0] for line in tree.splitlines())
+    return set(TREE_NAME.findall(entries)) - {"code-quality-analyzer/"}
 
+
+def _package_entries() -> set[str]:
     package = ROOT / "cqa_analyzer"
-    actual_modules = {
-        path.name for path in package.rglob("*.py") if "__pycache__" not in path.parts
-    }
-    actual_dirs = {
-        f"{path.name}/"
-        for path in package.rglob("*")
-        if path.is_dir() and path.name != "__pycache__"
-    }
-    # deep/ is listed as a directory only; its sole module is __init__.py.
-    missing = sorted((actual_modules | actual_dirs) - listed - {"__init__.py"})
-    assert missing == [], missing
+    entries = set()
+    for path in package.rglob("*"):
+        if "__pycache__" in path.parts:
+            continue
+        if path.is_dir():
+            entries.add(f"{path.name}/")
+        elif path.suffix == ".py" and path.name != "__init__.py":
+            entries.add(path.name)
+    return entries
 
-    # Names are resolved where the map places them: the repository root,
-    # .github/, tests/, docs/, and the package tree. No whole-repo walk, so a
-    # checkout with a populated .venv/ stays fast.
+
+def _names_on_disk() -> set[str]:
+    """Names where the map places them: root, .github/, tests/, docs/, the package tree.
+
+    No whole-repository walk, so a checkout with a populated .venv/ stays fast.
+    """
+    package = ROOT / "cqa_analyzer"
     bases = [ROOT, ROOT / ".github", ROOT / "tests", ROOT / "docs", package]
     bases += [path for path in package.rglob("*") if path.is_dir()]
-    names_on_disk: set[str] = set()
+    names = set()
     for base in bases:
         for path in base.iterdir():
-            names_on_disk.add(f"{path.name}/" if path.is_dir() else path.name)
-    stale = sorted(
-        name for name in listed - {"code-quality-analyzer/"} if name not in names_on_disk
-    )
+            names.add(f"{path.name}/" if path.is_dir() else path.name)
+    return names
+
+
+def test_architecture_module_map_matches_the_package():
+    """Every module under cqa_analyzer/ is in the map; every name in the map exists."""
+    listed = _names_in_architecture_map()
+
+    # deep/ is listed as a directory only; its sole module is __init__.py.
+    missing = sorted(_package_entries() - listed)
+    assert missing == [], missing
+
+    stale = sorted(listed - _names_on_disk())
     assert stale == [], stale

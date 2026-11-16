@@ -21,9 +21,8 @@ ship their source to a SaaS dashboard to learn whether it is healthy.
 
 ## What a run looks like
 
-One command, one directory, nothing sent anywhere. This is the output of
-`code-quality-analyzer tests/fixtures/readme_sample --offline` on the small
-synthetic project committed under
+One command, one directory, nothing sent anywhere. This is the analyzer's
+output for the small synthetic project kept under
 [`tests/fixtures/readme_sample/`](tests/fixtures/readme_sample/) — three
 Python files with three deliberate defects:
 
@@ -37,7 +36,7 @@ Analysis: authoritative=yes | complete=yes | successful=3/3
 │ Below Average - Simple structures only │
 └────────────────────────────────────────┘
 
-Files scanned: 3 | Lines: 76 | Languages: python=3
+Files scanned: 3 | Lines: 74 | Languages: python=3
 DSA Score: 4.43 | Design Score: 2.4 | Maturity: 0.05
 ! Project is very small; pattern-based rating is noisy
 
@@ -72,8 +71,10 @@ error_handling  Structured error handling  1
 Every finding has a stable rule ID, a `file:line:column` location, and a
 remediation. `-f json` gives the same report as versioned JSON and
 `-f sarif` as SARIF 2.1.0 for code scanning. The block above is not
-hand-written: `tests/test_readme_links.py` re-runs the analyzer on the
-fixture and fails when the README no longer matches.
+hand-written: `tests/test_readme_links.py` copies the fixture into a
+temporary directory, runs the analyzer on it, and fails when the README no
+longer matches (the fixture's
+[README](tests/fixtures/readme_sample/README.md) shows how to re-run it).
 
 Try it on your own code:
 

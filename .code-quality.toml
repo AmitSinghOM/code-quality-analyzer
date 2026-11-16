@@ -1,6 +1,0 @@
-# Policy for this repository's own scan (CI "Rate this repository" and the
-# cqa-action ratchet). Test fixtures are deliberately defective inputs --
-# tests/fixtures/readme_sample/ exists to produce the findings quoted in the
-# README -- so they are not this project's quality signal.
-[analysis]
-exclude = ["tests/fixtures/**"]
