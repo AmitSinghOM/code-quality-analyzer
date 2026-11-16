@@ -18,6 +18,7 @@ pages hold the contracts it points at.
 
 - [CALIBRATION.md](CALIBRATION.md) — cross-language scoring fairness calibration and its corpus.
 - [AACR_BENCH.md](AACR_BENCH.md) — AACR-Bench as an external calibration corpus.
+- [PRECISION.md](PRECISION.md) — measured per-rule precision: every recorded hit count, with the record and line it comes from.
 - `calibration-latest.json` — the latest calibration run the tests pin.
 - `report-schema-<version>.json` — JSON report schemas; the newest matches `REPORT_SCHEMA_VERSION`.
 
