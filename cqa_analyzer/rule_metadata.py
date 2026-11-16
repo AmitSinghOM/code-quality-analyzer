@@ -1428,3 +1428,131 @@ def rule_metadata(rule_id: str) -> RuleMetadata:
 def builtin_rule_ids() -> tuple[str, ...]:
     """Return every cataloged built-in rule ID in lexical order."""
     return tuple(sorted(_CATALOG))
+
+
+# ---- Rule documentation links --------------------------------------------------
+# GitHub anchor of the ``docs/RULES.md`` heading that documents each rule: its
+# own heading, or the combined heading it sits under. Frozen here so the SARIF
+# reporter needs no file read; ``tests/test_rule_help.py`` regenerates the map
+# from the document and fails when a heading is renamed, moved or removed.
+RULES_DOCUMENT_URL = (
+    "https://github.com/AmitSinghOM/code-quality-analyzer/blob/v{version}/docs/RULES.md"
+)
+
+_SQL_ANCHOR = (
+    "py-cor-007--go-cor-002--ts-cor-002--java-cor-002--kt-cor-002--"
+    "cs-cor-002--c-cor-002--rs-cor-002-sql-statement-assembled-from-runtime-values"
+)
+_RULE_ANCHORS = MappingProxyType(
+    {
+        "C-COR-001": "c-cor-001-empty-catch-block",
+        "C-COR-002": _SQL_ANCHOR,
+        "C-COR-003": "java-cor-003--kt-cor-003--cs-cor-003--c-cor-003-broad-exception-handler",
+        "C-COR-004": "c-cor-004-using-namespace-in-a-header",
+        "C-DUP-001": "go-dup-001--c-dup-001-duplicate-function-implementation-requires-deep",
+        "C-MAINT-001": "go-maint-001--c-maint-001-high-cyclomatic-complexity-requires-deep",
+        "C-MAINT-002": "go-maint-002--c-maint-002-high-cognitive-complexity-requires-deep",
+        "C-PKG-001": "c-pkg-001-undeclared-third-party-header",
+        "C-SEC-001": "c-sec-001-unbounded-buffer-write",
+        "C-SEC-002": "c-sec-002-shell-command-assembled-at-runtime",
+        "C-SEC-003": "c-sec-003-runtime-string-used-as-a-format",
+        "CS-COR-001": "cs-cor-001-empty-catch-block",
+        "CS-COR-002": _SQL_ANCHOR,
+        "CS-COR-003": "java-cor-003--kt-cor-003--cs-cor-003--c-cor-003-broad-exception-handler",
+        "CS-COR-004": "cs-cor-004--kt-cor-004--ts-cor-003-blocking-call-in-an-asynchronous-body",
+        "CS-PKG-001": "cs-pkg-001-undeclared-package-namespace",
+        "CS-PKG-002": "cs-pkg-002-invalid-project-file",
+        "CS-SEC-001": "cs-sec-001-type-resolving-deserializer",
+        "CS-SEC-002": "cs-sec-002-shell-command-assembled-at-runtime",
+        "CS-SEC-003": "cs-sec-003-certificate-validation-callback-accepts-everything",
+        "GO-COR-001": "go-cor-001-ignored-standard-library-error",
+        "GO-COR-002": _SQL_ANCHOR,
+        "GO-COR-003": "go-cor-003-unchecked-type-assertion",
+        "GO-COR-004": "go-cor-004-defer-inside-a-loop",
+        "GO-DUP-001": "go-dup-001--c-dup-001-duplicate-function-implementation-requires-deep",
+        "GO-MAINT-001": "go-maint-001--c-maint-001-high-cyclomatic-complexity-requires-deep",
+        "GO-MAINT-002": "go-maint-002--c-maint-002-high-cognitive-complexity-requires-deep",
+        "GO-SEC-001": "go-sec-001-tls-certificate-verification-disabled",
+        "GO-SEC-002": "go-sec-002-shell-command-assembled-at-runtime",
+        "GO-SEC-003": "go-sec-003-mathrand-used-for-a-secret",
+        "JAVA-COR-001": "java-cor-001-empty-catch-block",
+        "JAVA-COR-002": _SQL_ANCHOR,
+        "JAVA-COR-003": "java-cor-003--kt-cor-003--cs-cor-003--c-cor-003-broad-exception-handler",
+        "JAVA-PKG-001": "java-pkg-001-undeclared-direct-library",
+        "JAVA-PKG-002": "java-pkg-002-invalid-build-manifest",
+        "JAVA-SEC-001": "java-sec-001-java-native-deserialization",
+        "JAVA-SEC-002": "java-sec-002-shell-command-assembled-at-runtime",
+        "JAVA-SEC-003": "java-sec-003-tls-certificate-or-hostname-verification-disabled",
+        "KT-COR-001": "kt-cor-001-empty-catch-block",
+        "KT-COR-002": _SQL_ANCHOR,
+        "KT-COR-003": "java-cor-003--kt-cor-003--cs-cor-003--c-cor-003-broad-exception-handler",
+        "KT-COR-004": "cs-cor-004--kt-cor-004--ts-cor-003-blocking-call-in-an-asynchronous-body",
+        "KT-COR-005": "ts-cor-005--kt-cor-005-non-null-assertion-density",
+        "KT-PKG-001": "kt-pkg-001-undeclared-direct-library",
+        "KT-PKG-002": "kt-pkg-002-invalid-build-manifest",
+        "KT-SEC-001": "kt-sec-001-java-native-deserialization",
+        "KT-SEC-002": "kt-sec-002-shell-command-assembled-at-runtime",
+        "KT-SEC-003": "kt-sec-003-tls-certificate-or-hostname-verification-disabled",
+        "PY-COR-001": "py-cor-001-mutable-default-argument",
+        "PY-COR-002": "py-cor-002-broad-exception-handler",
+        "PY-COR-003": "py-cor-003-silently-swallowed-exception",
+        "PY-COR-004": "py-cor-004-unreachable-statement",
+        "PY-COR-005": "py-cor-005-blocking-synchronous-call-in-async-code",
+        "PY-COR-006": "py-cor-006-resource-without-guaranteed-cleanup",
+        "PY-COR-007": _SQL_ANCHOR,
+        "PY-DUP-001": "py-dup-001-duplicate-function-implementation",
+        "PY-MAINT-001": "py-maint-001-high-cyclomatic-complexity",
+        "PY-MAINT-002": "py-maint-002-high-cognitive-complexity",
+        "PY-MAINT-003": "py-maint-003-long-function",
+        "PY-MAINT-004": "py-maint-004-excessive-parameters",
+        "PY-MAINT-005": "py-maint-005-boolean-parameter-proliferation",
+        "PY-PKG-001": "py-pkg-001-circular-local-imports",
+        "PY-PKG-002": "py-pkg-002-missing-console-script-module",
+        "PY-PKG-003": "py-pkg-003-invalid-pyproject-metadata",
+        "PY-PKG-004": "py-pkg-004-missing-literal-public-export-binding",
+        "PY-PKG-005": "py-pkg-005-duplicate-literal-public-export",
+        "PY-PKG-006": "py-pkg-006-missing-literal-package-data-target",
+        "PY-SEC-001": "py-sec-001-unsafe-deserialization-of-untrusted-data",
+        "PY-SEC-002": "py-sec-002-shell-command-assembled-at-runtime",
+        "PY-SEC-003": "py-sec-003-evalexec-of-a-runtime-string",
+        "PY-SEC-004": "py-sec-004-tls-certificate-verification-disabled",
+        "PY-SEC-005": "py-sec-005-non-cryptographic-random-used-for-a-secret",
+        "RS-COR-001": "rs-cor-001-unwrap-density-outside-test-code",
+        "RS-COR-002": _SQL_ANCHOR,
+        "RS-COR-003": "rs-cor-003-blocking-call-in-async-function",
+        "RS-COR-004": "rs-cor-004-crate-wide-lint-allow-without-reason",
+        "RS-DUP-001": "rs-dup-001--rs-maint-001--rs-maint-002-requires-deep",
+        "RS-MAINT-001": "rs-dup-001--rs-maint-001--rs-maint-002-requires-deep",
+        "RS-MAINT-002": "rs-dup-001--rs-maint-001--rs-maint-002-requires-deep",
+        "RS-PKG-001": "rs-pkg-001-undeclared-crate--rs-pkg-002-invalid-cargotoml",
+        "RS-PKG-002": "rs-pkg-001-undeclared-crate--rs-pkg-002-invalid-cargotoml",
+        "RS-SEC-001": "rs-sec-001-unsafe-without-a-safety-comment",
+        "RS-SEC-002": "rs-sec-002-shell-command-assembled-at-runtime",
+        "RS-SEC-003": "rs-sec-003-tls-certificate-verification-disabled",
+        "TS-COR-001": "ts-cor-001-empty-catch-block",
+        "TS-COR-002": _SQL_ANCHOR,
+        "TS-COR-003": "cs-cor-004--kt-cor-004--ts-cor-003-blocking-call-in-an-asynchronous-body",
+        "TS-COR-004": "ts-cor-004-unexplained-type-check-suppression",
+        "TS-COR-005": "ts-cor-005--kt-cor-005-non-null-assertion-density",
+        "TS-PKG-001": "ts-pkg-001-undeclared-imported-dependency",
+        "TS-PKG-002": "ts-pkg-002-invalid-packagejson",
+        "TS-SEC-001": "ts-sec-001-eval--new-function-of-a-runtime-string",
+        "TS-SEC-002": "ts-sec-002-shell-command-assembled-at-runtime",
+        "TS-SEC-003": "ts-sec-003-runtime-value-written-as-html",
+        "TS-SEC-004": "ts-sec-004-tls-certificate-verification-disabled",
+    }
+)
+
+
+def help_url(rule_id: str, version: str) -> str:
+    """Return the release-pinned ``docs/RULES.md`` link for a built-in rule.
+
+    The link pins the ``v{version}`` tag so it keeps pointing at the text that
+    shipped with the analyzer that produced the report. Fails closed for an
+    uncataloged rule, like :func:`rule_metadata`.
+    """
+    try:
+        anchor = _RULE_ANCHORS[rule_id]
+    except KeyError as error:
+        raise ValueError(f"Missing built-in rule documentation anchor for {rule_id}") from error
+    return f"{RULES_DOCUMENT_URL.format(version=version)}#{anchor}"

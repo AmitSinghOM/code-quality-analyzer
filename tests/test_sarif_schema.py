@@ -91,3 +91,14 @@ def test_validator_rejects_a_non_spec_key(project):
     document["runs"][0]["notASarifKey"] = True
 
     assert any("notASarifKey" in error for error in _schema_errors(document))
+
+
+def test_rule_descriptors_with_help_markdown_and_help_uri_validate(project):
+    document = _sarif(project(SUPPRESSED_AND_PLAIN))
+    rules = document["runs"][0]["tool"]["driver"]["rules"]
+
+    assert rules, "run must carry rule descriptors"
+    for rule in rules:
+        assert set(rule["help"]) == {"markdown", "text"}, rule["id"]
+        assert rule["helpUri"].startswith("https://"), rule["id"]
+    assert _schema_errors(document) == []
