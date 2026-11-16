@@ -63,6 +63,10 @@ versions are unchanged. Analyzer 3.4.1 -> 3.4.2.
 - `publish.yml` gains a `dry_run` dispatch input (build and `twine check`
   only, no upload); release tooling is installed from a hashed
   `requirements-release.txt`.
+- `requirements-release.txt` is compiled with `uv pip compile --universal`,
+  so keyring's Linux-only dependencies (`SecretStorage`, `jeepney`) are
+  pinned behind `sys_platform` markers; the host-platform lock made
+  `pip install --require-hashes` refuse on the ubuntu build job.
 
 ### Compatibility
 
