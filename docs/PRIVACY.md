@@ -23,7 +23,8 @@ Normal reports can contain:
 
 SARIF contains only normalized actionable findings plus the built-in rule
 catalog, analysis health, privacy state, effective-configuration fingerprint,
-and baseline-selection metadata. It omits architecture evidence, package
+baseline-selection metadata, and path-scoped policy provenance (per-result
+`policySource` and aggregate `policyDropped` counts). It omits architecture evidence, package
 intelligence, complexity data, source snippets, command lines, environment
 variables, timestamps, fixes, and repository metadata. Normal SARIF may include
 partial finding fingerprints and suppression metadata; anonymized SARIF omits
@@ -41,6 +42,29 @@ uses hidden project-relative identities before presentation changes.
 
 `--redact-paths` removes directory components from report paths, but it is not full anonymization. Basenames, identifiers, messages, package metadata, and architecture signals can still be sensitive.
 
+## Path-scoped rule policy sources
+
+A `[overrides."<glob>"]` table in `.code-quality.toml` names a path pattern the
+repository author wrote. Reports carry it in two places: `policy_source` on
+every finding (`project` or `override:<glob>`, in JSON and as SARIF
+`result.properties.policySource`) and the keys of
+`scan_health.policy_dropped.by_source` (SARIF `run.properties.policyDropped`).
+Both are author-written, path-shaped data and are treated as paths:
+
+- Plain reports emit the glob as written.
+- `--redact-paths` keeps only the glob's last segment
+  (`override:tests/**/*_test.py` becomes `override:*_test.py`), the same
+  reduction applied to display paths.
+- `--anonymize` maps the glob through the same stable per-report file-token
+  map as source paths, so it is emitted as `override:file-NNNN` (a glob equal
+  to a reported path shares that path's token). The raw glob appears nowhere:
+  not in JSON, SARIF, text, stderr, or any health block.
+
+`project` is a constant and is never transformed. `policy_dropped.count`,
+`by_rule` and `security` are counts and never carry paths. Policy-dropped
+findings are reported as counts only, never as a list, so an anonymized report
+does not reveal how many findings each tokenized file hides.
+
 ## Fully anonymized reports
 
 `--anonymize` is stronger than `--redact-paths` and applies to text, JSON,
@@ -48,6 +72,7 @@ and SARIF output. It:
 
 - Replaces the project name with `anonymized-project`
 - Replaces file and function identities with report-local opaque tokens
+- Replaces path-scoped policy globs (`override:<glob>`) with the same file tokens
 - Replaces finding messages and remediation with generic rule guidance
 - Reduces package intelligence to booleans and aggregate counts
 - Replaces verbose architecture evidence with signal counts
