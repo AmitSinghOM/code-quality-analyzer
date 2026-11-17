@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import re
@@ -17,6 +18,10 @@ MAX_CONFIG_SIZE = 256 * 1024
 MAX_PATTERNS = 1_000
 MAX_PATTERN_LENGTH = 512
 _RULE_ID = re.compile(r"^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+$")
+_SEVERITY_LEVELS = ("note", "warning", "error")
+# Compiled globs per distinct pattern string; include, exclude, root-ignore
+# and overrides each hold at most MAX_PATTERNS, so a hit is the common case.
+_GLOB_CACHE_SIZE = 4 * MAX_PATTERNS
 
 
 class ConfigError(ValueError):
@@ -29,6 +34,35 @@ class RulePolicy:
 
     enabled: bool = True
     severity: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class OverridePolicy:
+    """One ``[overrides."<glob>"]`` table: rule policy scoped to a path glob.
+
+    ``glob`` is the table key after backslash-to-slash normalisation.
+    ``disabled`` holds sorted, de-duplicated rule IDs; ``severity`` holds
+    ``(rule_id, level)`` pairs sorted by rule ID.
+    """
+
+    glob: str
+    disabled: tuple[str, ...] = ()
+    severity: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class EffectivePolicy:
+    """Resolved policy for one (rule, path) pair.
+
+    ``source`` is ``"project"`` when the rule default or ``[rules]`` decided
+    the outcome, or ``"override:<glob>"`` naming the table that disabled the
+    rule or set its severity. When ``enabled`` is False, ``severity`` is the
+    project-level value and ``source`` names what disabled the rule.
+    """
+
+    enabled: bool
+    severity: str | None
+    source: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,9 +84,39 @@ class AnalyzerConfig:
 
     analysis: AnalysisConfig = field(default_factory=AnalysisConfig)
     rules: tuple[tuple[str, RulePolicy], ...] = ()
+    # ``[overrides]`` tables in file order: order breaks specificity ties.
+    overrides: tuple[OverridePolicy, ...] = ()
 
     def policy_for(self, rule_id: str) -> RulePolicy:
         return dict(self.rules).get(rule_id, RulePolicy())
+
+    def effective_policy(self, rule_id: str, identity_path: str) -> EffectivePolicy:
+        """Resolve ``rule_id`` for the project-relative ``identity_path``.
+
+        Start from the rule default, apply ``[rules]``, then every override
+        whose glob matches the path. ``disabled`` is monotone: once any
+        matching table (or ``[rules]``) disables the rule, no table re-enables
+        it. Severity conflicts resolve by the longest literal prefix (the
+        characters before the first ``*``, ``?`` or ``[``); equal prefixes
+        resolve to the table later in the file. A table severity beats a
+        ``[rules]`` severity.
+        """
+        path = identity_path.replace("\\", "/")
+        while path.startswith("./"):
+            path = path[2:]
+        base = self.policy_for(rule_id)
+        if not base.enabled:
+            return EffectivePolicy(enabled=False, severity=base.severity, source="project")
+
+        disabler, winner = _matching_overrides(self.overrides, rule_id, path)
+        if disabler is not None:
+            return EffectivePolicy(
+                enabled=False, severity=base.severity, source=f"override:{disabler}"
+            )
+        if winner is not None:
+            glob, level = winner
+            return EffectivePolicy(enabled=True, severity=level, source=f"override:{glob}")
+        return EffectivePolicy(enabled=True, severity=base.severity, source="project")
 
     @property
     def fingerprint(self) -> str:
@@ -77,6 +141,23 @@ class AnalyzerConfig:
                 }
                 for rule_id, policy in self.rules
             },
+            # Same guard as keep_directories. An ordered list, not a mapping:
+            # table order breaks severity ties, so reordering must change the
+            # digest.
+            **(
+                {
+                    "overrides": [
+                        {
+                            "glob": override.glob,
+                            "disabled": list(override.disabled),
+                            "severity": dict(override.severity),
+                        }
+                        for override in self.overrides
+                    ]
+                }
+                if self.overrides
+                else {}
+            ),
         }
         encoded = json.dumps(
             payload,
@@ -163,7 +244,7 @@ def _load_toml(path: Path, root: Path) -> dict:
 
 
 def _parse_config(data: dict) -> AnalyzerConfig:
-    _reject_unknown(data, {"analysis", "rules"}, "configuration")
+    _reject_unknown(data, {"analysis", "rules", "overrides"}, "configuration")
     analysis_data = _table(data.get("analysis"), "analysis")
     _reject_unknown(
         analysis_data,
@@ -186,13 +267,9 @@ def _parse_config(data: dict) -> AnalyzerConfig:
     rules_data = _table(data.get("rules"), "rules")
     rules = []
     for rule_id, value in sorted(rules_data.items()):
-        if not isinstance(rule_id, str) or not _RULE_ID.fullmatch(rule_id):
-            raise ConfigError(f"Invalid rule ID in configuration: {rule_id!r}.")
+        _validate_rule_id(rule_id)
         policy = _table(value, f"rules.{rule_id}")
         _reject_unknown(policy, {"enabled", "severity"}, f"rules.{rule_id}")
-        severity = policy.get("severity")
-        if severity is not None and severity not in {"warning", "error"}:
-            raise ConfigError(f"rules.{rule_id}.severity must be 'warning' or 'error'.")
         rules.append(
             (
                 rule_id,
@@ -202,11 +279,70 @@ def _parse_config(data: dict) -> AnalyzerConfig:
                         f"rules.{rule_id}.enabled",
                         default=True,
                     ),
-                    severity=severity,
+                    severity=_severity(policy.get("severity"), f"rules.{rule_id}.severity"),
                 ),
             )
         )
-    return AnalyzerConfig(analysis=analysis, rules=tuple(rules))
+    overrides = _overrides(_table(data.get("overrides"), "overrides"))
+    return AnalyzerConfig(analysis=analysis, rules=tuple(rules), overrides=overrides)
+
+
+def _overrides(data: dict) -> tuple[OverridePolicy, ...]:
+    """Parse ``[overrides."<glob>"]`` tables, keeping file order."""
+    if len(data) > MAX_PATTERNS:
+        raise ConfigError("overrides contains too many patterns.")
+    return tuple(_override(glob, value) for glob, value in data.items())
+
+
+def _override(raw_glob: object, value: object) -> OverridePolicy:
+    # Validate the glob before it is echoed in any message below, so a
+    # hostile key cannot turn a one-line error into something else.
+    if not isinstance(raw_glob, str) or any(ch < " " or ch == "\x7f" for ch in raw_glob):
+        raise ConfigError("overrides contains an invalid pattern.")
+    _validate_pattern(raw_glob, "overrides", allow_rooted=False)
+    glob = raw_glob.replace("\\", "/")
+    name = f"overrides.{glob}"
+    entry = _table(value, name)
+    _reject_unknown(entry, {"disabled", "severity"}, name)
+    return OverridePolicy(
+        glob=glob,
+        disabled=_rule_ids(entry.get("disabled"), f"{name}.disabled"),
+        severity=_severity_table(entry.get("severity"), f"{name}.severity"),
+    )
+
+
+def _rule_ids(value: object, name: str) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ConfigError(f"{name} must be an array of rule IDs.")
+    for rule_id in value:
+        _validate_rule_id(rule_id)
+    return tuple(sorted(set(value)))
+
+
+def _severity_table(value: object, name: str) -> tuple[tuple[str, str], ...]:
+    levels = []
+    for rule_id, level in sorted(_table(value, name).items()):
+        _validate_rule_id(rule_id)
+        severity = _severity(level, f"{name}.{rule_id}")
+        if severity is None:  # Defensive: TOML cannot express a null value.
+            raise ConfigError(f"{name}.{rule_id} must be 'note', 'warning' or 'error'.")
+        levels.append((rule_id, severity))
+    return tuple(levels)
+
+
+def _validate_rule_id(rule_id: object) -> None:
+    if not isinstance(rule_id, str) or not _RULE_ID.fullmatch(rule_id):
+        raise ConfigError(f"Invalid rule ID in configuration: {rule_id!r}.")
+
+
+def _severity(value: object, name: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or value not in _SEVERITY_LEVELS:
+        raise ConfigError(f"{name} must be 'note', 'warning' or 'error'.")
+    return value
 
 
 def _load_gitignore(path: Path, root: Path) -> tuple[str, ...]:
@@ -283,12 +419,23 @@ def _validate_pattern(pattern: str, name: str, *, allow_rooted: bool) -> None:
 
 
 def _glob_matches(pattern: str, path: str) -> bool:
+    compiled = _compile_glob(pattern)
+    return compiled is not None and compiled.match(path) is not None
+
+
+@functools.lru_cache(maxsize=_GLOB_CACHE_SIZE)
+def _compile_glob(pattern: str) -> re.Pattern[str] | None:
+    """Translate one glob to an anchored regex, once per distinct pattern.
+
+    Per-finding policy resolution asks the same patterns thousands of times;
+    without this cache every call would rebuild and recompile the regex.
+    """
     pattern = pattern.replace("\\", "/")
     rooted = pattern.startswith("/")
     pattern = pattern.lstrip("/")
     pattern = pattern.rstrip("/")
     if not pattern:
-        return False
+        return None
 
     body = _translate_glob(pattern)
     if rooted or "/" in pattern:
@@ -296,7 +443,53 @@ def _glob_matches(pattern: str, path: str) -> bool:
     else:
         prefix = r"(?:^|.*/)"
     suffix = r"(?:/.*)?$"
-    return re.match(prefix + body + suffix, path) is not None
+    return re.compile(prefix + body + suffix)
+
+
+@functools.lru_cache(maxsize=_GLOB_CACHE_SIZE)
+def _literal_prefix_length(glob: str) -> int:
+    """Specificity of an override glob: characters before the first wildcard."""
+    for index, character in enumerate(glob):
+        if character in "*?[":
+            return index
+    return len(glob)
+
+
+def _matching_overrides(
+    overrides: tuple[OverridePolicy, ...], rule_id: str, path: str
+) -> tuple[str | None, tuple[str, str] | None]:
+    """Return the most specific disabling glob and ``(glob, level)`` for ``path``.
+
+    Tables are visited in file order and compared with ``>=`` on literal-prefix
+    length, so a later table wins a specificity tie.
+    """
+    disabler: tuple[int, str] | None = None
+    winner: tuple[int, str, str] | None = None
+    for override in overrides:
+        if not _glob_matches(override.glob, path):
+            continue
+        specificity = _literal_prefix_length(override.glob)
+        if rule_id in override.disabled and _at_least(specificity, disabler):
+            disabler = (specificity, override.glob)
+        level = _override_level(override, rule_id)
+        if level is not None and _at_least(specificity, winner):
+            winner = (specificity, override.glob, level)
+    return (
+        None if disabler is None else disabler[1],
+        None if winner is None else (winner[1], winner[2]),
+    )
+
+
+def _at_least(specificity: int, current: tuple | None) -> bool:
+    """``>=`` so that, visiting tables in file order, a later table wins a tie."""
+    return current is None or specificity >= current[0]
+
+
+def _override_level(override: OverridePolicy, rule_id: str) -> str | None:
+    for rule, level in override.severity:
+        if rule == rule_id:
+            return level
+    return None
 
 
 def _translate_glob(pattern: str) -> str:
