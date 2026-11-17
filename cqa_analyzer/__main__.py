@@ -8,6 +8,7 @@ from pathlib import Path
 
 import argparse
 import os
+from dataclasses import dataclass, fields
 
 from . import (
     REPORT_SCHEMA_VERSION,
@@ -340,28 +341,7 @@ def main(argv: list[str] | None = None) -> None:
 
     try:
         with enforce_offline(options.offline):
-            exit_code = _run_analysis(
-                project_path=options.project_path,
-                verbose=options.verbose,
-                output_format=options.output_format,
-                complexity=options.complexity,
-                max_file_size=options.max_file_size,
-                max_files=options.max_files,
-                redact_paths=options.redact_paths,
-                anonymize=options.anonymize,
-                offline=options.offline,
-                cache_dir=options.cache_dir,
-                fail_under=options.fail_under,
-                fail_on=options.fail_on,
-                baseline_path=options.baseline_path,
-                write_baseline_path=options.write_baseline_path,
-                new_findings_only=options.new_findings_only,
-                changed_lines_manifest=options.changed_lines_manifest,
-                strict=options.strict,
-                config_path=options.config_path,
-                no_project_config=options.no_project_config,
-                expect_config_fingerprint=options.expect_config_fingerprint,
-            )
+            exit_code = _run_analysis(AnalysisOptions.from_namespace(options))
     except UsageError as error:
         parser.error(str(error))
     except (OfflineViolationError, CliError) as error:
@@ -375,89 +355,133 @@ class UsageError(Exception):
     """A usage problem detected after parsing (exit 2 through the parser)."""
 
 
+@dataclass(frozen=True, slots=True)
+class AnalysisOptions:
+    """Every analysis flag of the parser, read once from the namespace.
+
+    One value object replaces the twenty keyword arguments ``main()`` used to
+    forward to ``_run_analysis`` and the reporters (3.5.0, R2-1). Field names
+    equal the argparse ``dest`` names so ``from_namespace`` is a plain copy,
+    and each default equals the parser's; ``tests/test_analysis_options.py``
+    locks both.
+    """
+
+    project_path: str
+    verbose: bool = False
+    output_format: str = "text"
+    complexity: bool = False
+    max_file_size: int = DEFAULT_MAX_FILE_SIZE
+    max_files: int = DEFAULT_MAX_FILES
+    cache_dir: Path | None = None
+    redact_paths: bool = False
+    anonymize: bool = False
+    offline: bool = False
+    fail_under: float | None = None
+    fail_on: str | None = None
+    baseline_path: Path | None = None
+    write_baseline_path: Path | None = None
+    new_findings_only: bool = False
+    changed_lines_manifest: Path | None = None
+    strict: bool = False
+    config_path: Path | None = None
+    no_project_config: bool = False
+    expect_config_fingerprint: str | None = None
+
+    @classmethod
+    def from_namespace(cls, namespace: argparse.Namespace) -> AnalysisOptions:
+        return cls(**{field.name: getattr(namespace, field.name) for field in fields(cls)})
+
+
+@dataclass(frozen=True, slots=True)
+class AnalysisResults:
+    """What one run computed, handed whole to the three reporters.
+
+    The reporters used to take these as fifteen to nineteen positional
+    arguments each; nothing here is derived again, the values are the ones
+    ``_run_analysis`` computed, in the order it computed them.
+    """
+
+    project_label: str
+    scanner: CodeScanner
+    anonymizer: ReportAnonymizer | None
+    rater: QualityRater
+    rating: float
+    breakdown: dict
+    signal_scope: dict
+    dsa_found: dict
+    design_found: dict
+    scan_health: dict
+    analysis_health: dict
+    complexity_data: object
+    complexity_health: dict | None
+    reported_findings: list[Finding]
+    baseline_summary: dict | None
+    changed_lines_summary: dict | None
+
+
 def _run_analysis(
-    *,
-    project_path: str,
-    verbose: bool,
-    output_format: str,
-    complexity: bool,
-    max_file_size: int,
-    max_files: int,
-    redact_paths: bool,
-    anonymize: bool,
-    offline: bool,
-    cache_dir: Path | None,
-    fail_under: float | None,
-    fail_on: str | None,
-    baseline_path: Path | None,
-    write_baseline_path: Path | None,
-    new_findings_only: bool,
-    changed_lines_manifest: Path | None,
-    strict: bool,
-    config_path: Path | None = None,
-    no_project_config: bool = False,
-    expect_config_fingerprint: str | None = None,
+    options: AnalysisOptions,
 ) -> int:
-    root = Path(project_path).resolve()
+    root = Path(options.project_path).resolve()
     try:
         configuration = load_config(
             root,
-            config_path=config_path,
-            use_project_config=not no_project_config,
+            config_path=options.config_path,
+            use_project_config=not options.no_project_config,
         )
     except ConfigError as error:
         raise CliError(str(error)) from error
     if (
-        expect_config_fingerprint is not None
-        and configuration.fingerprint != expect_config_fingerprint.strip().lower()
+        options.expect_config_fingerprint is not None
+        and configuration.fingerprint != options.expect_config_fingerprint.strip().lower()
     ):
         # The gate's configuration is not what the workflow pinned. Say so
         # before analysing anything, with a code no other outcome uses.
         console.print(
             "[bold red]Configuration fingerprint mismatch:[/bold red] expected "
-            f"{escape(expect_config_fingerprint)}, effective "
+            f"{escape(options.expect_config_fingerprint)}, effective "
             f"{configuration.fingerprint}. The project's .code-quality.toml "
             "differs from the one this gate was pinned to."
         )
         return EXIT_CONFIG_MISMATCH
 
     changed_line_selection = None
-    if changed_lines_manifest is not None:
+    if options.changed_lines_manifest is not None:
         try:
-            changed_line_selection = load_changed_lines(changed_lines_manifest)
+            changed_line_selection = load_changed_lines(options.changed_lines_manifest)
         except ChangedLinesError as error:
             raise CliError(str(error)) from error
 
     known_fingerprints = None
-    if baseline_path is not None:
+    if options.baseline_path is not None:
         try:
-            known_fingerprints = load_baseline(baseline_path)
+            known_fingerprints = load_baseline(options.baseline_path)
         except BaselineError as error:
             raise CliError(str(error)) from error
 
-    anonymizer = ReportAnonymizer() if anonymize else None
-    project_label = ANONYMIZED_PROJECT if anonymize else root.name
-    internal_redaction = redact_paths and not anonymize
+    anonymizer = ReportAnonymizer() if options.anonymize else None
+    project_label = ANONYMIZED_PROJECT if options.anonymize else root.name
+    internal_redaction = options.redact_paths and not options.anonymize
     registry = create_default_registry()
     try:
-        reporter = registry.negotiate_reporter(output_format)
+        reporter = registry.negotiate_reporter(options.output_format)
     except LookupError as error:
         available = ", ".join(item["format_name"] for item in registry.capabilities()["reporters"])
         raise UsageError(
-            f"Unknown output format {output_format!r}; choose from {available}"
+            f"Unknown output format {options.output_format!r}; choose from {available}"
         ) from error
 
     cache_store = None
-    if cache_dir is not None:
+    if options.cache_dir is not None:
         try:
-            cache_store = CacheStore(cache_dir)
+            cache_store = CacheStore(options.cache_dir)
         except CacheError as error:
             raise CliError(str(error)) from error
 
     scanner = CodeScanner(
         root,
-        max_file_size=max_file_size,
-        max_files=max_files,
+        max_file_size=options.max_file_size,
+        max_files=options.max_files,
         redact_paths=internal_redaction,
         registry=registry,
         configuration=configuration,
@@ -482,9 +506,9 @@ def _run_analysis(
     signal_scope = scanner.architecture_signal_scope()
 
     baseline_written = False
-    if write_baseline_path is not None:
+    if options.write_baseline_path is not None:
         try:
-            write_baseline(write_baseline_path, scanner.findings)
+            write_baseline(options.write_baseline_path, scanner.findings)
         except BaselineError as error:
             raise CliError(str(error)) from error
         baseline_written = True
@@ -495,7 +519,7 @@ def _run_analysis(
         written=baseline_written,
     )
     baseline_selected_findings = (
-        list(comparison.new_findings) if new_findings_only else scanner.findings
+        list(comparison.new_findings) if options.new_findings_only else scanner.findings
     )
     changed_lines_summary = None
     if changed_line_selection is None:
@@ -518,81 +542,44 @@ def _run_analysis(
         )
     baseline_summary = (
         comparison.as_dict()
-        if baseline_path is not None or write_baseline_path is not None
+        if options.baseline_path is not None or options.write_baseline_path is not None
         else None
     )
 
     complexity_data = None
     complexity_health = None
-    if complexity:
+    if options.complexity:
         result = scanner.run_project_provider("python", "complexity")
         if result is not None:
             complexity_data = result.payload
             complexity_health = dict(result.health)
 
-    scan_health = scanner.scan_health()
-    analysis_health = scanner.analysis_authority()
+    results = AnalysisResults(
+        project_label=project_label,
+        scanner=scanner,
+        anonymizer=anonymizer,
+        rater=rater,
+        rating=rating,
+        breakdown=breakdown,
+        signal_scope=signal_scope,
+        dsa_found=dsa_found,
+        design_found=design_found,
+        scan_health=scanner.scan_health(),
+        analysis_health=scanner.analysis_authority(),
+        complexity_data=complexity_data,
+        complexity_health=complexity_health,
+        reported_findings=reported_findings,
+        baseline_summary=baseline_summary,
+        changed_lines_summary=changed_lines_summary,
+    )
 
-    if output_format == "json":
-        report = AnalysisReport(
-            structured=_build_json_report(
-                project_label,
-                rating,
-                signal_scope,
-                rater,
-                breakdown,
-                dsa_found,
-                design_found,
-                scanner,
-                scan_health,
-                analysis_health,
-                complexity_data,
-                complexity_health,
-                verbose,
-                reported_findings,
-                baseline_summary,
-                changed_lines_summary,
-                anonymizer,
-                offline,
-                redact_paths,
-            )
-        )
-    elif output_format == "sarif":
-        report = AnalysisReport(
-            sarif=_build_sarif_run(
-                scanner,
-                analysis_health,
-                reported_findings,
-                baseline_summary,
-                changed_lines_summary,
-                anonymizer,
-                offline,
-                redact_paths,
-                new_findings_only,
-            )
-        )
+    if options.output_format == "json":
+        report = AnalysisReport(structured=_build_json_report(results, options))
+    elif options.output_format == "sarif":
+        report = AnalysisReport(sarif=_build_sarif_run(results, options))
     else:
         with console.capture() as capture:
-            _emit_text(
-                project_label,
-                rating,
-                signal_scope,
-                rater,
-                breakdown,
-                dsa_found,
-                design_found,
-                scanner,
-                scan_health,
-                analysis_health,
-                complexity_data,
-                verbose,
-                reported_findings,
-                baseline_summary,
-                changed_lines_summary,
-                anonymizer,
-                offline,
-                redact_paths,
-            )
+            _emit_text(results, options)
         report = AnalysisReport(text=capture.get())
     rendered = reporter.render(report).decode("utf-8")
     sys.stdout.write(rendered if rendered.endswith("\n") else rendered + "\n")
@@ -601,11 +588,9 @@ def _run_analysis(
         scanner,
         rating,
         signal_scope,
-        fail_under,
-        strict,
+        options,
         complexity_health=complexity_health,
         findings=reported_findings,
-        fail_on=fail_on,
         changed_lines_summary=changed_lines_summary,
     )
 
@@ -638,28 +623,26 @@ def _exit_code(
     scanner: CodeScanner,
     rating: float,
     signal_scope: dict,
-    fail_under: float | None,
-    strict: bool,
+    options: AnalysisOptions,
     complexity_health: dict | None = None,
     findings=None,
-    fail_on: str | None = None,
     changed_lines_summary: dict | None = None,
 ) -> int:
     if scanner.discovery.source_candidates == 0:
         return EXIT_NOTHING_ANALYZED
     if scanner.files_successfully_analyzed == 0:
         return EXIT_COVERAGE_GAP
-    if strict and (
+    if options.strict and (
         scanner.has_coverage_gaps
         or _health_has_gaps(complexity_health)
         or bool((changed_lines_summary or {}).get("files_not_analyzed"))
     ):
         return EXIT_COVERAGE_GAP
-    if fail_under is not None and not signal_scope["applicable"]:
+    if options.fail_under is not None and not signal_scope["applicable"]:
         return EXIT_SCORE_NOT_APPLICABLE
-    if fail_under is not None and rating < fail_under:
+    if options.fail_under is not None and rating < options.fail_under:
         return EXIT_BELOW_THRESHOLD
-    if fail_on is not None and _findings_reach_severity(findings or [], fail_on):
+    if options.fail_on is not None and _findings_reach_severity(findings or [], options.fail_on):
         return EXIT_FINDINGS
     return EXIT_OK
 
@@ -747,17 +730,10 @@ def _privacy_payload(
     }
 
 
-def _build_sarif_run(
-    scanner,
-    analysis_health,
-    reported_findings,
-    baseline_summary,
-    changed_lines_summary,
-    anonymizer,
-    offline,
-    redact_paths,
-    new_findings_only,
-) -> SarifRun:
+def _build_sarif_run(results: AnalysisResults, options: AnalysisOptions) -> SarifRun:
+    scanner = results.scanner
+    anonymizer = results.anonymizer
+    reported_findings = results.reported_findings
     if anonymizer is None:
         findings = tuple(
             _attach_fingerprints(
@@ -779,21 +755,21 @@ def _build_sarif_run(
             anonymizer.file(identity)
         findings = tuple(anonymizer.finding(finding) for finding in reported_findings)
 
-    baseline_selection = {"newFindingsOnly": new_findings_only}
-    if baseline_summary is not None:
-        baseline_selection.update(baseline_summary)
+    baseline_selection = {"newFindingsOnly": options.new_findings_only}
+    if results.baseline_summary is not None:
+        baseline_selection.update(results.baseline_summary)
     return SarifRun(
         analyzer_version=__version__,
         configuration_fingerprint=scanner.configuration.fingerprint,
-        analysis_health=analysis_health,
+        analysis_health=results.analysis_health,
         privacy=_privacy_payload(
             anonymizer,
-            offline,
-            redact_paths,
+            options.offline,
+            options.redact_paths,
             scanner.cache_enabled,
         ),
         baseline_selection=baseline_selection,
-        changed_line_selection=changed_lines_summary,
+        changed_line_selection=results.changed_lines_summary,
         findings=findings,
         suppressed=tuple(_suppressed_payload(scanner, anonymizer)),
     )
@@ -818,44 +794,32 @@ def _project_analysis_payload(scanner, anonymizer: ReportAnonymizer | None) -> d
 
 
 def _build_json_report(
-    project_label,
-    rating,
-    signal_scope,
-    rater,
-    breakdown,
-    dsa_found,
-    design_found,
-    scanner,
-    scan_health,
-    analysis_health,
-    complexity_data,
-    complexity_health,
-    verbose,
-    reported_findings,
-    baseline_summary,
-    changed_lines_summary,
-    anonymizer,
-    offline,
-    redact_paths,
+    results: AnalysisResults,
+    options: AnalysisOptions,
 ):
+    scanner = results.scanner
+    anonymizer = results.anonymizer
+    reported_findings = results.reported_findings
     if anonymizer is None:
-        health_payload = scan_health
+        health_payload = results.scan_health
         package_payload = scanner.package_intelligence.as_dict()
         finding_payload = _attach_fingerprints(
             [finding.as_dict() for finding in reported_findings],
             reported_findings,
             scanner.findings,
         )
-        complexity_payload = complexity_data
+        complexity_payload = results.complexity_data
     else:
-        health_payload = anonymizer.scan_health(scan_health)
+        health_payload = anonymizer.scan_health(results.scan_health)
         package_payload = anonymizer.package(scanner.package_intelligence)
         finding_payload = [anonymizer.finding(finding) for finding in reported_findings]
-        complexity_payload = anonymizer.complexity(complexity_data)
+        complexity_payload = anonymizer.complexity(results.complexity_data)
 
-    score_applicable = signal_scope["applicable"]
-    score_value = rating if score_applicable else None
-    score_label = rater.get_rating_label(rating) if score_applicable else "Not applicable"
+    score_applicable = results.signal_scope["applicable"]
+    score_value = results.rating if score_applicable else None
+    score_label = (
+        results.rater.get_rating_label(results.rating) if score_applicable else "Not applicable"
+    )
     output = {
         "schema_version": REPORT_SCHEMA_VERSION,
         "analyzer_version": __version__,
@@ -863,20 +827,20 @@ def _build_json_report(
         "scoring_policy_version": SCORING_POLICY_VERSION,
         "configuration_fingerprint": scanner.configuration.fingerprint,
         "language_adapters": scanner.registry.capabilities()["languages"],
-        "project": project_label,
+        "project": results.project_label,
         "privacy": _privacy_payload(
             anonymizer,
-            offline,
-            redact_paths,
+            options.offline,
+            options.redact_paths,
             scanner.cache_enabled,
         ),
         "architecture_signal_score": score_value,
         "architecture_signal_label": score_label,
-        "architecture_signal_scope": signal_scope,
+        "architecture_signal_scope": results.signal_scope,
         "rating": score_value,
         "label": score_label,
-        "breakdown": breakdown,
-        "analysis_health": analysis_health,
+        "breakdown": results.breakdown,
+        "analysis_health": results.analysis_health,
         "scan_health": health_payload,
         "package_intelligence": package_payload,
         "project_analyses": _project_analysis_payload(scanner, anonymizer),
@@ -884,64 +848,52 @@ def _build_json_report(
         "findings": finding_payload,
         "suppressed_findings": _suppressed_payload(scanner, anonymizer),
         "dsa_patterns": _pattern_payload(
-            dsa_found,
+            results.dsa_found,
             _signal_definitions(scanner, "architecture.dsa", DSA_PATTERNS),
             scanner.dsa_evidence,
-            verbose=verbose,
+            verbose=options.verbose,
             anonymizer=anonymizer,
         ),
         "design_patterns": _pattern_payload(
-            design_found,
+            results.design_found,
             _signal_definitions(
                 scanner,
                 "architecture.design",
                 SYSTEM_DESIGN_PATTERNS,
             ),
             scanner.design_evidence,
-            verbose=verbose,
+            verbose=options.verbose,
             anonymizer=anonymizer,
         ),
     }
-    if baseline_summary is not None:
-        output["baseline"] = baseline_summary
-    if changed_lines_summary is not None:
-        output["changed_lines"] = changed_lines_summary
+    if results.baseline_summary is not None:
+        output["baseline"] = results.baseline_summary
+    if results.changed_lines_summary is not None:
+        output["changed_lines"] = results.changed_lines_summary
     if complexity_payload:
         output["complexity"] = complexity_payload
-    if complexity_health:
+    if results.complexity_health:
         output["complexity_health"] = (
-            anonymizer.scan_health(complexity_health)
+            anonymizer.scan_health(results.complexity_health)
             if anonymizer is not None
-            else complexity_health
+            else results.complexity_health
         )
     return output
 
 
 def _emit_text(
-    project_label,
-    rating,
-    signal_scope,
-    rater,
-    breakdown,
-    dsa_found,
-    design_found,
-    scanner,
-    scan_health,
-    analysis_health,
-    complexity_data,
-    verbose,
-    reported_findings,
-    baseline_summary,
-    changed_lines_summary,
-    anonymizer,
-    offline,
-    redact_paths,
+    results: AnalysisResults,
+    options: AnalysisOptions,
 ):
-    console.print(f"\n[bold blue]Analyzing:[/bold blue] {_safe(project_label)}\n")
+    scanner = results.scanner
+    anonymizer = results.anonymizer
+    rating = results.rating
+    breakdown = results.breakdown
+    console.print(f"\n[bold blue]Analyzing:[/bold blue] {_safe(results.project_label)}\n")
     privacy = _privacy_payload(
         anonymizer,
-        offline,
-        redact_paths,
+        options.offline,
+        options.redact_paths,
         scanner.cache_enabled,
     )
     console.print(
@@ -955,6 +907,7 @@ def _emit_text(
 
     console.print(f"[dim]Configuration: {scanner.configuration.fingerprint}[/dim]\n")
 
+    analysis_health = results.analysis_health
     authority_label = "yes" if analysis_health["authoritative"] else "no"
     complete_label = "yes" if analysis_health["complete"] else "no"
     console.print(
@@ -970,18 +923,18 @@ def _emit_text(
             + ", ".join(analysis_health["reasons"])
         )
 
-    if signal_scope["applicable"]:
+    if results.signal_scope["applicable"]:
         rating_color = "red" if rating < 4 else "yellow" if rating < 7 else "green"
         console.print(
             Panel(
                 f"[bold {rating_color}]{rating}/10[/bold {rating_color}]\n"
-                f"{rater.get_rating_label(rating)}",
+                f"{results.rater.get_rating_label(rating)}",
                 title="[bold]Architecture Signal Score[/bold]",
                 expand=False,
             )
         )
     else:
-        scope_languages = ", ".join(signal_scope["languages"])
+        scope_languages = ", ".join(results.signal_scope["languages"])
         console.print(
             Panel(
                 "[bold]Not applicable[/bold]\n"
@@ -1007,7 +960,11 @@ def _emit_text(
 
     for warning in breakdown.get("warnings", []):
         console.print(f"[yellow]![/yellow] {warning}")
-    health_payload = anonymizer.scan_health(scan_health) if anonymizer is not None else scan_health
+    health_payload = (
+        anonymizer.scan_health(results.scan_health)
+        if anonymizer is not None
+        else results.scan_health
+    )
     _print_scan_health(health_payload, scanner)
     if breakdown.get("warnings") or scanner.has_coverage_gaps:
         console.print()
@@ -1018,46 +975,48 @@ def _emit_text(
         else scanner.package_intelligence
     )
     finding_payload = (
-        [anonymizer.finding(finding) for finding in reported_findings]
+        [anonymizer.finding(finding) for finding in results.reported_findings]
         if anonymizer is not None
-        else reported_findings
+        else results.reported_findings
     )
     _print_package_intelligence(package_payload)
-    _print_baseline_summary(baseline_summary)
-    _print_changed_lines_summary(changed_lines_summary)
-    _print_not_analyzed(changed_lines_summary)
+    _print_baseline_summary(results.baseline_summary)
+    _print_changed_lines_summary(results.changed_lines_summary)
+    _print_not_analyzed(results.changed_lines_summary)
     _print_findings(finding_payload)
     _print_pattern_table(
         "DSA Patterns Detected",
         "cyan",
-        dsa_found,
+        results.dsa_found,
         _signal_definitions(scanner, "architecture.dsa", DSA_PATTERNS),
         scanner.dsa_evidence,
-        verbose,
+        options.verbose,
         anonymizer,
     )
     _print_pattern_table(
         "System Design Patterns Detected",
         "magenta",
-        design_found,
+        results.design_found,
         _signal_definitions(
             scanner,
             "architecture.design",
             SYSTEM_DESIGN_PATTERNS,
         ),
         scanner.design_evidence,
-        verbose,
+        options.verbose,
         anonymizer,
     )
 
-    if not dsa_found and not design_found:
+    if not results.dsa_found and not results.design_found:
         console.print("[yellow]No significant patterns detected.[/yellow]")
 
-    if complexity_data:
+    if results.complexity_data:
         projected_complexity = (
-            anonymizer.complexity(complexity_data) if anonymizer is not None else complexity_data
+            anonymizer.complexity(results.complexity_data)
+            if anonymizer is not None
+            else results.complexity_data
         )
-        _print_complexity(projected_complexity, verbose)
+        _print_complexity(projected_complexity, options.verbose)
 
 
 def _print_scan_health(scan_health, scanner):

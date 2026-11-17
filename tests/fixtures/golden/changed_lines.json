@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0.0",
+  "files": [
+    {
+      "path": "app/handlers.py",
+      "ranges": [
+        {
+          "start_line": 36,
+          "end_line": 44
+        }
+      ]
+    },
+    {
+      "path": "app/util/missing.py",
+      "ranges": [
+        {
+          "start_line": 1,
+          "end_line": 5
+        }
+      ]
+    },
+    {
+      "path": "docs/notes.txt",
+      "ranges": [
+        {
+          "start_line": 1,
+          "end_line": 1
+        }
+      ]
+    }
+  ]
+}

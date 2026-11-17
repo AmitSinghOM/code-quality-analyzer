@@ -1,0 +1,5 @@
+[project]
+name = "golden-project"
+version = "0.2.0"
+description = "Synthetic fixture for the CLI golden tests. Not a real project."
+dependencies = ["pyyaml", "requests"]

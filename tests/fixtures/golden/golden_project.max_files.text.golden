@@ -1,0 +1,30 @@
+
+Analyzing: golden_project
+Privacy: anonymized=no | paths redacted=no | offline enforced=yes | cache enabled=no
+Configuration: 7f2042db6205d44e3ce413ff9080011ffc8edd6904b18c87b1268e1331ccdf62
+Analysis: authoritative=no | complete=no | successful=2/2
+! Analysis is non-authoritative: discovery_truncated
+┌─ Architecture Signal Score ──────┐
+│ 1.0/10                           │
+│ Poor - Minimal value, basic code │
+└──────────────────────────────────┘
+
+Files scanned: 2 | Lines: 17 | Languages: python=2
+DSA Score: 1.0 | Design Score: 1.0 | Maturity: 0.0
+! Project is very small; pattern-based rating is noisy
+! File limit reached — results cover part of the project only (raise --max-files)
+
+┌─ Package Intelligence ────┐
+│ Project: golden-project   │
+│ Layout: flat (.)          │
+│ Modules: 2                │
+│ Declared dependencies: 2  │
+│ Circular import groups: 0 │
+└───────────────────────────┘
+
+Actionable Findings
+Rule        Severity  Location      Message                                                                Remediation
+──────────  ────────  ────────────  ─────────────────────────────────────────────────────────────────────  ──────────────────────────────────────────────────────────────────────────────────────────────────────
+PY-SEC-005  warning   late.py:11:5  'token' is produced by the non-cryptographic random module (CWE-330).  Generate tokens, passwords and nonces with the secrets module (secrets.token_urlsafe, secrets.choice).
+
+No significant patterns detected.

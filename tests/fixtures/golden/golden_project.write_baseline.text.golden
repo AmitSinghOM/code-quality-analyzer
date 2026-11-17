@@ -1,0 +1,51 @@
+
+Analyzing: golden_project
+Privacy: anonymized=no | paths redacted=no | offline enforced=yes | cache enabled=no
+Configuration: 7f2042db6205d44e3ce413ff9080011ffc8edd6904b18c87b1268e1331ccdf62
+Analysis: authoritative=yes | complete=yes | successful=4/4
+┌─ Architecture Signal Score ────────────┐
+│ 2.9/10                                 │
+│ Below Average - Simple structures only │
+└────────────────────────────────────────┘
+
+Files scanned: 4 | Lines: 71 | Languages: python=4
+DSA Score: 3.65 | Design Score: 2.8 | Maturity: 0.05
+! Project is very small; pattern-based rating is noisy
+i 1 finding(s) suppressed by in-source directives (PY-COR-002=1); listed under suppressed_findings in JSON/SARIF
+
+┌─ Package Intelligence ────┐
+│ Project: golden-project   │
+│ Layout: flat (.)          │
+│ Modules: 4                │
+│ Declared dependencies: 2  │
+│ Circular import groups: 0 │
+└───────────────────────────┘
+
+┌─ Finding Baseline ───┐
+│ Loaded: False        │
+│ Written: True        │
+│ Current findings: 5  │
+│ New findings: 5      │
+└──────────────────────┘
+
+Actionable Findings
+Rule          Severity  Location                Message                                                                   Remediation
+────────────  ────────  ──────────────────────  ────────────────────────────────────────────────────────────────────────  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+PY-COR-001    warning   app/handlers.py:27:44   Argument 'tags' in 'handle_order' uses a mutable list default.            Use None as the default and create a new value inside the function.
+PY-SEC-003    warning   app/handlers.py:38:12   eval() evaluates a string built at runtime (CWE-95).                      Use ast.literal_eval for data, a dispatch table for behaviour, or importlib for module names; never evaluate runtime strings.
+PY-SEC-002    warning   app/handlers.py:42:5    subprocess.run(shell=True) runs a command assembled at runtime (CWE-78).  Pass the command as an argument list without shell=True; quote with shlex.quote if a shell is unavoidable.
+PY-MAINT-004  warning   app/handlers.py:45:1    Function 'ship' has 8 parameters (limit 7).                               Group related inputs in a cohesive value object or split the responsibility.
+PY-COR-006    warning   app/util/paths.py:7:14  Resource from 'builtins.open' lacks guaranteed cleanup.                   Use a context manager or guarantee cleanup with try/finally.
+
+DSA Patterns Detected
+Pattern        Description                                           Files
+─────────────  ────────────────────────────────────────────────────  ─────
+sorting        Sorting algorithms and ordered operations             1
+heap_priority  Heap/priority queue for efficient min/max operations  1
+
+System Design Patterns Detected
+Pattern         Description                Files
+──────────────  ─────────────────────────  ─────
+error_handling  Structured error handling  1
+logging         Logging implementation     1
+

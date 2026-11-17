@@ -1,0 +1,334 @@
+{
+  "schema_version": "1.14.0",
+  "analyzer_version": "3.4.2",
+  "ruleset_version": "2.27.0",
+  "scoring_policy_version": "2.1.0",
+  "configuration_fingerprint": "7f2042db6205d44e3ce413ff9080011ffc8edd6904b18c87b1268e1331ccdf62",
+  "language_adapters": {
+    "c_cpp": "1.0.0",
+    "csharp": "1.0.0",
+    "go": "1.1.0",
+    "java": "1.0.0",
+    "kotlin": "1.0.0",
+    "python": "1.0.0",
+    "rust": "1.0.0",
+    "typescript": "1.0.0"
+  },
+  "project": "golden_project",
+  "privacy": {
+    "anonymized": false,
+    "paths_redacted": false,
+    "offline_enforced": true,
+    "cache_enabled": false
+  },
+  "architecture_signal_score": 2.9,
+  "architecture_signal_label": "Below Average - Simple structures only",
+  "architecture_signal_scope": {
+    "languages": [
+      "c_cpp",
+      "csharp",
+      "go",
+      "java",
+      "kotlin",
+      "python",
+      "rust",
+      "typescript"
+    ],
+    "applicable": true,
+    "by_language": {
+      "python": {
+        "files": 5,
+        "dsa_patterns": [
+          "heap_priority",
+          "sorting"
+        ],
+        "design_patterns": [
+          "error_handling",
+          "logging"
+        ]
+      }
+    }
+  },
+  "rating": 2.9,
+  "label": "Below Average - Simple structures only",
+  "breakdown": {
+    "dsa_score": 3.65,
+    "design_score": 2.8,
+    "maturity_score": 0.05,
+    "dsa_patterns_count": 2,
+    "design_patterns_count": 2,
+    "files_scanned": 5,
+    "total_lines": 83,
+    "coverage_gap_ratio": 0.0,
+    "warnings": [
+      "Project is very small; pattern-based rating is noisy"
+    ]
+  },
+  "analysis_health": {
+    "complete": true,
+    "authoritative": true,
+    "source_candidates": 5,
+    "files_read": 5,
+    "files_successfully_analyzed": 5,
+    "completeness_ratio": 1.0,
+    "reasons": []
+  },
+  "scan_health": {
+    "source_candidates": 5,
+    "files_found": 5,
+    "total_skipped": 0,
+    "skipped_by_reason": {},
+    "skipped_examples": {},
+    "truncated": false,
+    "truncated_reasons": [],
+    "bytes_read": 2228,
+    "pruned_directories": 0,
+    "pruned_examples": [],
+    "excluded_generated": {},
+    "excluded_generated_examples": {},
+    "files_scanned": 5,
+    "files_successfully_analyzed": 5,
+    "unparsed_files": 0,
+    "unparsed_examples": [],
+    "languages": {
+      "python": 5
+    },
+    "suppressed": {
+      "count": 1,
+      "by_rule": {
+        "PY-COR-002": 1
+      }
+    },
+    "package_analysis": {
+      "errors": 0,
+      "complete": true
+    },
+    "project_analysis": {
+      "c_cpp:complexity": "<install-dependent: tree-sitter availability>",
+      "c_cpp:duplication": "<install-dependent: tree-sitter availability>",
+      "c_cpp:package": "<install-dependent: tree-sitter availability>",
+      "csharp:package": "<install-dependent: tree-sitter availability>",
+      "go:complexity": "<install-dependent: tree-sitter availability>",
+      "go:duplication": "<install-dependent: tree-sitter availability>",
+      "go:package-graph": "<install-dependent: tree-sitter availability>",
+      "java:package": "<install-dependent: tree-sitter availability>",
+      "kotlin:package": "<install-dependent: tree-sitter availability>",
+      "python:duplication": "<install-dependent: tree-sitter availability>",
+      "python:package": "<install-dependent: tree-sitter availability>",
+      "rust:complexity": "<install-dependent: tree-sitter availability>",
+      "rust:duplication": "<install-dependent: tree-sitter availability>",
+      "rust:package": "<install-dependent: tree-sitter availability>",
+      "typescript:package": "<install-dependent: tree-sitter availability>"
+    }
+  },
+  "package_intelligence": {
+    "pyproject_present": true,
+    "metadata_valid": true,
+    "project_name": "golden-project",
+    "requires_python": null,
+    "build_backend": null,
+    "dependencies": [
+      "pyyaml",
+      "requests"
+    ],
+    "optional_dependencies": {},
+    "scripts": {},
+    "layout": "flat",
+    "source_roots": [
+      "."
+    ],
+    "modules": [
+      "app",
+      "app.handlers",
+      "app.util",
+      "app.util.paths",
+      "late"
+    ],
+    "import_graph": {
+      "app": [
+        "app.handlers"
+      ],
+      "app.handlers": [
+        "app.util.paths"
+      ],
+      "app.util": [],
+      "app.util.paths": [],
+      "late": []
+    },
+    "circular_imports": []
+  },
+  "project_analyses": {
+    "c_cpp:complexity": "<install-dependent: tree-sitter availability>",
+    "c_cpp:duplication": "<install-dependent: tree-sitter availability>",
+    "c_cpp:package": "<install-dependent: tree-sitter availability>",
+    "csharp:package": "<install-dependent: tree-sitter availability>",
+    "go:complexity": "<install-dependent: tree-sitter availability>",
+    "go:duplication": "<install-dependent: tree-sitter availability>",
+    "go:package-graph": "<install-dependent: tree-sitter availability>",
+    "java:package": "<install-dependent: tree-sitter availability>",
+    "kotlin:package": "<install-dependent: tree-sitter availability>",
+    "python:duplication": "<install-dependent: tree-sitter availability>",
+    "python:package": "<install-dependent: tree-sitter availability>",
+    "rust:complexity": "<install-dependent: tree-sitter availability>",
+    "rust:duplication": "<install-dependent: tree-sitter availability>",
+    "rust:package": "<install-dependent: tree-sitter availability>",
+    "typescript:package": "<install-dependent: tree-sitter availability>"
+  },
+  "finding_summary": {
+    "total": 6,
+    "by_severity": {
+      "warning": 6
+    },
+    "by_category": {
+      "correctness": 2,
+      "maintainability": 1,
+      "security": 3
+    }
+  },
+  "findings": [
+    {
+      "rule_id": "PY-COR-001",
+      "category": "correctness",
+      "severity": "warning",
+      "confidence": "high",
+      "message": "Argument 'tags' in 'handle_order' uses a mutable list default.",
+      "location": {
+        "path": "app/handlers.py",
+        "line": 27,
+        "column": 44,
+        "end_line": 27,
+        "end_column": 46
+      },
+      "remediation": "Use None as the default and create a new value inside the function.",
+      "fingerprint": "a2a52f13d353bc847e861803a491789c19ab0ea93ace433fc1378bd9ee609c5d"
+    },
+    {
+      "rule_id": "PY-SEC-003",
+      "category": "security",
+      "severity": "warning",
+      "confidence": "high",
+      "message": "eval() evaluates a string built at runtime (CWE-95).",
+      "location": {
+        "path": "app/handlers.py",
+        "line": 38,
+        "column": 12,
+        "end_line": 38,
+        "end_column": 26
+      },
+      "remediation": "Use ast.literal_eval for data, a dispatch table for behaviour, or importlib for module names; never evaluate runtime strings.",
+      "fingerprint": "31d06f00f5e36f5b3e0bb326f79ee6b73984ac5236f72795a5e3b7096e51ba5b"
+    },
+    {
+      "rule_id": "PY-SEC-002",
+      "category": "security",
+      "severity": "warning",
+      "confidence": "medium",
+      "message": "subprocess.run(shell=True) runs a command assembled at runtime (CWE-78).",
+      "location": {
+        "path": "app/handlers.py",
+        "line": 42,
+        "column": 5,
+        "end_line": 42,
+        "end_column": 73
+      },
+      "remediation": "Pass the command as an argument list without shell=True; quote with shlex.quote if a shell is unavoidable.",
+      "fingerprint": "4ca0c1e56ccd422887c5e8392a1bdd330ba88b281a8aadba264e13c27f1330f7"
+    },
+    {
+      "rule_id": "PY-MAINT-004",
+      "category": "maintainability",
+      "severity": "warning",
+      "confidence": "high",
+      "message": "Function 'ship' has 8 parameters (limit 7).",
+      "location": {
+        "path": "app/handlers.py",
+        "line": 45,
+        "column": 1
+      },
+      "remediation": "Group related inputs in a cohesive value object or split the responsibility.",
+      "fingerprint": "57cd5f848d2114ef6fcae7357c86ded4d08c554b5d2dd643cc293ef998a3281f"
+    },
+    {
+      "rule_id": "PY-COR-006",
+      "category": "correctness",
+      "severity": "warning",
+      "confidence": "high",
+      "message": "Resource from 'builtins.open' lacks guaranteed cleanup.",
+      "location": {
+        "path": "app/util/paths.py",
+        "line": 7,
+        "column": 14,
+        "end_line": 7,
+        "end_column": 24
+      },
+      "remediation": "Use a context manager or guarantee cleanup with try/finally.",
+      "fingerprint": "368bec6500f2b69cf4398ebf18704b2b77880e372b9fe9090e45a34cfe96b36d"
+    },
+    {
+      "rule_id": "PY-SEC-005",
+      "category": "security",
+      "severity": "warning",
+      "confidence": "medium",
+      "message": "'token' is produced by the non-cryptographic random module (CWE-330).",
+      "location": {
+        "path": "late.py",
+        "line": 11,
+        "column": 5,
+        "end_line": 11,
+        "end_column": 68
+      },
+      "remediation": "Generate tokens, passwords and nonces with the secrets module (secrets.token_urlsafe, secrets.choice).",
+      "fingerprint": "441010de4c822cd92a8fd82a32315b3fb00eba23943712976f787c295b5f2412"
+    }
+  ],
+  "suppressed_findings": [
+    {
+      "rule_id": "PY-COR-002",
+      "category": "correctness",
+      "severity": "warning",
+      "confidence": "high",
+      "message": "Exception handler catches Exception.",
+      "location": {
+        "path": "app/handlers.py",
+        "line": 31,
+        "column": 12,
+        "end_line": 31,
+        "end_column": 21
+      },
+      "remediation": "Catch the narrow exception types the operation can recover from.",
+      "suppression_reason": "archive is best effort"
+    }
+  ],
+  "dsa_patterns": {
+    "sorting": {
+      "files": [
+        "app/handlers.py"
+      ],
+      "file_count": 1,
+      "description": "Sorting algorithms and ordered operations"
+    },
+    "heap_priority": {
+      "files": [
+        "app/handlers.py"
+      ],
+      "file_count": 1,
+      "description": "Heap/priority queue for efficient min/max operations"
+    }
+  },
+  "design_patterns": {
+    "error_handling": {
+      "files": [
+        "app/handlers.py"
+      ],
+      "file_count": 1,
+      "description": "Structured error handling"
+    },
+    "logging": {
+      "files": [
+        "app/handlers.py"
+      ],
+      "file_count": 1,
+      "description": "Logging implementation"
+    }
+  }
+}

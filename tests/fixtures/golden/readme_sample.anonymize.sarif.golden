@@ -1,0 +1,200 @@
+{
+  "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/cs01/schemas/sarif-schema-2.1.0.json",
+  "runs": [
+    {
+      "properties": {
+        "analysisHealth": {
+          "authoritative": true,
+          "complete": true,
+          "completeness_ratio": 1.0,
+          "files_read": 3,
+          "files_successfully_analyzed": 3,
+          "reasons": [],
+          "source_candidates": 3
+        },
+        "baselineSelection": {
+          "newFindingsOnly": false
+        },
+        "configurationFingerprint": "7f2042db6205d44e3ce413ff9080011ffc8edd6904b18c87b1268e1331ccdf62",
+        "privacy": {
+          "anonymized": true,
+          "cache_enabled": false,
+          "offline_enforced": true,
+          "paths_redacted": true
+        }
+      },
+      "results": [
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file-0001"
+                },
+                "region": {
+                  "endColumn": 24,
+                  "endLine": 16,
+                  "startColumn": 14,
+                  "startLine": 16
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Finding reported by PY-COR-006."
+          },
+          "properties": {
+            "category": "correctness",
+            "confidence": "high",
+            "remediation": "Review the local rule documentation for remediation guidance."
+          },
+          "ruleId": "PY-COR-006",
+          "ruleIndex": 1
+        },
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file-0001"
+                },
+                "region": {
+                  "endColumn": 66,
+                  "endLine": 24,
+                  "startColumn": 24,
+                  "startLine": 24
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Finding reported by PY-SEC-004."
+          },
+          "properties": {
+            "category": "security",
+            "confidence": "high",
+            "remediation": "Review the local rule documentation for remediation guidance."
+          },
+          "ruleId": "PY-SEC-004",
+          "ruleIndex": 2
+        },
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file-0001"
+                },
+                "region": {
+                  "endColumn": 25,
+                  "endLine": 27,
+                  "startColumn": 16,
+                  "startLine": 27
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Finding reported by PY-COR-002."
+          },
+          "properties": {
+            "category": "correctness",
+            "confidence": "high",
+            "remediation": "Review the local rule documentation for remediation guidance."
+          },
+          "ruleId": "PY-COR-002",
+          "ruleIndex": 0
+        }
+      ],
+      "tool": {
+        "driver": {
+          "name": "Code Quality Analyzer",
+          "rules": [
+            {
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "fullDescription": {
+                "text": "A broad exception handler can hide failures it cannot recover from."
+              },
+              "help": {
+                "markdown": "**Broad exception handler** (`PY-COR-002`)\n\nA broad exception handler can hide failures it cannot recover from.\n\n**Remediation:** Catch the narrow exception types the operation can recover from.\n\n**Not reported when:**\n\n- The handler catches a specific exception class rather than Exception or BaseException.\n- The handler body is only `pass`/`...` (a bare `except:`, `except Exception: pass`, ...): PY-COR-003 reports the swallow and one handler yields one finding, not two.\n- The handler ends with a bare `raise` or `raise <bound name>` (no `from`): `except BaseException: cleanup(); raise` is a `finally` with access to the exception and the only way to guarantee cleanup on KeyboardInterrupt; ruff BLE001 exempts the same shape. Logging without re-raising, or wrapping in a new exception type, is still reported.\n\n[PY-COR-002 in the rule reference](https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.4.2/docs/RULES.md#py-cor-002-broad-exception-handler)",
+                "text": "Catch the narrow exception types the operation can recover from."
+              },
+              "helpUri": "https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.4.2/docs/RULES.md#py-cor-002-broad-exception-handler",
+              "id": "PY-COR-002",
+              "name": "broad-exception-handler",
+              "properties": {
+                "category": "correctness",
+                "confidence": "high",
+                "defaultSeverity": "warning",
+                "language": "python"
+              },
+              "shortDescription": {
+                "text": "Broad exception handler"
+              }
+            },
+            {
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "fullDescription": {
+                "text": "A locally acquired resource is not protected by structural cleanup."
+              },
+              "help": {
+                "markdown": "**Resource without guaranteed cleanup** (`PY-COR-006`)\n\nA locally acquired resource is not protected by structural cleanup.\n\n**Remediation:** Use a context manager or guarantee cleanup with try/finally.\n\n**Not reported when:**\n\n- The resource is opened inside a `with` statement or returned to a caller that manages its lifetime.\n- The call is not in the fixed resource-call allowlist (python_resources._RESOURCE_CALLS).\n- Cleanup is guaranteed by an enclosing try/finally.\n\n[PY-COR-006 in the rule reference](https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.4.2/docs/RULES.md#py-cor-006-resource-without-guaranteed-cleanup)",
+                "text": "Use a context manager or guarantee cleanup with try/finally."
+              },
+              "helpUri": "https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.4.2/docs/RULES.md#py-cor-006-resource-without-guaranteed-cleanup",
+              "id": "PY-COR-006",
+              "name": "resource-without-guaranteed-cleanup",
+              "properties": {
+                "category": "correctness",
+                "confidence": "high",
+                "defaultSeverity": "warning",
+                "language": "python"
+              },
+              "shortDescription": {
+                "text": "Resource without guaranteed cleanup"
+              }
+            },
+            {
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "fullDescription": {
+                "text": "verify=False, ssl._create_unverified_context(), ssl.CERT_NONE or check_hostname = False turns off peer authentication."
+              },
+              "help": {
+                "markdown": "**TLS certificate verification disabled** (`PY-SEC-004`)\n\nverify=False, ssl._create_unverified_context(), ssl.CERT_NONE or check_hostname = False turns off peer authentication.\n\n**CWE:** CWE-295\n\n**Remediation:** Keep verification on; point verify= at a CA bundle for private CAs.\n\n**Not reported when:**\n\n- verify= is anything other than the literal False (a CA bundle path is the recommended form), or CERT_NONE appears outside a cert_reqs/verify_mode slot.\n- The file is on a conventional test path (tests/, __tests__/, spec/, *_test.go, *.spec.ts, *Test.kt, test_*.py): the finding is downgraded to informational, not dropped \u2014 disabled TLS verification and trust-all fixtures are the norm in tests (languages/_parity.py: downgrade_in_tests).\n\n[PY-SEC-004 in the rule reference](https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.4.2/docs/RULES.md#py-sec-004-tls-certificate-verification-disabled)",
+                "text": "Keep verification on; point verify= at a CA bundle for private CAs."
+              },
+              "helpUri": "https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.4.2/docs/RULES.md#py-sec-004-tls-certificate-verification-disabled",
+              "id": "PY-SEC-004",
+              "name": "tls-verification-disabled",
+              "properties": {
+                "category": "security",
+                "confidence": "high",
+                "defaultSeverity": "warning",
+                "language": "python",
+                "security-severity": "7.4",
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-295"
+                ]
+              },
+              "shortDescription": {
+                "text": "TLS certificate verification disabled"
+              }
+            }
+          ],
+          "semanticVersion": "3.4.2"
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

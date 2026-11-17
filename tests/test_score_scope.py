@@ -63,7 +63,7 @@ def test_scope_is_not_applicable_without_signal_providers(project):
 
 
 def test_fail_under_on_not_applicable_score_exits_distinctly(project):
-    from cqa_analyzer.__main__ import _exit_code
+    from cqa_analyzer.__main__ import AnalysisOptions, _exit_code
 
     root = project({"main.go": _GO_SOURCE})
     registry = PluginRegistry()
@@ -76,8 +76,7 @@ def test_fail_under_on_not_applicable_score_exits_distinctly(project):
         scanner,
         1.0,
         scanner.architecture_signal_scope(),
-        fail_under=5.0,
-        strict=False,
+        AnalysisOptions(project_path=str(root), fail_under=5.0, strict=False),
     )
 
     assert exit_code == EXIT_SCORE_NOT_APPLICABLE

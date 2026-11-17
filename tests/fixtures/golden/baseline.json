@@ -1,0 +1,11 @@
+{
+  "schema_version": "2.0.0",
+  "fingerprint_algorithm": "sha256",
+  "fingerprints": [
+    "31d06f00f5e36f5b3e0bb326f79ee6b73984ac5236f72795a5e3b7096e51ba5b",
+    "368bec6500f2b69cf4398ebf18704b2b77880e372b9fe9090e45a34cfe96b36d",
+    "4ca0c1e56ccd422887c5e8392a1bdd330ba88b281a8aadba264e13c27f1330f7",
+    "57cd5f848d2114ef6fcae7357c86ded4d08c554b5d2dd643cc293ef998a3281f",
+    "a2a52f13d353bc847e861803a491789c19ab0ea93ace433fc1378bd9ee609c5d"
+  ]
+}
