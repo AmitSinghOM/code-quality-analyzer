@@ -35,6 +35,7 @@ pages hold the contracts it points at.
 - [adr/002-scoring-policy-2-production-systems-catalog.md](adr/002-scoring-policy-2-production-systems-catalog.md) — scoring policy 2.0.0: production-systems catalog.
 - [adr/003-scoring-policy-2-1-locking-hardening-labuladong.md](adr/003-scoring-policy-2-1-locking-hardening-labuladong.md) — scoring policy 2.1.0: locking, concurrency, hardening, scheduling.
 - [adr/004-positioning-and-longevity.md](adr/004-positioning-and-longevity.md) — positioning and longevity structure for the model era.
+- [adr/005-path-scoped-rule-policy.md](adr/005-path-scoped-rule-policy.md) — path-scoped rule policy and the baseline unmatched count (E8/E6 design, target 3.6.0).
 
 ## Reviews and history
 
