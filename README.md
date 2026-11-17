@@ -139,6 +139,9 @@ baselines, changed-line selection, and severity thresholds — all under the
 same privacy contract. Any finding can be suppressed on its line, in every
 language, with a reason: `// cqa: ignore=GO-SEC-001 reason="local test proxy"`.
 
+Measured precision, per rule, with the record each number comes from:
+[`docs/PRECISION.md`](docs/PRECISION.md).
+
 ## Architecture Signal Score Scale
 
 | Score | Architecture-signal breadth |
@@ -246,8 +249,8 @@ python3 -m pip install --upgrade cqa-analyzer
 python3 -m pip install --upgrade 'cqa-analyzer[deep]'   # with the optional extra
 
 # a specific version
-pipx install --force 'cqa-analyzer==3.4.2'
-python3 -m pip install 'cqa-analyzer==3.4.2'
+pipx install --force 'cqa-analyzer==3.5.0'
+python3 -m pip install 'cqa-analyzer==3.5.0'
 ```
 
 Check with `code-quality-analyzer --version`. If the number does not
@@ -322,7 +325,7 @@ Pin a released tag in `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/AmitSinghOM/code-quality-analyzer
-    rev: v3.4.2
+    rev: v3.5.0
     hooks:
       - id: code-quality-analyzer
 ```
@@ -363,6 +366,18 @@ code-quality-analyzer /path/to/project -c
 
 `PROJECT_PATH` must be a directory. Pointing at a single file is rejected
 rather than silently returning an architecture signal score of 1.
+
+### Looking up a rule
+
+`code-quality-analyzer --explain PY-COR-001` prints the rule's title,
+language, family, severity, confidence, CWE (for security rules), what it
+detects, how to fix it, the cases it deliberately stays silent on, and a link
+to its section in [`docs/RULES.md`](docs/RULES.md). Ids are case-insensitive;
+a typo exits 2 with the nearest ids. `code-quality-analyzer --list-rules`
+prints every built-in rule as `ID  severity  title`, one per line; add
+`--language rust` (or `python`, `go`, `typescript`, `java`, `kotlin`,
+`csharp`, `c_cpp`) to narrow it. Neither flag needs a `PROJECT_PATH` or reads
+any file.
 
 ## Project configuration
 
@@ -587,7 +602,10 @@ see [`docs/CHANGED_LINES.md`](docs/CHANGED_LINES.md).
 
 The SARIF artifact is emitted before the gate exit code and contains the same
 selected findings used by `--fail-on`. See [`docs/SARIF.md`](docs/SARIF.md) for
-the deterministic ordering, URI, metadata, and privacy contract.
+the deterministic ordering, URI, metadata, and privacy contract. Each rule
+descriptor carries `helpUri` and `help.markdown`, so the alert page shows the
+rule's remediation and `not_when` conditions and links to the release-pinned
+[`docs/RULES.md`](docs/RULES.md) section.
 
 Baseline files contain only schema metadata and SHA-256 fingerprints. They do
 not contain source paths, messages, identifiers, snippets, or report evidence.

@@ -17,7 +17,7 @@ body:
     attributes:
       label: Analyzer version
       description: Output of `code-quality-analyzer --version`.
-      placeholder: code-quality-analyzer 3.4.2
+      placeholder: code-quality-analyzer 3.5.0
     validations:
       required: true
 
