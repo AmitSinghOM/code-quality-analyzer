@@ -124,14 +124,23 @@ def plan_file(
     return FilePlan(relative, adapter.language_id, True, None)
 
 
-def rules_for_language(language_id: str, configuration: AnalyzerConfig) -> tuple[RuleMetadata, ...]:
-    """Enabled built-in rules for one adapter, with configured severity applied."""
+def rules_for_language(
+    language_id: str, configuration: AnalyzerConfig, path: str | None = None
+) -> tuple[RuleMetadata, ...]:
+    """Enabled built-in rules for one adapter, with configured severity applied.
+
+    With ``path`` (project-relative), ``[overrides]`` tables matching it apply
+    too, exactly as the scanner resolves each finding.
+    """
     selected = []
     for rule_id in builtin_rule_ids():
         meta = rule_metadata(rule_id)
         if meta.language != language_id:
             continue
-        policy = configuration.policy_for(rule_id)
+        if path is None:
+            policy = configuration.policy_for(rule_id)
+        else:
+            policy = configuration.effective_policy(rule_id, path)
         if not policy.enabled:
             continue
         if policy.severity and policy.severity != meta.default_severity:
@@ -182,13 +191,17 @@ def _plan_requested_files(
 
 
 def _group_by_rule_set(plans: list[FilePlan], configuration: AnalyzerConfig) -> list[dict]:
-    """Bucket selected files by (language, exact enabled rule IDs)."""
-    groups: dict[tuple[str, ...], dict] = {}
+    """Bucket selected files by (language, exact enabled rule IDs and severities).
+
+    Rules resolve per path, so path overrides split a language's files into
+    as many groups as they have distinct rule sets.
+    """
+    groups: dict[tuple, dict] = {}
     for plan in plans:
         if not plan.selected or plan.language is None:
             continue
-        rules = rules_for_language(plan.language, configuration)
-        key = (plan.language, *(meta.rule_id for meta in rules))
+        rules = rules_for_language(plan.language, configuration, plan.path)
+        key = (plan.language, *((meta.rule_id, meta.default_severity) for meta in rules))
         group = groups.setdefault(
             key,
             {"language": plan.language, "files": [], "rules": [_rule_dict(m) for m in rules]},
