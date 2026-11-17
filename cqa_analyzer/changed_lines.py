@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 
+from .config import AnalysisConfig, path_is_selected
 from .findings import Finding
 from .safe_io import SafeReadError, read_bounded_text, read_failure_message
 
@@ -71,6 +72,8 @@ class ChangedLineSelection:
         self,
         analyzed_paths: Iterable[str],
         source_extensions: Iterable[str] | None = None,
+        *,
+        analysis: AnalysisConfig | None = None,
     ) -> tuple[str, ...]:
         """Manifest files the analyzer should have seen but did not (review 5, A7;
         scoped in 3.4.1).
@@ -85,27 +88,62 @@ class ChangedLineSelection:
         no registered adapter claims (Markdown, YAML, TOML, JSON, lockfiles) was
         never in scope, so it is neither a gap nor listed. Without the bound
         (``None``) every unanalyzed manifest path counts, which made a
-        docs-only or CI-only pull request exit 3 under ``--strict``."""
+        docs-only or CI-only pull request exit 3 under ``--strict``.
+
+        ``analysis`` narrows the promise further (3.6.0, ADR 005): a manifest
+        path the project's selection policy rejects (``include`` /
+        ``exclude`` / ``.gitignore``) was excluded on purpose, and the policy
+        is part of the pinned configuration fingerprint, so it is not a gap.
+        :meth:`config_excluded` lists those paths. Without ``analysis`` the
+        result is exactly what it was before."""
         analyzed = set(analyzed_paths)
-        in_scope = None if source_extensions is None else {ext.lower() for ext in source_extensions}
         return tuple(
             sorted(
                 path
-                for path in self.files
-                if path not in analyzed
-                and (in_scope is None or Path(path).suffix.lower() in in_scope)
+                for path in self._in_scope(source_extensions)
+                if path not in analyzed and (analysis is None or path_is_selected(path, analysis))
             )
         )
+
+    def config_excluded(
+        self,
+        analysis: AnalysisConfig,
+        source_extensions: Iterable[str] | None = None,
+    ) -> tuple[str, ...]:
+        """Manifest files in scope by suffix that the selection policy rejects.
+
+        These are declared, fingerprinted choices rather than coverage gaps, so
+        they are reported as a count beside ``files_not_analyzed`` and never
+        fail ``--strict``. Same suffix rule as :meth:`not_analyzed`."""
+        return tuple(
+            sorted(
+                path
+                for path in self._in_scope(source_extensions)
+                if not path_is_selected(path, analysis)
+            )
+        )
+
+    def _in_scope(self, source_extensions: Iterable[str] | None) -> Iterable[str]:
+        if source_extensions is None:
+            return self.files
+        in_scope = {ext.lower() for ext in source_extensions}
+        return (path for path in self.files if Path(path).suffix.lower() in in_scope)
 
     def summary(
         self,
         input_findings: int,
         selected_findings: int,
         not_analyzed: tuple[str, ...] = (),
+        config_excluded: int | None = None,
     ) -> dict:
         """Return aggregate-only report metadata (plus bounded examples of
-        manifest files that were not analyzed)."""
-        return {
+        manifest files that were not analyzed).
+
+        ``config_excluded`` adds ``files_config_excluded`` -- a count only, as
+        manifest paths are as sensitive as source paths. The key is emitted
+        only when the caller passes the count, so callers that do not know
+        about it keep today's payload byte for byte."""
+        payload = {
             "schema_version": CHANGED_LINES_SCHEMA_VERSION,
             "file_count": self.file_count,
             "range_count": self.range_count,
@@ -114,6 +152,9 @@ class ChangedLineSelection:
             "files_not_analyzed": len(not_analyzed),
             "files_not_analyzed_examples": list(not_analyzed[:NOT_ANALYZED_EXAMPLE_LIMIT]),
         }
+        if config_excluded is not None:
+            payload["files_config_excluded"] = config_excluded
+        return payload
 
 
 def load_changed_lines(path: Path) -> ChangedLineSelection:
