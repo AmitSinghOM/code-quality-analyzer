@@ -63,6 +63,7 @@ code-quality-analyzer/
 │   ├── maintainability.py       # Measured Python maintainability rules
 │   ├── findings.py              # Language-neutral actionable finding model
 │   ├── rule_metadata.py         # Stable built-in rule catalog (titles, remediation, not_when, CWE)
+│   ├── rule_catalog.py          # Rule catalog behind --explain / --list-rules
 │   ├── signals.py               # Per-file signal extraction and pattern matching
 │   ├── patterns.py              # DSA and system design pattern definitions
 │   ├── production_patterns.py   # Scoring policy 2.x production-systems specs shared by languages
