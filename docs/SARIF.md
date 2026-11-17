@@ -47,10 +47,50 @@ percent-encoded project-relative paths using `/` separators.
 source-derived finding messages and remediation with generic guidance. Rule
 IDs, severity, category, confidence, line and column ranges, analysis health,
 privacy state, configuration fingerprint, and baseline-selection counts remain.
+Policy sources follow the same path treatment; see
+[Path-scoped rule policy](#path-scoped-rule-policy).
 
 Path validation fails closed for empty, absolute, scheme-based, NUL-containing,
 or parent-traversing artifact paths. `--offline` applies the same socket-denial
 guard used by other formats; rendering itself performs no network access.
+
+## Path-scoped rule policy
+
+When a `[overrides."<glob>"]` table in `.code-quality.toml` sets a finding's
+severity or drops a rule under a path, SARIF records it in two property bags
+(see `docs/adr/005-path-scoped-rule-policy.md`, decision 4):
+
+- `result.properties.policySource`: `project` when the effective severity came
+  from the rule default or `[rules]`; `override:<glob>` naming the winning
+  table when an override changed it. It sits beside `category`, `confidence`
+  and `remediation` because the SARIF `result` object forbids unknown keys and
+  `properties` is an open bag. Suppressed results carry it the same way.
+- `run.properties.policyDropped`: `{count, by_rule, by_source, security}`,
+  next to `baselineSelection`. `by_source` keys are `project` or
+  `override:<glob>`; `security` counts dropped findings whose rule has a CWE.
+  Policy-dropped findings are counted here and **never emitted as results**,
+  so a vendored tree a user silenced does not reappear as dismissed alerts.
+
+Both keys appear only when the analyzer produced them; a run without an
+overrides table renders exactly as before.
+
+```json
+"properties": {
+  "category": "maintainability",
+  "confidence": "high",
+  "policySource": "override:tests/**",
+  "remediation": "..."
+}
+```
+
+*Privacy.* The glob is author-written and path-shaped, so it is treated as a
+path. Plain output emits it as written. `--redact-paths` keeps only its last
+segment (`override:tests/**/*_test.py` becomes `override:*_test.py`), mirroring
+artifact basenames. `--anonymize` maps it through the report's file-token map,
+so a glob renders as `override:file-0001` (sharing the token of any artifact
+with the same path text) in `policySource` and in every `policyDropped.by_source`
+key; the raw glob appears nowhere in anonymized SARIF. `project` is a constant
+and is never transformed. `count`, `by_rule` and `security` carry no paths.
 
 ## Security classification
 

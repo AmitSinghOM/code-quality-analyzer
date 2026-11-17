@@ -42,6 +42,11 @@ class SarifRun:
     """Findings removed by an in-source directive (review 5, A6). Emitted as
     results carrying ``suppressions: [{kind: inSource, justification}]`` so a
     SARIF consumer shows them as suppressed rather than absent."""
+    policy_dropped: Mapping[str, object] | None = None
+    """Counts of findings a path-scoped rule policy dropped (ADR 005,
+    decision 4): ``{count, by_rule, by_source, security}``. Emitted under
+    ``run.properties.policyDropped`` only when present; dropped findings are
+    never emitted as results."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,6 +153,8 @@ def _sarif_properties(run: SarifRun) -> dict:
     }
     if run.changed_line_selection is not None:
         properties["changedLineSelection"] = dict(run.changed_line_selection)
+    if run.policy_dropped is not None:
+        properties["policyDropped"] = dict(run.policy_dropped)
     return properties
 
 
@@ -236,6 +243,11 @@ def _result(finding: Mapping[str, object], indexes: dict[str, int]) -> dict:
         "ruleId": rule_id,
         "ruleIndex": indexes[rule_id],
     }
+    if "policy_source" in finding:
+        # ``result`` forbids unknown keys; ``properties`` is an open bag. The
+        # value is already privacy-projected by the producer (redacted or
+        # anonymized upstream), so it is emitted as given.
+        result["properties"]["policySource"] = _finding_string(finding, "policy_source")
     fingerprint = finding.get("fingerprint")
     if isinstance(fingerprint, str) and fingerprint:
         # GitHub code scanning keys alert identity on partialFingerprints, so a

@@ -10,6 +10,8 @@ ANONYMIZED_PROJECT = "anonymized-project"
 ANONYMIZED_REMEDIATION = (
     "Review the local rule documentation for remediation guidance."
 )
+POLICY_SOURCE_PROJECT = "project"
+POLICY_SOURCE_OVERRIDE_PREFIX = "override:"
 
 
 class ReportAnonymizer:
@@ -24,6 +26,22 @@ class ReportAnonymizer:
         if path not in self._files:
             self._files[path] = f"file-{len(self._files) + 1:04d}"
         return self._files[path]
+
+    def policy_source(self, value: str) -> str:
+        """Tokenize the glob in a path-scoped policy source (ADR 005, decision 4).
+
+        ``"project"`` is a constant and passes through. ``"override:<glob>"``
+        names an author-written, path-shaped table key, so the glob goes
+        through the same per-report file map as artifact paths (a glob equal
+        to a real path shares its token). Any other shape fails closed: the
+        whole value is tokenized, so raw text never reaches a shared report.
+        """
+        if value == POLICY_SOURCE_PROJECT:
+            return value
+        glob = value[len(POLICY_SOURCE_OVERRIDE_PREFIX):]
+        if value.startswith(POLICY_SOURCE_OVERRIDE_PREFIX) and glob:
+            return f"{POLICY_SOURCE_OVERRIDE_PREFIX}{self.file(glob)}"
+        return self.file(value)
 
     def function(self, name: str, path: str, line: int) -> str:
         """Return one stable opaque token for a function identity."""
@@ -74,7 +92,19 @@ class ReportAnonymizer:
                 key: self.provider_health(value) if isinstance(value, dict) else value
                 for key, value in providers.items()
             }
+        dropped = payload.get("policy_dropped")
+        if isinstance(dropped, dict) and isinstance(dropped.get("by_source"), dict):
+            # ``by_source`` keys are policy sources whose globs are path-shaped;
+            # ``count``, ``by_rule`` and ``security`` carry no paths and stay.
+            dropped["by_source"] = self._policy_sources(dropped["by_source"])
         return payload
+
+    def _policy_sources(self, by_source: dict) -> dict:
+        merged: dict[str, int] = {}
+        for source, count in by_source.items():
+            token = self.policy_source(source)
+            merged[token] = merged.get(token, 0) + count
+        return dict(sorted(merged.items()))
 
     def provider_health(self, health: dict) -> dict:
         """Tokenize whichever path-bearing example keys a provider health carries."""
