@@ -12,7 +12,7 @@ cannot satisfy those invariants does not ship, regardless of value.
 Eight adapters ship with 95 rules (`docs/RULES.md`); every language
 contributes architecture signals to the score, and each registers a
 package-intelligence provider. Counts come from `rule_metadata` and the
-default plugin registry at 3.4.2.
+default plugin registry at 3.5.0.
 
 | Language | Rules | Duplication | Complexity | Package intelligence |
 |---|---|---|---|---|

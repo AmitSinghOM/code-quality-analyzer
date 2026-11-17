@@ -2,6 +2,126 @@
 
 All notable changes are documented in this file. Versions follow semantic versioning for the analyzer CLI and independent semantic versions for report and ruleset contracts.
 
+## 3.5.0 - 2026-11-17
+
+Minor release: rule help on every surface (`--explain` / `--list-rules` on
+the CLI, `helpUri` + `help.markdown` in SARIF, a heading for every rule in
+`docs/RULES.md`), a README that opens with a real run, a measured-precision
+page, community files, and an internal options refactor with a byte-for-byte
+golden lock. CLI defaults, finding rules, exit codes (0-6), report schema
+1.14.0, baseline schema 2.0.0, ruleset 2.27.0 and scoring policy 2.1.0 are
+unchanged. Analyzer 3.4.2 -> 3.5.0.
+
+### Added
+
+- **`--explain RULE_ID` and `--list-rules [--language LANG]`** (E5, #71).
+  `--explain` prints a rule's id, title, language, family, severity,
+  confidence, CWE (security rules), what it detects, remediation, the cases
+  it deliberately stays silent on, and its `docs/RULES.md` link pinned to
+  the running version; ids are case-insensitive, and an unknown id exits 2
+  with the nearest ids (`did you mean PY-COR-007, PY-COR-006, PY-COR-005?`).
+  `--list-rules` prints every built-in rule as `ID  severity  title`, one
+  per line, no header; `--language` narrows it to one adapter language id
+  (`c_cpp`, `csharp`, `go`, `java`, `kotlin`, `python`, `rust`,
+  `typescript`). Both answer from `rule_metadata`, read no project file,
+  and run without a `PROJECT_PATH`, which stays required for an analysis
+  (argparse's own `the following arguments are required: PROJECT_PATH`,
+  exit 2). New stdlib-only `cqa_analyzer/rule_catalog.py`.
+- **SARIF rule help** (E3, #69). Every `tool.driver.rules[]` descriptor
+  carries `helpUri` and `help.markdown` beside the existing `help.text`.
+  `helpUri` is the release-pinned rule reference,
+  `https://github.com/AmitSinghOM/code-quality-analyzer/blob/v<version>/docs/RULES.md#<anchor>`,
+  where `<anchor>` is the GitHub heading anchor that documents the rule
+  (its own heading, or the combined heading it shares with sibling rules).
+  `help.markdown` is the rule title, what it detects, the CWE when
+  anchored, the remediation, every `not_when` condition as a bullet, and
+  that same link: the text GitHub code scanning renders beside an alert.
+  `rule_metadata.help_url(rule_id, version)` resolves the anchor from a
+  frozen `id -> anchor` map, so the runtime opens no file and fails closed
+  on an uncataloged id. Both fields derive from `RuleMetadata` only, never
+  from scanned source, so `--anonymize` and `--redact-paths` leave them
+  byte-identical. SARIF with both fields validates against the vendored
+  OASIS 2.1.0 schema. No JSON report change.
+- **`docs/RULES.md`: a `### <ID>: <Title>` subsection for each of the 27
+  `*-SEC-*` rules** (#69), generated from the summary table and
+  `RuleMetadata` (name, CWE, security-severity, confidence, test-path
+  behaviour, what it fires on, `not_when`, remediation), so each of the 95
+  rules has a heading an alert can link to. The summary table stays; no
+  rule text was changed or invented. `docs/SARIF.md` gains a "Rule help
+  links" section. `tests/test_rule_help.py` locks every rule id to a
+  RULES.md heading anchor (GitHub slug rules) and the frozen map to the
+  document.
+- **`docs/PRECISION.md`** (E22, #73): every recorded per-rule precision
+  number (corpus project, hits before, true positives, false-positive class
+  removed, release) with a `RECORD:line` citation into the review records,
+  CHANGELOG, calibration tables and AACR-Bench notes; a "how we measure"
+  and a "what is not measured" section. No new scan was run; one known
+  disagreement between records (PY-COR-003 on requests: 7 in the review
+  ledger, 9 in the CHANGELOG) is reported as both. Two docs-drift tests
+  lock the citations and rule ids.
+- **Community files** (E15, #70): `CONTRIBUTING.md` (gates, fail-first
+  test rule, contract version rules, privacy invariants),
+  `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1, verbatim except the
+  contact line), issue forms for bugs, false positives and feature requests
+  with blank issues disabled, a pull request checklist, and
+  `GOVERNANCE.md`. Reporting a false positive now produces what a fixture
+  needs (rule id, synthetic snippet, why it is safe, `-v` output).
+  `tests/test_community_files.py` locks the files and the forms' shape.
+- **README first screen** (E13, #72): a "What a run looks like" section
+  with the analyzer's real text output on a committed synthetic fixture
+  (`tests/fixtures/readme_sample/`, stored as `*.sample` so the
+  repository's own gate never reads it), a two-line try-it, and
+  code-locked catalog counts (95 rules, 62 patterns, eight languages). The
+  project tree moved to a complete `docs/ARCHITECTURE.md`: how one run
+  flows (CLI -> discovery -> adapter parse -> rule packs and signal
+  providers -> project providers -> rater/reporters) plus a module map
+  naming 14 modules the README tree had missed; `rule_catalog.py` joins the
+  map (#74). `tests/test_readme_links.py` keeps README links, the output
+  sample, the counts and the module map in step with the code.
+
+### Changed
+
+- Internal: `cqa_analyzer/__main__.py` passes one frozen `AnalysisOptions`
+  (and an `AnalysisResults` bundle) through `_run_analysis`, `_exit_code`
+  and the three reporters instead of 9-20 positional arguments; no string,
+  ordering, output or exit-code change. Golden CLI tests
+  (`tests/test_analysis_options.py`, `tests/fixtures/golden/`) lock every
+  reporter, privacy mode and gate byte for byte against 3.4.2 output;
+  regenerate them after a version bump with
+  `CQA_UPDATE_GOLDENS=1 pytest tests/test_analysis_options.py` and read the
+  diff. (#76)
+
+### Design notes
+
+- ADR 005, `docs/adr/005-path-scoped-rule-policy.md` (#75): path-scoped
+  rule policy (E8) and baseline unmatched count (E6), target 3.6.0. Decides
+  the `[overrides."<glob>"]` config shape and glob precedence, the `note`
+  severity, `*-SEC-*` disabling by path, the policy ledger and
+  `policy_source`, and the single 1.14.0 -> 1.15.0 report-schema bump that
+  ships both. No code.
+
+### Not changed, on purpose
+
+- No `help_uri` key in the JSON report: the link lives in SARIF
+  (`helpUri`, `help.markdown`) and on the CLI (`--explain`), so report
+  schema 1.14.0 holds and no consumer re-validates.
+- E6 (`baseline.unmatched_count`) and E8 (glob-scoped rule overrides) ship
+  together in 3.6.0 under ADR 005, not separately here: a finding a path
+  rule hides would otherwise read as fixed debt in the unmatched count.
+- The baseline was not regenerated; every PR above passed the ratchet with
+  0 new findings.
+
+### Documentation
+
+- README: `### Looking up a rule` under **Usage** (`--explain`,
+  `--list-rules`, `--language`), the SARIF `helpUri` / `help.markdown` note
+  under **Use in CI**, and the `docs/PRECISION.md` link under **What it
+  detects** (the follow-ups #71, #69 and #73 carried in their bodies).
+- Version pins read 3.5.0: `cqa-analyzer==3.5.0` and `rev: v3.5.0` in the
+  README, `rev: v3.5.0` in `docs/PRE_COMMIT.md`, the `--version`
+  placeholder in the bug and false-positive issue forms, and the
+  `docs/ROADMAP.md` count snapshot.
+
 ## 3.4.2 - 2026-11-13
 
 Patch release: hardening of the MCP and diff boundaries, a privacy fix for
