@@ -257,6 +257,12 @@
     "written": false,
     "known_fingerprints": 5,
     "current_findings": 6,
-    "new_findings": 1
+    "new_findings": 1,
+    "unmatched_count": 0,
+    "matched": {
+      "active": 5,
+      "suppressed": 0,
+      "policy_dropped": 0
+    }
   }
 }
