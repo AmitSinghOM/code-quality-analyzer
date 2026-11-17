@@ -1,0 +1,261 @@
+{
+  "schema_version": "1.14.0",
+  "analyzer_version": "3.4.2",
+  "ruleset_version": "2.27.0",
+  "scoring_policy_version": "2.1.0",
+  "configuration_fingerprint": "7f2042db6205d44e3ce413ff9080011ffc8edd6904b18c87b1268e1331ccdf62",
+  "language_adapters": {
+    "c_cpp": "1.0.0",
+    "csharp": "1.0.0",
+    "go": "1.1.0",
+    "java": "1.0.0",
+    "kotlin": "1.0.0",
+    "python": "1.0.0",
+    "rust": "1.0.0",
+    "typescript": "1.0.0"
+  },
+  "project": "readme_sample",
+  "privacy": {
+    "anonymized": false,
+    "paths_redacted": true,
+    "offline_enforced": true,
+    "cache_enabled": false
+  },
+  "architecture_signal_score": 3.0,
+  "architecture_signal_label": "Below Average - Simple structures only",
+  "architecture_signal_scope": {
+    "languages": [
+      "c_cpp",
+      "csharp",
+      "go",
+      "java",
+      "kotlin",
+      "python",
+      "rust",
+      "typescript"
+    ],
+    "applicable": true,
+    "by_language": {
+      "python": {
+        "files": 3,
+        "dsa_patterns": [
+          "heap_priority",
+          "lru_cache_manual",
+          "sorting"
+        ],
+        "design_patterns": [
+          "error_handling"
+        ]
+      }
+    }
+  },
+  "rating": 3.0,
+  "label": "Below Average - Simple structures only",
+  "breakdown": {
+    "dsa_score": 4.43,
+    "design_score": 2.4,
+    "maturity_score": 0.05,
+    "dsa_patterns_count": 3,
+    "design_patterns_count": 1,
+    "files_scanned": 3,
+    "total_lines": 74,
+    "coverage_gap_ratio": 0.0,
+    "warnings": [
+      "Project is very small; pattern-based rating is noisy"
+    ]
+  },
+  "analysis_health": {
+    "complete": true,
+    "authoritative": true,
+    "source_candidates": 3,
+    "files_read": 3,
+    "files_successfully_analyzed": 3,
+    "completeness_ratio": 1.0,
+    "reasons": []
+  },
+  "scan_health": {
+    "source_candidates": 3,
+    "files_found": 3,
+    "total_skipped": 0,
+    "skipped_by_reason": {},
+    "skipped_examples": {},
+    "truncated": false,
+    "truncated_reasons": [],
+    "bytes_read": 2073,
+    "pruned_directories": 0,
+    "pruned_examples": [],
+    "excluded_generated": {},
+    "excluded_generated_examples": {},
+    "files_scanned": 3,
+    "files_successfully_analyzed": 3,
+    "unparsed_files": 0,
+    "unparsed_examples": [],
+    "languages": {
+      "python": 3
+    },
+    "suppressed": {
+      "count": 0,
+      "by_rule": {}
+    },
+    "package_analysis": {
+      "errors": 0,
+      "complete": true
+    },
+    "project_analysis": {
+      "c_cpp:complexity": "<install-dependent: tree-sitter availability>",
+      "c_cpp:duplication": "<install-dependent: tree-sitter availability>",
+      "c_cpp:package": "<install-dependent: tree-sitter availability>",
+      "csharp:package": "<install-dependent: tree-sitter availability>",
+      "go:complexity": "<install-dependent: tree-sitter availability>",
+      "go:duplication": "<install-dependent: tree-sitter availability>",
+      "go:package-graph": "<install-dependent: tree-sitter availability>",
+      "java:package": "<install-dependent: tree-sitter availability>",
+      "kotlin:package": "<install-dependent: tree-sitter availability>",
+      "python:duplication": "<install-dependent: tree-sitter availability>",
+      "python:package": "<install-dependent: tree-sitter availability>",
+      "rust:complexity": "<install-dependent: tree-sitter availability>",
+      "rust:duplication": "<install-dependent: tree-sitter availability>",
+      "rust:package": "<install-dependent: tree-sitter availability>",
+      "typescript:package": "<install-dependent: tree-sitter availability>"
+    }
+  },
+  "package_intelligence": {
+    "pyproject_present": true,
+    "metadata_valid": true,
+    "project_name": "inventory-sync",
+    "requires_python": null,
+    "build_backend": null,
+    "dependencies": [
+      "requests"
+    ],
+    "optional_dependencies": {},
+    "scripts": {},
+    "layout": "flat",
+    "source_roots": [
+      "."
+    ],
+    "modules": [
+      "inventory",
+      "inventory.cache",
+      "inventory.sync"
+    ],
+    "import_graph": {
+      "inventory": [],
+      "inventory.cache": [],
+      "inventory.sync": [
+        "inventory.cache"
+      ]
+    },
+    "circular_imports": []
+  },
+  "project_analyses": {
+    "c_cpp:complexity": "<install-dependent: tree-sitter availability>",
+    "c_cpp:duplication": "<install-dependent: tree-sitter availability>",
+    "c_cpp:package": "<install-dependent: tree-sitter availability>",
+    "csharp:package": "<install-dependent: tree-sitter availability>",
+    "go:complexity": "<install-dependent: tree-sitter availability>",
+    "go:duplication": "<install-dependent: tree-sitter availability>",
+    "go:package-graph": "<install-dependent: tree-sitter availability>",
+    "java:package": "<install-dependent: tree-sitter availability>",
+    "kotlin:package": "<install-dependent: tree-sitter availability>",
+    "python:duplication": "<install-dependent: tree-sitter availability>",
+    "python:package": "<install-dependent: tree-sitter availability>",
+    "rust:complexity": "<install-dependent: tree-sitter availability>",
+    "rust:duplication": "<install-dependent: tree-sitter availability>",
+    "rust:package": "<install-dependent: tree-sitter availability>",
+    "typescript:package": "<install-dependent: tree-sitter availability>"
+  },
+  "finding_summary": {
+    "total": 3,
+    "by_severity": {
+      "warning": 3
+    },
+    "by_category": {
+      "correctness": 2,
+      "security": 1
+    }
+  },
+  "findings": [
+    {
+      "rule_id": "PY-COR-006",
+      "category": "correctness",
+      "severity": "warning",
+      "confidence": "high",
+      "message": "Resource from 'builtins.open' lacks guaranteed cleanup.",
+      "location": {
+        "path": "sync.py",
+        "line": 16,
+        "column": 14,
+        "end_line": 16,
+        "end_column": 24
+      },
+      "remediation": "Use a context manager or guarantee cleanup with try/finally.",
+      "fingerprint": "ddde844caf4e6562439d0669302bfa527af8f73fcee76f3e88c6f31626c76d4b"
+    },
+    {
+      "rule_id": "PY-SEC-004",
+      "category": "security",
+      "severity": "warning",
+      "confidence": "high",
+      "message": "TLS certificate verification is disabled with verify=False (CWE-295).",
+      "location": {
+        "path": "sync.py",
+        "line": 24,
+        "column": 24,
+        "end_line": 24,
+        "end_column": 66
+      },
+      "remediation": "Keep certificate verification on; pin a CA bundle (verify=<path>) or use a trust store for private CAs.",
+      "fingerprint": "cd2de1782e67b4587ad855288fb143bfbea1f9a9c11faefb4b1e050c5a183cea"
+    },
+    {
+      "rule_id": "PY-COR-002",
+      "category": "correctness",
+      "severity": "warning",
+      "confidence": "high",
+      "message": "Exception handler catches Exception.",
+      "location": {
+        "path": "sync.py",
+        "line": 27,
+        "column": 16,
+        "end_line": 27,
+        "end_column": 25
+      },
+      "remediation": "Catch the narrow exception types the operation can recover from.",
+      "fingerprint": "c47b59e2efe8c6e2367e1ba43b4fd0e803fcc03a34769269a711ebbe2cad69f1"
+    }
+  ],
+  "suppressed_findings": [],
+  "dsa_patterns": {
+    "sorting": {
+      "files": [
+        "cache.py"
+      ],
+      "file_count": 1,
+      "description": "Sorting algorithms and ordered operations"
+    },
+    "heap_priority": {
+      "files": [
+        "cache.py"
+      ],
+      "file_count": 1,
+      "description": "Heap/priority queue for efficient min/max operations"
+    },
+    "lru_cache_manual": {
+      "files": [
+        "cache.py"
+      ],
+      "file_count": 1,
+      "description": "Manual LRU cache implementation"
+    }
+  },
+  "design_patterns": {
+    "error_handling": {
+      "files": [
+        "sync.py"
+      ],
+      "file_count": 1,
+      "description": "Structured error handling"
+    }
+  }
+}

@@ -1,0 +1,5 @@
+"""Synthetic order-processing package for the CLI golden tests."""
+
+from .handlers import handle_order
+
+__all__ = ["handle_order"]

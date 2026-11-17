@@ -1,0 +1,41 @@
+
+Analyzing: readme_sample
+Privacy: anonymized=no | paths redacted=yes | offline enforced=yes | cache enabled=no
+Configuration: 7f2042db6205d44e3ce413ff9080011ffc8edd6904b18c87b1268e1331ccdf62
+Analysis: authoritative=yes | complete=yes | successful=3/3
+┌─ Architecture Signal Score ────────────┐
+│ 3.0/10                                 │
+│ Below Average - Simple structures only │
+└────────────────────────────────────────┘
+
+Files scanned: 3 | Lines: 74 | Languages: python=3
+DSA Score: 4.43 | Design Score: 2.4 | Maturity: 0.05
+! Project is very small; pattern-based rating is noisy
+
+┌─ Package Intelligence ────┐
+│ Project: inventory-sync   │
+│ Layout: flat (.)          │
+│ Modules: 3                │
+│ Declared dependencies: 1  │
+│ Circular import groups: 0 │
+└───────────────────────────┘
+
+Actionable Findings
+Rule        Severity  Location       Message                                                                Remediation
+──────────  ────────  ─────────────  ─────────────────────────────────────────────────────────────────────  ───────────────────────────────────────────────────────────────────────────────────────────────────────
+PY-COR-006  warning   sync.py:16:14  Resource from 'builtins.open' lacks guaranteed cleanup.                Use a context manager or guarantee cleanup with try/finally.
+PY-SEC-004  warning   sync.py:24:24  TLS certificate verification is disabled with verify=False (CWE-295).  Keep certificate verification on; pin a CA bundle (verify=<path>) or use a trust store for private CAs.
+PY-COR-002  warning   sync.py:27:16  Exception handler catches Exception.                                   Catch the narrow exception types the operation can recover from.
+
+DSA Patterns Detected
+Pattern           Description                                           Files
+────────────────  ────────────────────────────────────────────────────  ─────
+sorting           Sorting algorithms and ordered operations             1
+heap_priority     Heap/priority queue for efficient min/max operations  1
+lru_cache_manual  Manual LRU cache implementation                       1
+
+System Design Patterns Detected
+Pattern         Description                Files
+──────────────  ─────────────────────────  ─────
+error_handling  Structured error handling  1
+

@@ -1,0 +1,13 @@
+"""Nested module so path redaction has a directory to hide."""
+
+from __future__ import annotations
+
+
+def read_manifest(path: str) -> str:
+    handle = open(path)
+    return handle.read()
+
+
+def write_manifest(path: str, text: str) -> None:
+    with open(path, "w") as handle:
+        handle.write(text)

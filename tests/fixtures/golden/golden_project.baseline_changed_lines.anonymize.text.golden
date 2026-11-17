@@ -1,0 +1,57 @@
+
+Analyzing: anonymized-project
+Privacy: anonymized=yes | paths redacted=yes | offline enforced=yes | cache enabled=no
+Configuration: 7f2042db6205d44e3ce413ff9080011ffc8edd6904b18c87b1268e1331ccdf62
+Analysis: authoritative=yes | complete=yes | successful=5/5
+┌─ Architecture Signal Score ────────────┐
+│ 2.9/10                                 │
+│ Below Average - Simple structures only │
+└────────────────────────────────────────┘
+
+Files scanned: 5 | Lines: 83 | Languages: python=5
+DSA Score: 3.65 | Design Score: 2.8 | Maturity: 0.05
+! Project is very small; pattern-based rating is noisy
+i 1 finding(s) suppressed by in-source directives (PY-COR-002=1); listed under suppressed_findings in JSON/SARIF
+
+┌─ Package Intelligence (Anonymized) ───┐
+│ Project metadata declared: True       │
+│ Layout: flat                          │
+│ Modules: 5                            │
+│ Declared dependencies: 2              │
+│ Circular import groups: 0             │
+└───────────────────────────────────────┘
+
+┌─ Finding Baseline ───┐
+│ Loaded: True         │
+│ Written: False       │
+│ Current findings: 6  │
+│ New findings: 1      │
+└──────────────────────┘
+
+┌─ Changed-Line Selection ───┐
+│ Files: 3                   │
+│ Canonical ranges: 3        │
+│ Input findings: 6          │
+│ Selected findings: 2       │
+└────────────────────────────┘
+
+! 1 changed file(s) in the manifest were not analyzed (unsupported, excluded or unparsed) - they are unchecked, not clean; --strict treats this as a coverage gap
+    - file-0001
+Actionable Findings
+Rule        Severity  Location         Message                          Remediation
+──────────  ────────  ───────────────  ───────────────────────────────  ─────────────────────────────────────────────────────────────
+PY-SEC-003  warning   file-0002:38:12  Finding reported by PY-SEC-003.  Review the local rule documentation for remediation guidance.
+PY-SEC-002  warning   file-0002:42:5   Finding reported by PY-SEC-002.  Review the local rule documentation for remediation guidance.
+
+DSA Patterns Detected
+Pattern        Description                                           Files
+─────────────  ────────────────────────────────────────────────────  ─────
+sorting        Sorting algorithms and ordered operations             1
+heap_priority  Heap/priority queue for efficient min/max operations  1
+
+System Design Patterns Detected
+Pattern         Description                Files
+──────────────  ─────────────────────────  ─────
+error_handling  Structured error handling  1
+logging         Logging implementation     1
+

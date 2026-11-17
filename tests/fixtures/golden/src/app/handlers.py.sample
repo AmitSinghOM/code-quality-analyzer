@@ -1,0 +1,52 @@
+"""Order handlers with deliberate defects for the golden tests."""
+
+from __future__ import annotations
+
+import heapq
+import logging
+import subprocess
+
+from .util.paths import read_manifest
+
+log = logging.getLogger(__name__)
+
+
+class OrderQueue:
+    """A priority queue of pending orders, smallest deadline first."""
+
+    def __init__(self) -> None:
+        self._heap: list[tuple[int, str]] = []
+
+    def push(self, deadline: int, order_id: str) -> None:
+        heapq.heappush(self._heap, (deadline, order_id))
+
+    def pop(self) -> str:
+        return heapq.heappop(self._heap)[1]
+
+
+def handle_order(order: dict, tags: list = []) -> str:
+    tags.append(order["id"])
+    try:
+        archive(order["id"])
+    except Exception:  # cqa: ignore=PY-COR-002 reason="archive is best effort"
+        log.warning("archive failed for %s", order["id"])
+    return render(order)
+
+
+def render(order: dict) -> str:
+    template = read_manifest("templates/order.txt")
+    return eval(template)
+
+
+def archive(order_id: str) -> None:
+    subprocess.run("tar czf archive.tgz orders/" + order_id, shell=True)
+
+
+def ship(order, carrier, priority, insured, fragile, signature, gift, express):
+    options = sorted([priority, insured, fragile, signature, gift, express])
+    for option in options:
+        if option:
+            for attempt in range(3):
+                if attempt and carrier:
+                    log.info("retry %s", attempt)
+    return order

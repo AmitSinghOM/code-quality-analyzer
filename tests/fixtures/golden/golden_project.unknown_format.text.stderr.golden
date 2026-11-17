@@ -1,0 +1,1 @@
+code-quality-analyzer: error: Unknown output format 'yaml'; choose from json, sarif, text
