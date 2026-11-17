@@ -36,7 +36,7 @@ def _finding(
     }
 
 
-def _run(*findings):
+def _run(*findings, **extra):
     return SarifRun(
         analyzer_version="2.27.0",
         configuration_fingerprint="a" * 64,
@@ -48,6 +48,7 @@ def _run(*findings):
         },
         baseline_selection={"newFindingsOnly": False},
         findings=tuple(findings),
+        **extra,
     )
 
 
@@ -252,6 +253,70 @@ def test_catalog_covers_every_current_builtin_rule():
 def test_sarif_fails_closed_for_uncataloged_rule():
     with pytest.raises(ValueError, match="Missing built-in rule metadata"):
         _render(_run(_finding(rule_id="PLUGIN-001")))
+
+
+# --- Path-scoped rule policy (ADR 005, decision 4: SARIF) -------------------
+
+POLICY_DROPPED = {
+    "count": 3,
+    "by_rule": {"PY-MAINT-003": 2, "PY-SEC-002": 1},
+    "by_source": {"override:tests/**": 2, "project": 1},
+    "security": 1,
+}
+
+
+def test_result_carries_policy_source_property_only_when_present():
+    traced = _finding(path="a.py")
+    traced["policy_source"] = "override:tests/**/*_test.py"
+    plain = _finding(path="b.py")
+
+    _, payload = _render(_run(traced, plain))
+    results = payload["runs"][0]["results"]
+
+    assert results[0]["properties"]["policySource"] == "override:tests/**/*_test.py"
+    assert "policySource" not in results[1]["properties"]
+    assert set(results[1]["properties"]) == {"category", "confidence", "remediation"}
+    assert "policy_source" not in json.dumps(payload)
+
+
+def test_result_policy_source_project_is_emitted_verbatim():
+    finding = _finding()
+    finding["policy_source"] = "project"
+
+    _, payload = _render(_run(finding))
+
+    assert payload["runs"][0]["results"][0]["properties"]["policySource"] == "project"
+
+
+def test_result_policy_source_must_be_a_nonempty_string():
+    finding = _finding()
+    finding["policy_source"] = ""
+
+    with pytest.raises(ValueError, match="policy_source"):
+        _render(_run(finding))
+
+
+def test_suppressed_result_inherits_policy_source():
+    suppressed = _finding()
+    suppressed["suppression_reason"] = "trusted"
+    suppressed["policy_source"] = "override:src/**"
+
+    _, payload = _render(_run(suppressed=(suppressed,)))
+    result = payload["runs"][0]["results"][0]
+
+    assert result["suppressions"][0]["kind"] == "inSource"
+    assert result["properties"]["policySource"] == "override:src/**"
+
+
+def test_run_properties_carry_policy_dropped_only_when_given():
+    _, without = _render(_run(_finding()))
+    _, with_counts = _render(_run(_finding(), policy_dropped=POLICY_DROPPED))
+
+    assert "policyDropped" not in without["runs"][0]["properties"]
+    assert with_counts["runs"][0]["properties"]["policyDropped"] == POLICY_DROPPED
+    # Policy-dropped findings are counted, never emitted as results.
+    assert len(with_counts["runs"][0]["results"]) == 1
+    assert without["runs"][0]["results"] == with_counts["runs"][0]["results"]
 
 
 def test_cli_emits_valid_sarif_before_finding_gate(project):

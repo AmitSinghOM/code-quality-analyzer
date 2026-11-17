@@ -18,6 +18,7 @@ import jsonschema
 from clirunner import CliRunner
 
 from cqa_analyzer.__main__ import main
+from cqa_analyzer.reporters import AnalysisReport, SarifReporter, SarifRun
 
 SCHEMA_PATH = Path(__file__).parent / "fixtures" / "sarif-schema-2.1.0.json"
 VALIDATOR = jsonschema.Draft7Validator(json.loads(SCHEMA_PATH.read_text()))
@@ -102,3 +103,72 @@ def test_rule_descriptors_with_help_markdown_and_help_uri_validate(project):
         assert set(rule["help"]) == {"markdown", "text"}, rule["id"]
         assert rule["helpUri"].startswith("https://"), rule["id"]
     assert _schema_errors(document) == []
+
+
+# --- Path-scoped rule policy (ADR 005, decision 4) ---------------------------
+#
+# The result object forbids unknown keys (``additionalProperties: false``), so
+# ``policy_source`` must live in ``result.properties`` (an open propertyBag);
+# the drop counts live in ``run.properties.policyDropped``. Built from a
+# ``SarifRun`` directly because the CLI wiring lands in a separate change.
+
+
+def _policy_finding(path, policy_source):
+    return {
+        "rule_id": "PY-MAINT-003",
+        "category": "maintainability",
+        "severity": "note",
+        "confidence": "high",
+        "message": "Function is too long.",
+        "location": {"path": path, "line": 1, "column": 1},
+        "remediation": "Split the function.",
+        "policy_source": policy_source,
+    }
+
+
+def _policy_run(**extra):
+    return SarifRun(
+        analyzer_version="3.6.0",
+        configuration_fingerprint="b" * 64,
+        analysis_health={"complete": True, "authoritative": True},
+        privacy={"anonymized": False, "paths_redacted": False, "offline_enforced": True},
+        baseline_selection={"newFindingsOnly": False},
+        findings=(
+            _policy_finding("tests/test_a.py", "override:tests/**"),
+            _policy_finding("src/a.py", "project"),
+        ),
+        policy_dropped={
+            "count": 4,
+            "by_rule": {"PY-SEC-002": 1, "PY-MAINT-003": 3},
+            "by_source": {"override:vendor/**": 3, "project": 1},
+            "security": 1,
+        },
+        **extra,
+    )
+
+
+def _render(run):
+    return json.loads(SarifReporter().render(AnalysisReport(sarif=run)))
+
+
+def test_sarif_with_policy_source_and_policy_dropped_validates():
+    document = _render(_policy_run())
+    run = document["runs"][0]
+
+    assert [r["properties"]["policySource"] for r in run["results"]] == [
+        "project",
+        "override:tests/**",
+    ]
+    assert run["properties"]["policyDropped"]["by_source"] == {
+        "override:vendor/**": 3,
+        "project": 1,
+    }
+    assert _schema_errors(document) == []
+
+
+def test_policy_source_outside_the_property_bag_would_be_rejected():
+    """Guard against the guard: the propertyBag is the only valid home."""
+    document = _render(_policy_run())
+    document["runs"][0]["results"][0]["policySource"] = "project"
+
+    assert any("policySource" in error for error in _schema_errors(document))
