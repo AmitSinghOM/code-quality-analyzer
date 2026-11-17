@@ -49,6 +49,49 @@ automatically. Test both harmless-edit noise and newly introduced defects.
 - Fingerprints must be lowercase SHA-256 hexadecimal strings.
 - `--new-findings-only` requires an existing `--baseline`.
 
+## Unmatched entries (prune candidates)
+
+A baseline grows stale as findings are fixed. The `baseline` block of the JSON
+report (and `run.properties.baselineSelection` in SARIF) says where every
+stored fingerprint went:
+
+```json
+"baseline": {
+  "known_fingerprints": 45,
+  "current_findings": 41,
+  "new_findings": 1,
+  "unmatched_count": 3,
+  "matched": {"active": 40, "suppressed": 2, "policy_dropped": 0}
+}
+```
+
+- `baseline.unmatched_count` -- baseline fingerprints matched by **no** current
+  finding: not an active one, not one hidden by an in-source `# cqa: ignore`
+  directive, and not one dropped by project or path rule policy. These are the
+  prune candidates: the findings were fixed, or their text or file changed.
+- `baseline.matched.active` -- entries matched by a reported finding.
+- `baseline.matched.suppressed` -- entries whose finding is still in the code
+  but hidden by a directive.
+- `baseline.matched.policy_dropped` -- entries whose finding is still in the
+  code but hidden by configuration (a disabled rule or a path override).
+
+Hidden debt is reported beside the unmatched count, never inside it: a
+finding you silenced is not a finding you fixed, and a rule you disabled
+yesterday must not make the baseline look cleaner today. Each set is
+fingerprinted on its own with the baseline file's own schema, so a policy that
+drops a whole (rule, path) keeps the ordinals those findings had when active,
+and a severity change never alters identity.
+
+Re-writing the baseline with `--write-baseline` **is** the prune: it stores the
+fingerprints of the current active findings and nothing else. No entry is ever
+removed automatically. Review the unmatched count the way you review new
+findings -- a sudden jump usually means a rename or a reformat, not a fix.
+
+The baseline file format is unchanged: schema `2.0.0`, the same three keys
+(`schema_version`, `fingerprint_algorithm`, `fingerprints`) and no
+configuration fingerprint. Files written as schema `1.0.0` keep working, and
+their unmatched count is computed with the `1.0.0` hashing.
+
 ## Changed-line intersection
 
 `--changed-lines-manifest` is an independent final selector. The analyzer first
