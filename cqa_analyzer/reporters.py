@@ -8,9 +8,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from urllib.parse import quote
 
+from . import __version__
 from .protocols import DEFAULT_CAPABILITY_VERSION, PLUGIN_API_VERSION
 from .registry import PluginRegistry
-from .rule_metadata import RuleMetadata, rule_metadata
+from .rule_metadata import RuleMetadata, help_url, rule_metadata
 
 SARIF_FINGERPRINT_KEY = "cqaFingerprint/v2"
 SARIF_SCHEMA = (
@@ -115,7 +116,7 @@ def _sarif_payload(run: SarifRun) -> dict:
                 "tool": {
                     "driver": {
                         "name": "Code Quality Analyzer",
-                        "rules": [_rule_descriptor(item) for item in catalog],
+                        "rules": [_rule_descriptor(item, run.analyzer_version) for item in catalog],
                         "semanticVersion": run.analyzer_version,
                     },
                 },
@@ -150,7 +151,7 @@ def _sarif_properties(run: SarifRun) -> dict:
     return properties
 
 
-def _rule_descriptor(metadata: RuleMetadata) -> dict:
+def _rule_descriptor(metadata: RuleMetadata, version: str = __version__) -> dict:
     properties: dict[str, object] = {
         "category": metadata.category,
         "confidence": metadata.confidence,
@@ -163,17 +164,36 @@ def _rule_descriptor(metadata: RuleMetadata) -> dict:
         # ``external/cwe/cwe-NNN`` tag form is the one it links to CWE.
         properties["security-severity"] = metadata.security_severity
         properties["tags"] = ["security", *(f"external/cwe/{c.lower()}" for c in metadata.cwe)]
+    url = help_url(metadata.rule_id, version)
     return {
         "defaultConfiguration": {
             "level": _sarif_level(metadata.default_severity),
         },
         "fullDescription": {"text": metadata.description},
-        "help": {"text": metadata.remediation},
+        # ``help.markdown`` is what GitHub shows beside an alert; ``helpUri``
+        # is the documented "primary documentation" link. Both derive from
+        # RuleMetadata only, so ``--anonymize`` / ``--redact-paths`` leave
+        # them untouched.
+        "help": {"markdown": _help_markdown(metadata, url), "text": metadata.remediation},
+        "helpUri": url,
         "id": metadata.rule_id,
         "name": metadata.name,
         "properties": properties,
         "shortDescription": {"text": metadata.title},
     }
+
+
+def _help_markdown(metadata: RuleMetadata, url: str) -> str:
+    lines = [f"**{metadata.title}** (`{metadata.rule_id}`)", "", metadata.description, ""]
+    if metadata.cwe:
+        lines += ["**CWE:** " + ", ".join(metadata.cwe), ""]
+    lines += [f"**Remediation:** {metadata.remediation}", ""]
+    if metadata.not_when:
+        lines += ["**Not reported when:**", ""]
+        lines += [f"- {condition}" for condition in metadata.not_when]
+        lines.append("")
+    lines.append(f"[{metadata.rule_id} in the rule reference]({url})")
+    return "\n".join(lines)
 
 
 def _result(finding: Mapping[str, object], indexes: dict[str, int]) -> dict:

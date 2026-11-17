@@ -965,3 +965,403 @@ subprocess.run(["convert", path, "out.png"])
 data = yaml.safe_load(text)
 token = secrets.token_urlsafe(32)
 ```
+
+## Per-rule detail
+
+One subsection per security rule, mirroring `RuleMetadata` (the text
+`explain_rule` returns): the call shape that fires, every `not_when`
+condition, and the remediation. The SARIF `helpUri` of each security rule
+points at its subsection; `tests/test_rule_help.py` keeps the headings and
+the metadata in step.
+
+### PY-SEC-001: Unsafe deserialization of untrusted data
+
+`unsafe-deserialization` · CWE-502 · security-severity 8.8 · confidence high · test path: note
+
+pickle/marshal/shelve/dill loads, or yaml.load without a safe Loader, can instantiate arbitrary objects and run code from the payload.
+
+**Fires on:** `pickle`/`marshal`/`shelve`/`dill` loads; `yaml.load` without `SafeLoader`/`CSafeLoader`/`BaseLoader`; `yaml.unsafe_load`
+
+**Not reported when:**
+
+* yaml.load/load_all passes Loader=SafeLoader, CSafeLoader, BaseLoader or CBaseLoader (positionally or by keyword); yaml.safe_load is never reported.
+* The call is not one of the fixed pickle/cPickle/_pickle/marshal/shelve/dill/yaml.unsafe_load targets (python_security._UNSAFE_LOADS).
+* The payload is a direct `dumps(...)`/`dump(...)` call in the same expression (`pickle.loads(pickle.dumps(x))`): the bytes were produced right there, so no attacker input reaches the deserializer. A name bound elsewhere is still reported.
+* The file is on a conventional test path (tests/, __tests__/, spec/, *_test.go, *.spec.ts, *Test.kt, test_*.py): the finding is downgraded to informational, not dropped — disabled TLS verification and trust-all fixtures are the norm in tests (languages/_parity.py: downgrade_in_tests).
+
+**Remediation:** Deserialize with a format that cannot execute code (json, yaml.safe_load) or restrict the loader.
+
+### PY-SEC-002: Shell command assembled at runtime
+
+`shell-command-from-runtime-string` · CWE-78 · security-severity 8.8 · confidence medium · test path: warning
+
+subprocess.*(cmd, shell=True), os.system(cmd) or os.popen(cmd) with a non-literal command lets a shell re-parse runtime data.
+
+**Fires on:** `subprocess.*(cmd, shell=True)`, `os.system(cmd)`, `os.popen(cmd)` with non-literal `cmd`
+
+**Not reported when:**
+
+* The command is a string literal, or the subprocess call has no shell=True keyword (a list of arguments is never reported).
+* os.system/os.popen are only recognised through the `os.` qualifier; a `from os import system` call is not seen.
+
+**Remediation:** Pass an argument list without shell=True; quote with shlex.quote if a shell is unavoidable.
+
+### PY-SEC-003: eval/exec of a runtime string
+
+`dynamic-code-execution` · CWE-95 · security-severity 8.8 · confidence high · test path: warning
+
+eval() or exec() receives a value that is not a string literal.
+
+**Fires on:** bare `eval(x)` / `exec(x)` with non-literal `x` (`ast.literal_eval`, `df.eval` never)
+
+**Not reported when:**
+
+* The first argument is a string literal, or the callee is an attribute (pandas `df.eval`, `ast.literal_eval`) rather than the bare builtin.
+
+**Remediation:** Use ast.literal_eval for data, a dispatch table for behaviour, or importlib for module names.
+
+### PY-SEC-004: TLS certificate verification disabled
+
+`tls-verification-disabled` · CWE-295 · security-severity 7.4 · confidence high · test path: note
+
+verify=False, ssl._create_unverified_context(), ssl.CERT_NONE or check_hostname = False turns off peer authentication.
+
+**Fires on:** `verify=False`, `ssl._create_unverified_context()`, `CERT_NONE` in `cert_reqs`/`verify_mode`, `check_hostname = False`
+
+**Not reported when:**
+
+* verify= is anything other than the literal False (a CA bundle path is the recommended form), or CERT_NONE appears outside a cert_reqs/verify_mode slot.
+* The file is on a conventional test path (tests/, __tests__/, spec/, *_test.go, *.spec.ts, *Test.kt, test_*.py): the finding is downgraded to informational, not dropped — disabled TLS verification and trust-all fixtures are the norm in tests (languages/_parity.py: downgrade_in_tests).
+
+**Remediation:** Keep verification on; point verify= at a CA bundle for private CAs.
+
+### PY-SEC-005: Non-cryptographic random used for a secret
+
+`insecure-random-for-secret` · CWE-330 · security-severity 5.9 · confidence medium · test path: warning
+
+A value bound to a secret-shaped name (token, password, nonce, salt, otp, api_key, session id, csrf) is produced by the random module.
+
+**Fires on:** `random.*` bound to a secret-shaped name (`token`, `secret`, `password`, `nonce`, `salt`, `otp`, `api_key`, `session_id`, `csrf`, …); `SystemRandom`/`secrets` never
+
+**Not reported when:**
+
+* The bound name or keyword does not match the secret-shaped pattern (languages/_security.is_secret_name); `counter = random.randint(...)` is fine.
+* The expression mentions SystemRandom, or uses the secrets module.
+
+**Remediation:** Generate secrets with the secrets module (token_urlsafe, choice).
+
+### GO-SEC-001: TLS certificate verification disabled
+
+`tls-verification-disabled` · CWE-295 · security-severity 7.4 · confidence high · test path: note
+
+tls.Config sets InsecureSkipVerify: true.
+
+**Fires on:** `InsecureSkipVerify: true`
+
+**Not reported when:**
+
+* The file is on a conventional test path (tests/, __tests__/, spec/, *_test.go, *.spec.ts, *Test.kt, test_*.py): the finding is downgraded to informational, not dropped — disabled TLS verification and trust-all fixtures are the norm in tests (languages/_parity.py: downgrade_in_tests).
+
+**Remediation:** Verify certificates; load a private CA into tls.Config.RootCAs.
+
+### GO-SEC-002: Shell command assembled at runtime
+
+`shell-command-from-runtime-string` · CWE-78 · security-severity 8.8 · confidence medium · test path: warning
+
+exec.Command("sh", "-c", cmd) (or CommandContext) with a non-literal cmd.
+
+**Fires on:** `exec.Command("sh"|"bash"|"cmd", "-c", x)` / `CommandContext` with non-literal `x`
+
+**Not reported when:**
+
+* The program is not a shell (`exec.Command(cmd)` and `exec.Command("ls", arg)` are not reported), the flag is not -c, or the command string is a literal.
+
+**Remediation:** Call the binary directly with exec.Command(name, args...).
+
+### GO-SEC-003: math/rand used for a secret
+
+`insecure-random-for-secret` · CWE-338 · security-severity 5.9 · confidence medium · test path: warning
+
+A value bound to a secret-shaped name is produced by math/rand.
+
+**Fires on:** `math/rand` (import-checked) bound to a secret-shaped name
+
+**Not reported when:**
+
+* The file does not import math/rand (crypto/rand is fine), or the bound name is not secret-shaped (languages/_security.is_secret_name).
+
+**Remediation:** Use crypto/rand for tokens, keys, nonces and passwords.
+
+### JAVA-SEC-001: Java native deserialization
+
+`unsafe-deserialization` · CWE-502 · security-severity 8.8 · confidence high · test path: note
+
+ObjectInputStream / readObject() / XMLDecoder instantiate arbitrary classes named by the stream.
+
+**Fires on:** `new ObjectInputStream(`, `.readObject()`, `XMLDecoder`
+
+**Not reported when:**
+
+* The file is on a conventional test path (tests/, __tests__/, spec/, *_test.go, *.spec.ts, *Test.kt, test_*.py): the finding is downgraded to informational, not dropped — disabled TLS verification and trust-all fixtures are the norm in tests (languages/_parity.py: downgrade_in_tests).
+
+**Remediation:** Use a schema-bound format (JSON, protobuf) or an ObjectInputFilter allowlist.
+
+### JAVA-SEC-002: Shell command assembled at runtime
+
+`shell-command-from-runtime-string` · CWE-78 · security-severity 8.8 · confidence medium · test path: warning
+
+Runtime.getRuntime().exec(cmd) or ProcessBuilder("sh", "-c", cmd) with a non-literal cmd.
+
+**Fires on:** `Runtime.getRuntime().exec(x)`, `ProcessBuilder("sh", "-c", x)` with non-literal `x`
+
+**Not reported when:**
+
+* The exec/ProcessBuilder command is a string literal, or ProcessBuilder's program is not a shell / its second argument is not -c.
+
+**Remediation:** Pass the program and each argument separately to ProcessBuilder.
+
+### JAVA-SEC-003: TLS certificate or hostname verification disabled
+
+`tls-verification-disabled` · CWE-295 · security-severity 7.4 · confidence high · test path: note
+
+A trust-all TrustManager (empty checkServerTrusted), a hostname verifier returning true, NoopHostnameVerifier or ALLOW_ALL_HOSTNAME_VERIFIER.
+
+**Fires on:** empty `checkServerTrusted`/`checkClientTrusted`, `verify(..., SSLSession) { return true; }`, `NoopHostnameVerifier`, `ALLOW_ALL_HOSTNAME_VERIFIER`, `TrustAllStrategy`
+
+**Not reported when:**
+
+* checkServerTrusted has a non-empty body, or the HostnameVerifier does more than `return true` (comments are blanked, so a commented empty body still counts).
+* The file is on a conventional test path (tests/, __tests__/, spec/, *_test.go, *.spec.ts, *Test.kt, test_*.py): the finding is downgraded to informational, not dropped — disabled TLS verification and trust-all fixtures are the norm in tests (languages/_parity.py: downgrade_in_tests).
+
+**Remediation:** Keep the default TrustManager and HostnameVerifier; add a private CA to a truststore.
+
+### KT-SEC-001: Java native deserialization
+
+`unsafe-deserialization` · CWE-502 · security-severity 8.8 · confidence high · test path: note
+
+ObjectInputStream / readObject() / XMLDecoder instantiate arbitrary classes named by the stream.
+
+**Fires on:** `new ObjectInputStream(`, `.readObject()`, `XMLDecoder`
+
+**Not reported when:**
+
+* The file is on a conventional test path (tests/, __tests__/, spec/, *_test.go, *.spec.ts, *Test.kt, test_*.py): the finding is downgraded to informational, not dropped — disabled TLS verification and trust-all fixtures are the norm in tests (languages/_parity.py: downgrade_in_tests).
+
+**Remediation:** Use a schema-bound format (JSON, protobuf) or an ObjectInputFilter allowlist.
+
+### KT-SEC-002: Shell command assembled at runtime
+
+`shell-command-from-runtime-string` · CWE-78 · security-severity 8.8 · confidence medium · test path: warning
+
+Runtime.getRuntime().exec(cmd) or ProcessBuilder("sh", "-c", cmd) with a non-literal cmd.
+
+**Fires on:** `Runtime.getRuntime().exec(x)`, `ProcessBuilder("sh", "-c", x)` with non-literal `x`
+
+**Not reported when:**
+
+* The exec/ProcessBuilder command is a string literal, or ProcessBuilder's program is not a shell / its second argument is not -c.
+
+**Remediation:** Pass the program and each argument separately to ProcessBuilder.
+
+### KT-SEC-003: TLS certificate or hostname verification disabled
+
+`tls-verification-disabled` · CWE-295 · security-severity 7.4 · confidence high · test path: note
+
+A trust-all TrustManager (empty checkServerTrusted), a hostname verifier returning true, NoopHostnameVerifier or ALLOW_ALL_HOSTNAME_VERIFIER.
+
+**Fires on:** empty `checkServerTrusted`/`checkClientTrusted`, `verify(..., SSLSession) { return true; }`, `NoopHostnameVerifier`, `ALLOW_ALL_HOSTNAME_VERIFIER`, `TrustAllStrategy`
+
+**Not reported when:**
+
+* checkServerTrusted has a non-empty body, or the verify override is not `= true` / `{ return true }`.
+* The file is on a conventional test path (tests/, __tests__/, spec/, *_test.go, *.spec.ts, *Test.kt, test_*.py): the finding is downgraded to informational, not dropped — disabled TLS verification and trust-all fixtures are the norm in tests (languages/_parity.py: downgrade_in_tests).
+
+**Remediation:** Keep the default TrustManager and HostnameVerifier; add a private CA to a truststore.
+
+### CS-SEC-001: Type-resolving deserializer
+
+`unsafe-deserialization` · CWE-502 · security-severity 8.8 · confidence high · test path: note
+
+BinaryFormatter, NetDataContractSerializer, LosFormatter, SoapFormatter, ObjectStateFormatter or Newtonsoft TypeNameHandling other than None.
+
+**Fires on:** `BinaryFormatter`, `NetDataContractSerializer`, `LosFormatter`, `SoapFormatter`, `ObjectStateFormatter`, Newtonsoft `TypeNameHandling.All/Auto/Objects/Arrays`
+
+**Not reported when:**
+
+* TypeNameHandling.None; serializers other than the fixed list (System.Text.Json, XmlSerializer, DataContractSerializer) are never reported.
+* The file is on a conventional test path (tests/, __tests__/, spec/, *_test.go, *.spec.ts, *Test.kt, test_*.py): the finding is downgraded to informational, not dropped — disabled TLS verification and trust-all fixtures are the norm in tests (languages/_parity.py: downgrade_in_tests).
+
+**Remediation:** Use System.Text.Json or a DataContract serializer with known types.
+
+### CS-SEC-002: Shell command assembled at runtime
+
+`shell-command-from-runtime-string` · CWE-78 · security-severity 8.8 · confidence medium · test path: warning
+
+Process.Start("cmd.exe", args) or new ProcessStartInfo("sh", args) with non-literal args.
+
+**Fires on:** `Process.Start("cmd.exe"|"sh", x)` / `new ProcessStartInfo(shell, x)` with non-literal or interpolated `x`
+
+**Not reported when:**
+
+* The program is not a shell (`Process.Start(exe, args)`), or the arguments are a plain literal without interpolation or concatenation.
+
+**Remediation:** Start the program directly and use ProcessStartInfo.ArgumentList.
+
+### CS-SEC-003: Certificate validation callback accepts everything
+
+`tls-verification-disabled` · CWE-295 · security-severity 7.4 · confidence high · test path: note
+
+ServerCertificateCustomValidationCallback / ServerCertificateValidationCallback returns true, or DangerousAcceptAnyServerCertificateValidator is used.
+
+**Fires on:** certificate validation callback `=> true` / `delegate { return true; }`, `DangerousAcceptAnyServerCertificateValidator`
+
+**Not reported when:**
+
+* The callback body is anything other than a constant `true`.
+* The file is on a conventional test path (tests/, __tests__/, spec/, *_test.go, *.spec.ts, *Test.kt, test_*.py): the finding is downgraded to informational, not dropped — disabled TLS verification and trust-all fixtures are the norm in tests (languages/_parity.py: downgrade_in_tests).
+
+**Remediation:** Remove the callback or validate the chain; trust a private CA via the store.
+
+### TS-SEC-001: eval / new Function of a runtime string
+
+`dynamic-code-execution` · CWE-95 · security-severity 8.8 · confidence high · test path: warning
+
+eval(x) or new Function(..., x) receives a value that is not a string literal.
+
+**Fires on:** `eval(x)`, `new Function(..., x)` with non-literal `x`; declarations named `eval` are skipped
+
+**Not reported when:**
+
+* The evaluated argument (last argument for new Function) is a string literal; `obj.eval(...)` is not the global eval and is not reported.
+
+**Remediation:** Use JSON.parse for data and a dispatch table or dynamic import for behaviour.
+
+### TS-SEC-002: Shell command assembled at runtime
+
+`shell-command-from-runtime-string` · CWE-78 · security-severity 8.8 · confidence medium · test path: warning
+
+child_process exec/execSync with a non-literal command, or spawn/execFile with { shell: true } and a non-literal program.
+
+**Fires on:** `child_process` `exec`/`execSync` with template/concat command; `spawn`/`execFile` with `shell: true`. Binding resolved from the import, so `RegExp.exec` is never confused with it
+
+**Not reported when:**
+
+* The file does not import child_process (`RegExp.prototype.exec` is never confused with it), the command is a literal without `${}`/`+`, or spawn/execFile is called without `shell: true`.
+
+**Remediation:** Use execFile/spawn with an argument array and no shell option.
+
+### TS-SEC-003: Runtime value written as HTML
+
+`html-injection-sink` · CWE-79 · security-severity 6.1 · confidence medium · test path: note
+
+innerHTML/outerHTML assignment, insertAdjacentHTML, document.write or dangerouslySetInnerHTML receives a non-literal value.
+
+**Fires on:** `innerHTML`/`outerHTML` `=`/`+=`, `insertAdjacentHTML`, `document.write`, `dangerouslySetInnerHTML={{__html: x}}` with non-literal `x`; a leading `DOMPurify.sanitize(`/`sanitizeHtml(`/`*.sanitize(` is silent
+
+**Not reported when:**
+
+* The assigned value is a string literal, or starts with a recognised sanitizer call (DOMPurify.sanitize, sanitizeHtml, escapeHtml, *.sanitize).
+* The file is on a conventional test path (tests/, __tests__/, spec/, *_test.go, *.spec.ts, *Test.kt, test_*.py): the finding is downgraded to informational, not dropped — disabled TLS verification and trust-all fixtures are the norm in tests (languages/_parity.py: downgrade_in_tests).
+
+**Remediation:** Set textContent, build DOM nodes, or sanitize with DOMPurify first.
+
+### TS-SEC-004: TLS certificate verification disabled
+
+`tls-verification-disabled` · CWE-295 · security-severity 7.4 · confidence high · test path: note
+
+rejectUnauthorized: false, or NODE_TLS_REJECT_UNAUTHORIZED set to '0'.
+
+**Fires on:** `rejectUnauthorized: false`, `NODE_TLS_REJECT_UNAUTHORIZED = "0"`
+
+**Not reported when:**
+
+* NODE_TLS_REJECT_UNAUTHORIZED is compared or set to anything other than the literal '0'.
+* The file is on a conventional test path (tests/, __tests__/, spec/, *_test.go, *.spec.ts, *Test.kt, test_*.py): the finding is downgraded to informational, not dropped — disabled TLS verification and trust-all fixtures are the norm in tests (languages/_parity.py: downgrade_in_tests).
+
+**Remediation:** Keep rejectUnauthorized on; pass a private CA through the ca option.
+
+### C-SEC-001: Unbounded buffer write
+
+`unbounded-buffer-write` · CWE-120, CWE-676 · security-severity 7.5 · confidence high · test path: warning
+
+gets, strcpy, strcat, stpcpy, sprintf, vsprintf, wcscpy or wcscat is called; none bounds the bytes written.
+
+**Fires on:** calls to `gets`, `strcpy`, `strcat`, `stpcpy`, `sprintf`, `vsprintf`, `wcscpy`, `wcscat`; declarations, `#define`s, member calls and `my_strcpy` are not
+
+**Not reported when:**
+
+* The identifier is declared rather than called (`char *strcpy(`, `#define strcpy`), is a member call (`obj.strcpy(`), or is a differently named function (`my_strcpy`).
+
+**Remediation:** Use the bounded form (strlcpy/strncpy_s, snprintf, fgets) or std::string.
+
+### C-SEC-002: Shell command assembled at runtime
+
+`shell-command-from-runtime-string` · CWE-78 · security-severity 8.8 · confidence medium · test path: warning
+
+system(cmd) or popen(cmd, mode) with a non-literal cmd.
+
+**Fires on:** `system(x)` / `popen(x, …)` with non-literal `x`
+
+**Not reported when:**
+
+* The command is a string literal, or system/popen is being declared.
+
+**Remediation:** Use execve/posix_spawn with an argument vector.
+
+### C-SEC-003: Runtime string used as a format
+
+`format-string-from-runtime-value` · CWE-134 · security-severity 7.5 · confidence medium · test path: warning
+
+printf-family or syslog call whose format argument is a non-literal and the last argument (the -Wformat-security shape).
+
+**Fires on:** `printf`-family / `syslog` whose format is a non-literal **and** the last argument (`-Wformat-security`); ALL_CAPS macros are treated as literals
+
+**Not reported when:**
+
+* The format is a string literal or an ALL_CAPS macro constant, or further arguments follow it (`printf(fmt, x)` is not this shape).
+
+**Remediation:** Pass a literal format and the value as an argument: printf("%s", msg).
+
+### RS-SEC-001: unsafe without a SAFETY comment
+
+`undocumented-unsafe` · CWE-119 · security-severity 5.9 · confidence medium · test path: note
+
+An unsafe block, fn or impl has no SAFETY comment (or # Safety doc section) stating the invariants it relies on.
+
+**Fires on:** `unsafe {`, `unsafe fn`, `unsafe impl` with no `// SAFETY:` (or `# Safety` doc) in the comment block above, on the line, or first inside the block — clippy `undocumented_unsafe_blocks`
+
+**Not reported when:**
+
+* A comment block immediately above the unsafe item, its own line, or the first line inside the block contains `SAFETY` or `# Safety`.
+* The file is on a conventional test path (tests/, __tests__/, spec/, *_test.go, *.spec.ts, *Test.kt, test_*.py): the finding is downgraded to informational, not dropped — disabled TLS verification and trust-all fixtures are the norm in tests (languages/_parity.py: downgrade_in_tests).
+
+**Remediation:** Add `// SAFETY: ...` above the block explaining why the operation is sound.
+
+### RS-SEC-002: Shell command assembled at runtime
+
+`shell-command-from-runtime-string` · CWE-78 · security-severity 8.8 · confidence medium · test path: warning
+
+Command::new("sh") followed by .arg("-c").arg(cmd) or .args(["-c", cmd]) with a non-literal cmd.
+
+**Fires on:** `Command::new("sh")` … `.arg("-c").arg(x)` / `.args(["-c", x])` with non-literal `x`
+
+**Not reported when:**
+
+* Command::new's program is not a shell, no -c flag precedes the argument, or the argument is a string literal.
+
+**Remediation:** Run the program directly with Command::new(program).args([...]).
+
+### RS-SEC-003: TLS certificate verification disabled
+
+`tls-verification-disabled` · CWE-295 · security-severity 7.4 · confidence high · test path: note
+
+reqwest danger_accept_invalid_certs(true) / danger_accept_invalid_hostnames(true) or rustls .dangerous().
+
+**Fires on:** reqwest `danger_accept_invalid_certs(true)` / `danger_accept_invalid_hostnames(true)`, rustls `.dangerous()`
+
+**Not reported when:**
+
+* The file is on a conventional test path (tests/, __tests__/, spec/, *_test.go, *.spec.ts, *Test.kt, test_*.py): the finding is downgraded to informational, not dropped — disabled TLS verification and trust-all fixtures are the norm in tests (languages/_parity.py: downgrade_in_tests).
+
+**Remediation:** Keep verification on; add a private CA with add_root_certificate.
+

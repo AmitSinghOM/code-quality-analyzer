@@ -74,6 +74,20 @@ result as a security alert, rank it, and link the CWE. Quality rules carry
 neither property. The result `level` is unchanged (`warning`), so an existing
 `--fail-on error` gate does not fail on upgrade.
 
+## Rule help links
+
+Every descriptor carries `helpUri` and `help.markdown` next to the existing
+`help.text`. `helpUri` is the release-pinned rule reference,
+`https://github.com/AmitSinghOM/code-quality-analyzer/blob/v<version>/docs/RULES.md#<anchor>`,
+where `<version>` is the analyzer's `semanticVersion` and `<anchor>` is the
+GitHub heading anchor documenting that rule (its own heading, or the combined
+heading it shares with sibling rules). `help.markdown` is what GitHub code
+scanning renders beside an alert: the rule title, what it detects, the CWE
+when anchored, the remediation, every `not_when` condition, and that same
+link. Both are built from `RuleMetadata` only, never from scanned source, so
+`--anonymize` and `--redact-paths` leave them byte-identical;
+`tests/test_rule_help.py` checks the anchors against `docs/RULES.md`.
+
 ## Contract versions
 
 The output declares SARIF `2.1.0`. Analyzer semantic versioning identifies the
