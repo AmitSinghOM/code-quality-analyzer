@@ -26,11 +26,85 @@ from .protocols import (
     SourceFile,
 )
 from .registry import PluginRegistry
+from .rule_metadata import rule_metadata
 from .suppression_ledger import SuppressionLedger, open_ledger
 
 # How many unparseable files are named in scan health / verbose output.
 # Bounded so a corrupt tree cannot bloat the report; the count is exact.
 UNPARSED_EXAMPLE_LIMIT = 5
+
+
+@dataclass(frozen=True, slots=True)
+class PolicyDroppedFinding:
+    """A finding a disabled rule removed, and the policy that removed it.
+
+    ``source`` is ``"project"`` (rule default or ``[rules]``) or
+    ``"override:<glob>"`` with the raw configured glob.
+    """
+
+    finding: Finding
+    source: str
+
+
+@dataclass
+class PolicyLedger:
+    """Per-scan record of what rule policy did to each finding (ADR 005, 4).
+
+    ``entries`` keeps every finding a disabled rule dropped, whole, so it can
+    still be fingerprinted against a baseline. ``source_for`` names the policy
+    behind each emitted finding's severity from a side table keyed by object
+    identity, as ``_attach_fingerprints`` keys fingerprints, so ``Finding`` and
+    the plugin API stay unchanged. The table holds each finding, so an id is
+    never reused while the ledger lives.
+
+    Sources hold raw, user-written globs. They are path-shaped data: every
+    report sink must reduce or tokenize them (``--redact-paths``,
+    ``--anonymize``) before output.
+    """
+
+    entries: list[PolicyDroppedFinding] = field(default_factory=list)
+    _emitted: dict[int, tuple[Finding, str]] = field(default_factory=dict, repr=False)
+
+    def drop(self, finding: Finding, source: str) -> None:
+        self.entries.append(PolicyDroppedFinding(finding, source))
+
+    def emit(self, finding: Finding, source: str) -> None:
+        self._emitted[id(finding)] = (finding, source)
+
+    def source_for(self, finding: Finding) -> str | None:
+        """Policy source of an emitted finding; ``None`` if not from this scan."""
+        entry = self._emitted.get(id(finding))
+        return entry[1] if entry is not None and entry[0] is finding else None
+
+    def dropped_findings(self) -> tuple[Finding, ...]:
+        """Dropped findings in report order, the order baseline ordinals use."""
+        return tuple(sorted((entry.finding for entry in self.entries), key=_report_order))
+
+    @staticmethod
+    def is_security_rule(rule_id: str) -> bool:
+        """The predicate SARIF uses for the ``security`` tag: the rule has a CWE."""
+        try:
+            return bool(rule_metadata(rule_id).cwe)
+        except ValueError:  # A plugin rule outside the catalog has no CWE.
+            return False
+
+    def health(self) -> dict:
+        """Counts only, shaped like ``scan_health.suppressed``."""
+        by_rule: dict[str, int] = {}
+        by_source: dict[str, int] = {}
+        security = 0
+        for entry in self.entries:
+            rule_id = entry.finding.rule_id
+            by_rule[rule_id] = by_rule.get(rule_id, 0) + 1
+            by_source[entry.source] = by_source.get(entry.source, 0) + 1
+            if self.is_security_rule(rule_id):
+                security += 1
+        return {
+            "count": len(self.entries),
+            "by_rule": dict(sorted(by_rule.items())),
+            "by_source": dict(sorted(by_source.items())),
+            "security": security,
+        }
 
 
 @dataclass
@@ -64,6 +138,7 @@ class CodeScanner:
         self.cache_enabled = cache_store is not None
         self._scanned = False
         self.suppressions = SuppressionLedger()
+        self.policy_ledger = PolicyLedger()
         self.language_counts: dict[str, int] = {}
 
         self.files_scanned = 0
@@ -164,20 +239,25 @@ class CodeScanner:
             self.package_health = dict(result.health)
         return result
 
-    def _add_findings(self, findings, content: str | None = None) -> None:
-        """Apply language-neutral rule policy before storing findings.
+    def _add_findings(
+        self, findings, content: str | None = None, identity_path: str | None = None
+    ) -> None:
+        """Apply rule policy per (identity path, rule) before storing findings.
 
         When ``content`` is given (per-file rule packs), each finding's
         location is stamped with the whitespace-normalised text of its line so
-        baselines can identify it independently of its line number.
+        baselines can identify it independently of its line number. A finding
+        a disabled rule removes is stamped too and kept in the policy ledger,
+        so it keeps the fingerprint it had while active.
+
+        Policy matches the hidden project-relative path: the finding's own
+        ``identity_path``, else the scanned file's (``identity_path``), else
+        the location path, never the redacted display path.
         """
         lines = content.splitlines() if content is not None else None
         for finding in findings:
-            policy = self.configuration.policy_for(finding.rule_id)
-            if not policy.enabled:
-                continue
-            if policy.severity is not None:
-                finding = replace(finding, severity=policy.severity)
+            path = finding.location.identity_path or identity_path or finding.location.path
+            policy = self.configuration.effective_policy(finding.rule_id, path)
             if lines is not None and finding.location.context is None:
                 context = _line_context(lines, finding.location.line)
                 if context is not None:
@@ -185,17 +265,16 @@ class CodeScanner:
                         finding,
                         location=replace(finding.location, context=context),
                     )
+            if not policy.enabled:
+                self.policy_ledger.drop(finding, policy.source)
+                continue
+            if policy.severity is not None:
+                finding = replace(finding, severity=policy.severity)
             self.findings.append(finding)
+            self.policy_ledger.emit(finding, policy.source)
 
     def _sort_findings(self) -> None:
-        self.findings.sort(
-            key=lambda item: (
-                item.location.path,
-                item.location.line,
-                item.location.column,
-                item.rule_id,
-            )
-        )
+        self.findings.sort(key=_report_order)
 
     def _scan_file(self, path: Path, content: str) -> None:
         adapter = self.registry.adapter_for_path(path)
@@ -237,7 +316,7 @@ class CodeScanner:
         self.analyzed_paths.add(internal_path)
         self.parsed_files.setdefault(adapter.language_id, {})[internal_path] = parsed
         for rule_pack in self.registry.rule_packs_for(adapter.language_id):
-            self._add_findings(rule_pack.evaluate(parsed), content)
+            self._add_findings(rule_pack.evaluate(parsed), content, internal_path)
 
         for provider in self.registry.signal_providers_for(
             adapter.language_id,
@@ -374,6 +453,12 @@ class CodeScanner:
                 for result in self.project_results.values()
             )
         )
+
+
+def _report_order(finding: Finding) -> tuple:
+    """Report order (path, line, column, rule); baseline ordinals follow it."""
+    location = finding.location
+    return (location.path, location.line, location.column, finding.rule_id)
 
 
 def _line_context(lines: list[str], line: int) -> str | None:
