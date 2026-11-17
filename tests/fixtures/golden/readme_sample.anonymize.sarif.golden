@@ -121,10 +121,10 @@
                 "text": "A broad exception handler can hide failures it cannot recover from."
               },
               "help": {
-                "markdown": "**Broad exception handler** (`PY-COR-002`)\n\nA broad exception handler can hide failures it cannot recover from.\n\n**Remediation:** Catch the narrow exception types the operation can recover from.\n\n**Not reported when:**\n\n- The handler catches a specific exception class rather than Exception or BaseException.\n- The handler body is only `pass`/`...` (a bare `except:`, `except Exception: pass`, ...): PY-COR-003 reports the swallow and one handler yields one finding, not two.\n- The handler ends with a bare `raise` or `raise <bound name>` (no `from`): `except BaseException: cleanup(); raise` is a `finally` with access to the exception and the only way to guarantee cleanup on KeyboardInterrupt; ruff BLE001 exempts the same shape. Logging without re-raising, or wrapping in a new exception type, is still reported.\n\n[PY-COR-002 in the rule reference](https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.4.2/docs/RULES.md#py-cor-002-broad-exception-handler)",
+                "markdown": "**Broad exception handler** (`PY-COR-002`)\n\nA broad exception handler can hide failures it cannot recover from.\n\n**Remediation:** Catch the narrow exception types the operation can recover from.\n\n**Not reported when:**\n\n- The handler catches a specific exception class rather than Exception or BaseException.\n- The handler body is only `pass`/`...` (a bare `except:`, `except Exception: pass`, ...): PY-COR-003 reports the swallow and one handler yields one finding, not two.\n- The handler ends with a bare `raise` or `raise <bound name>` (no `from`): `except BaseException: cleanup(); raise` is a `finally` with access to the exception and the only way to guarantee cleanup on KeyboardInterrupt; ruff BLE001 exempts the same shape. Logging without re-raising, or wrapping in a new exception type, is still reported.\n\n[PY-COR-002 in the rule reference](https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.5.0/docs/RULES.md#py-cor-002-broad-exception-handler)",
                 "text": "Catch the narrow exception types the operation can recover from."
               },
-              "helpUri": "https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.4.2/docs/RULES.md#py-cor-002-broad-exception-handler",
+              "helpUri": "https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.5.0/docs/RULES.md#py-cor-002-broad-exception-handler",
               "id": "PY-COR-002",
               "name": "broad-exception-handler",
               "properties": {
@@ -145,10 +145,10 @@
                 "text": "A locally acquired resource is not protected by structural cleanup."
               },
               "help": {
-                "markdown": "**Resource without guaranteed cleanup** (`PY-COR-006`)\n\nA locally acquired resource is not protected by structural cleanup.\n\n**Remediation:** Use a context manager or guarantee cleanup with try/finally.\n\n**Not reported when:**\n\n- The resource is opened inside a `with` statement or returned to a caller that manages its lifetime.\n- The call is not in the fixed resource-call allowlist (python_resources._RESOURCE_CALLS).\n- Cleanup is guaranteed by an enclosing try/finally.\n\n[PY-COR-006 in the rule reference](https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.4.2/docs/RULES.md#py-cor-006-resource-without-guaranteed-cleanup)",
+                "markdown": "**Resource without guaranteed cleanup** (`PY-COR-006`)\n\nA locally acquired resource is not protected by structural cleanup.\n\n**Remediation:** Use a context manager or guarantee cleanup with try/finally.\n\n**Not reported when:**\n\n- The resource is opened inside a `with` statement or returned to a caller that manages its lifetime.\n- The call is not in the fixed resource-call allowlist (python_resources._RESOURCE_CALLS).\n- Cleanup is guaranteed by an enclosing try/finally.\n\n[PY-COR-006 in the rule reference](https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.5.0/docs/RULES.md#py-cor-006-resource-without-guaranteed-cleanup)",
                 "text": "Use a context manager or guarantee cleanup with try/finally."
               },
-              "helpUri": "https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.4.2/docs/RULES.md#py-cor-006-resource-without-guaranteed-cleanup",
+              "helpUri": "https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.5.0/docs/RULES.md#py-cor-006-resource-without-guaranteed-cleanup",
               "id": "PY-COR-006",
               "name": "resource-without-guaranteed-cleanup",
               "properties": {
@@ -169,10 +169,10 @@
                 "text": "verify=False, ssl._create_unverified_context(), ssl.CERT_NONE or check_hostname = False turns off peer authentication."
               },
               "help": {
-                "markdown": "**TLS certificate verification disabled** (`PY-SEC-004`)\n\nverify=False, ssl._create_unverified_context(), ssl.CERT_NONE or check_hostname = False turns off peer authentication.\n\n**CWE:** CWE-295\n\n**Remediation:** Keep verification on; point verify= at a CA bundle for private CAs.\n\n**Not reported when:**\n\n- verify= is anything other than the literal False (a CA bundle path is the recommended form), or CERT_NONE appears outside a cert_reqs/verify_mode slot.\n- The file is on a conventional test path (tests/, __tests__/, spec/, *_test.go, *.spec.ts, *Test.kt, test_*.py): the finding is downgraded to informational, not dropped \u2014 disabled TLS verification and trust-all fixtures are the norm in tests (languages/_parity.py: downgrade_in_tests).\n\n[PY-SEC-004 in the rule reference](https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.4.2/docs/RULES.md#py-sec-004-tls-certificate-verification-disabled)",
+                "markdown": "**TLS certificate verification disabled** (`PY-SEC-004`)\n\nverify=False, ssl._create_unverified_context(), ssl.CERT_NONE or check_hostname = False turns off peer authentication.\n\n**CWE:** CWE-295\n\n**Remediation:** Keep verification on; point verify= at a CA bundle for private CAs.\n\n**Not reported when:**\n\n- verify= is anything other than the literal False (a CA bundle path is the recommended form), or CERT_NONE appears outside a cert_reqs/verify_mode slot.\n- The file is on a conventional test path (tests/, __tests__/, spec/, *_test.go, *.spec.ts, *Test.kt, test_*.py): the finding is downgraded to informational, not dropped \u2014 disabled TLS verification and trust-all fixtures are the norm in tests (languages/_parity.py: downgrade_in_tests).\n\n[PY-SEC-004 in the rule reference](https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.5.0/docs/RULES.md#py-sec-004-tls-certificate-verification-disabled)",
                 "text": "Keep verification on; point verify= at a CA bundle for private CAs."
               },
-              "helpUri": "https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.4.2/docs/RULES.md#py-sec-004-tls-certificate-verification-disabled",
+              "helpUri": "https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.5.0/docs/RULES.md#py-sec-004-tls-certificate-verification-disabled",
               "id": "PY-SEC-004",
               "name": "tls-verification-disabled",
               "properties": {
@@ -191,7 +191,7 @@
               }
             }
           ],
-          "semanticVersion": "3.4.2"
+          "semanticVersion": "3.5.0"
         }
       }
     }

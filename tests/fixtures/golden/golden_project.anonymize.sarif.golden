@@ -237,10 +237,10 @@
                 "text": "A mutable function default can retain state between calls."
               },
               "help": {
-                "markdown": "**Mutable default argument** (`PY-COR-001`)\n\nA mutable function default can retain state between calls.\n\n**Remediation:** Use None as the default and create a new value inside the function.\n\n**Not reported when:**\n\n- The default is an immutable literal (None, numbers, strings, tuples) or a call to anything other than list/dict/set/bytearray; list, dict and set displays, their comprehensions, and those four factory calls are what is flagged (python_rules._MUTABLE_LITERALS / _MUTABLE_FACTORIES).\n- The parameter is intentionally a shared, documented cache or sentinel: the rule cannot see intent, so confirm before rewriting.\n\n[PY-COR-001 in the rule reference](https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.4.2/docs/RULES.md#py-cor-001-mutable-default-argument)",
+                "markdown": "**Mutable default argument** (`PY-COR-001`)\n\nA mutable function default can retain state between calls.\n\n**Remediation:** Use None as the default and create a new value inside the function.\n\n**Not reported when:**\n\n- The default is an immutable literal (None, numbers, strings, tuples) or a call to anything other than list/dict/set/bytearray; list, dict and set displays, their comprehensions, and those four factory calls are what is flagged (python_rules._MUTABLE_LITERALS / _MUTABLE_FACTORIES).\n- The parameter is intentionally a shared, documented cache or sentinel: the rule cannot see intent, so confirm before rewriting.\n\n[PY-COR-001 in the rule reference](https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.5.0/docs/RULES.md#py-cor-001-mutable-default-argument)",
                 "text": "Use None as the default and create a new value inside the function."
               },
-              "helpUri": "https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.4.2/docs/RULES.md#py-cor-001-mutable-default-argument",
+              "helpUri": "https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.5.0/docs/RULES.md#py-cor-001-mutable-default-argument",
               "id": "PY-COR-001",
               "name": "mutable-default-argument",
               "properties": {
@@ -261,10 +261,10 @@
                 "text": "A broad exception handler can hide failures it cannot recover from."
               },
               "help": {
-                "markdown": "**Broad exception handler** (`PY-COR-002`)\n\nA broad exception handler can hide failures it cannot recover from.\n\n**Remediation:** Catch the narrow exception types the operation can recover from.\n\n**Not reported when:**\n\n- The handler catches a specific exception class rather than Exception or BaseException.\n- The handler body is only `pass`/`...` (a bare `except:`, `except Exception: pass`, ...): PY-COR-003 reports the swallow and one handler yields one finding, not two.\n- The handler ends with a bare `raise` or `raise <bound name>` (no `from`): `except BaseException: cleanup(); raise` is a `finally` with access to the exception and the only way to guarantee cleanup on KeyboardInterrupt; ruff BLE001 exempts the same shape. Logging without re-raising, or wrapping in a new exception type, is still reported.\n\n[PY-COR-002 in the rule reference](https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.4.2/docs/RULES.md#py-cor-002-broad-exception-handler)",
+                "markdown": "**Broad exception handler** (`PY-COR-002`)\n\nA broad exception handler can hide failures it cannot recover from.\n\n**Remediation:** Catch the narrow exception types the operation can recover from.\n\n**Not reported when:**\n\n- The handler catches a specific exception class rather than Exception or BaseException.\n- The handler body is only `pass`/`...` (a bare `except:`, `except Exception: pass`, ...): PY-COR-003 reports the swallow and one handler yields one finding, not two.\n- The handler ends with a bare `raise` or `raise <bound name>` (no `from`): `except BaseException: cleanup(); raise` is a `finally` with access to the exception and the only way to guarantee cleanup on KeyboardInterrupt; ruff BLE001 exempts the same shape. Logging without re-raising, or wrapping in a new exception type, is still reported.\n\n[PY-COR-002 in the rule reference](https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.5.0/docs/RULES.md#py-cor-002-broad-exception-handler)",
                 "text": "Catch the narrow exception types the operation can recover from."
               },
-              "helpUri": "https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.4.2/docs/RULES.md#py-cor-002-broad-exception-handler",
+              "helpUri": "https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.5.0/docs/RULES.md#py-cor-002-broad-exception-handler",
               "id": "PY-COR-002",
               "name": "broad-exception-handler",
               "properties": {
@@ -285,10 +285,10 @@
                 "text": "A locally acquired resource is not protected by structural cleanup."
               },
               "help": {
-                "markdown": "**Resource without guaranteed cleanup** (`PY-COR-006`)\n\nA locally acquired resource is not protected by structural cleanup.\n\n**Remediation:** Use a context manager or guarantee cleanup with try/finally.\n\n**Not reported when:**\n\n- The resource is opened inside a `with` statement or returned to a caller that manages its lifetime.\n- The call is not in the fixed resource-call allowlist (python_resources._RESOURCE_CALLS).\n- Cleanup is guaranteed by an enclosing try/finally.\n\n[PY-COR-006 in the rule reference](https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.4.2/docs/RULES.md#py-cor-006-resource-without-guaranteed-cleanup)",
+                "markdown": "**Resource without guaranteed cleanup** (`PY-COR-006`)\n\nA locally acquired resource is not protected by structural cleanup.\n\n**Remediation:** Use a context manager or guarantee cleanup with try/finally.\n\n**Not reported when:**\n\n- The resource is opened inside a `with` statement or returned to a caller that manages its lifetime.\n- The call is not in the fixed resource-call allowlist (python_resources._RESOURCE_CALLS).\n- Cleanup is guaranteed by an enclosing try/finally.\n\n[PY-COR-006 in the rule reference](https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.5.0/docs/RULES.md#py-cor-006-resource-without-guaranteed-cleanup)",
                 "text": "Use a context manager or guarantee cleanup with try/finally."
               },
-              "helpUri": "https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.4.2/docs/RULES.md#py-cor-006-resource-without-guaranteed-cleanup",
+              "helpUri": "https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.5.0/docs/RULES.md#py-cor-006-resource-without-guaranteed-cleanup",
               "id": "PY-COR-006",
               "name": "resource-without-guaranteed-cleanup",
               "properties": {
@@ -309,10 +309,10 @@
                 "text": "A function declares more effective parameters than the supported limit."
               },
               "help": {
-                "markdown": "**Excessive parameters** (`PY-MAINT-004`)\n\nA function declares more effective parameters than the supported limit.\n\n**Remediation:** Group related inputs in a cohesive value object or split the responsibility.\n\n**Not reported when:**\n\n- The parameter count is at or below the configured limit; `self`/`cls` are not counted.\n\n[PY-MAINT-004 in the rule reference](https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.4.2/docs/RULES.md#py-maint-004-excessive-parameters)",
+                "markdown": "**Excessive parameters** (`PY-MAINT-004`)\n\nA function declares more effective parameters than the supported limit.\n\n**Remediation:** Group related inputs in a cohesive value object or split the responsibility.\n\n**Not reported when:**\n\n- The parameter count is at or below the configured limit; `self`/`cls` are not counted.\n\n[PY-MAINT-004 in the rule reference](https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.5.0/docs/RULES.md#py-maint-004-excessive-parameters)",
                 "text": "Group related inputs in a cohesive value object or split the responsibility."
               },
-              "helpUri": "https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.4.2/docs/RULES.md#py-maint-004-excessive-parameters",
+              "helpUri": "https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.5.0/docs/RULES.md#py-maint-004-excessive-parameters",
               "id": "PY-MAINT-004",
               "name": "excessive-parameters",
               "properties": {
@@ -333,10 +333,10 @@
                 "text": "subprocess.*(cmd, shell=True), os.system(cmd) or os.popen(cmd) with a non-literal command lets a shell re-parse runtime data."
               },
               "help": {
-                "markdown": "**Shell command assembled at runtime** (`PY-SEC-002`)\n\nsubprocess.*(cmd, shell=True), os.system(cmd) or os.popen(cmd) with a non-literal command lets a shell re-parse runtime data.\n\n**CWE:** CWE-78\n\n**Remediation:** Pass an argument list without shell=True; quote with shlex.quote if a shell is unavoidable.\n\n**Not reported when:**\n\n- The command is a string literal, or the subprocess call has no shell=True keyword (a list of arguments is never reported).\n- os.system/os.popen are only recognised through the `os.` qualifier; a `from os import system` call is not seen.\n\n[PY-SEC-002 in the rule reference](https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.4.2/docs/RULES.md#py-sec-002-shell-command-assembled-at-runtime)",
+                "markdown": "**Shell command assembled at runtime** (`PY-SEC-002`)\n\nsubprocess.*(cmd, shell=True), os.system(cmd) or os.popen(cmd) with a non-literal command lets a shell re-parse runtime data.\n\n**CWE:** CWE-78\n\n**Remediation:** Pass an argument list without shell=True; quote with shlex.quote if a shell is unavoidable.\n\n**Not reported when:**\n\n- The command is a string literal, or the subprocess call has no shell=True keyword (a list of arguments is never reported).\n- os.system/os.popen are only recognised through the `os.` qualifier; a `from os import system` call is not seen.\n\n[PY-SEC-002 in the rule reference](https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.5.0/docs/RULES.md#py-sec-002-shell-command-assembled-at-runtime)",
                 "text": "Pass an argument list without shell=True; quote with shlex.quote if a shell is unavoidable."
               },
-              "helpUri": "https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.4.2/docs/RULES.md#py-sec-002-shell-command-assembled-at-runtime",
+              "helpUri": "https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.5.0/docs/RULES.md#py-sec-002-shell-command-assembled-at-runtime",
               "id": "PY-SEC-002",
               "name": "shell-command-from-runtime-string",
               "properties": {
@@ -362,10 +362,10 @@
                 "text": "eval() or exec() receives a value that is not a string literal."
               },
               "help": {
-                "markdown": "**eval/exec of a runtime string** (`PY-SEC-003`)\n\neval() or exec() receives a value that is not a string literal.\n\n**CWE:** CWE-95\n\n**Remediation:** Use ast.literal_eval for data, a dispatch table for behaviour, or importlib for module names.\n\n**Not reported when:**\n\n- The first argument is a string literal, or the callee is an attribute (pandas `df.eval`, `ast.literal_eval`) rather than the bare builtin.\n\n[PY-SEC-003 in the rule reference](https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.4.2/docs/RULES.md#py-sec-003-evalexec-of-a-runtime-string)",
+                "markdown": "**eval/exec of a runtime string** (`PY-SEC-003`)\n\neval() or exec() receives a value that is not a string literal.\n\n**CWE:** CWE-95\n\n**Remediation:** Use ast.literal_eval for data, a dispatch table for behaviour, or importlib for module names.\n\n**Not reported when:**\n\n- The first argument is a string literal, or the callee is an attribute (pandas `df.eval`, `ast.literal_eval`) rather than the bare builtin.\n\n[PY-SEC-003 in the rule reference](https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.5.0/docs/RULES.md#py-sec-003-evalexec-of-a-runtime-string)",
                 "text": "Use ast.literal_eval for data, a dispatch table for behaviour, or importlib for module names."
               },
-              "helpUri": "https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.4.2/docs/RULES.md#py-sec-003-evalexec-of-a-runtime-string",
+              "helpUri": "https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.5.0/docs/RULES.md#py-sec-003-evalexec-of-a-runtime-string",
               "id": "PY-SEC-003",
               "name": "dynamic-code-execution",
               "properties": {
@@ -391,10 +391,10 @@
                 "text": "A value bound to a secret-shaped name (token, password, nonce, salt, otp, api_key, session id, csrf) is produced by the random module."
               },
               "help": {
-                "markdown": "**Non-cryptographic random used for a secret** (`PY-SEC-005`)\n\nA value bound to a secret-shaped name (token, password, nonce, salt, otp, api_key, session id, csrf) is produced by the random module.\n\n**CWE:** CWE-330\n\n**Remediation:** Generate secrets with the secrets module (token_urlsafe, choice).\n\n**Not reported when:**\n\n- The bound name or keyword does not match the secret-shaped pattern (languages/_security.is_secret_name); `counter = random.randint(...)` is fine.\n- The expression mentions SystemRandom, or uses the secrets module.\n\n[PY-SEC-005 in the rule reference](https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.4.2/docs/RULES.md#py-sec-005-non-cryptographic-random-used-for-a-secret)",
+                "markdown": "**Non-cryptographic random used for a secret** (`PY-SEC-005`)\n\nA value bound to a secret-shaped name (token, password, nonce, salt, otp, api_key, session id, csrf) is produced by the random module.\n\n**CWE:** CWE-330\n\n**Remediation:** Generate secrets with the secrets module (token_urlsafe, choice).\n\n**Not reported when:**\n\n- The bound name or keyword does not match the secret-shaped pattern (languages/_security.is_secret_name); `counter = random.randint(...)` is fine.\n- The expression mentions SystemRandom, or uses the secrets module.\n\n[PY-SEC-005 in the rule reference](https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.5.0/docs/RULES.md#py-sec-005-non-cryptographic-random-used-for-a-secret)",
                 "text": "Generate secrets with the secrets module (token_urlsafe, choice)."
               },
-              "helpUri": "https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.4.2/docs/RULES.md#py-sec-005-non-cryptographic-random-used-for-a-secret",
+              "helpUri": "https://github.com/AmitSinghOM/code-quality-analyzer/blob/v3.5.0/docs/RULES.md#py-sec-005-non-cryptographic-random-used-for-a-secret",
               "id": "PY-SEC-005",
               "name": "insecure-random-for-secret",
               "properties": {
@@ -413,7 +413,7 @@
               }
             }
           ],
-          "semanticVersion": "3.4.2"
+          "semanticVersion": "3.5.0"
         }
       }
     }
