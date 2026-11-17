@@ -134,3 +134,121 @@ def test_package_data_names_are_removed_from_anonymized_finding():
     assert payload["message"] == "Finding reported by PY-PKG-006."
     assert "private_package" not in str(payload)
     assert "private/schema.json" not in str(payload)
+
+
+# --- Path-scoped rule policy sources (ADR 005, decision 4: privacy) ---------
+
+
+def test_policy_source_project_constant_is_never_transformed():
+    anonymizer = ReportAnonymizer()
+
+    assert anonymizer.policy_source("project") == "project"
+    assert anonymizer._files == {}
+
+
+def test_policy_source_override_glob_is_tokenized_through_the_file_map():
+    anonymizer = ReportAnonymizer()
+
+    projected = anonymizer.policy_source("override:tests/**/*_test.py")
+
+    assert projected == "override:file-0001"
+    assert anonymizer.policy_source("override:tests/**/*_test.py") == projected
+    assert anonymizer.policy_source("override:vendor/**") == "override:file-0002"
+    assert "tests/**" not in projected
+
+
+def test_policy_source_glob_equal_to_a_real_path_shares_its_token():
+    anonymizer = ReportAnonymizer()
+
+    path_token = anonymizer.file("pkg/generated.py")
+
+    assert anonymizer.policy_source("override:pkg/generated.py") == f"override:{path_token}"
+    assert anonymizer.file("other.py") == "file-0002"
+
+
+def test_policy_source_odd_shape_fails_closed_and_never_returns_raw_text():
+    anonymizer = ReportAnonymizer()
+
+    for raw in ("vendor/**", "override:", "Project", "rules:tests/**"):
+        projected = anonymizer.policy_source(raw)
+        assert projected != raw
+        assert projected.startswith("file-"), raw
+        assert "vendor" not in projected and "tests" not in projected
+
+
+def test_scan_health_tokenizes_policy_dropped_sources_and_keeps_counts():
+    anonymizer = ReportAnonymizer()
+    health = {
+        "skipped_examples": {},
+        "unparsed_examples": [],
+        "excluded_generated_examples": {},
+        "suppressed": {"count": 1, "by_rule": {"PY-SEC-002": 1}},
+        "policy_dropped": {
+            "count": 7,
+            "by_rule": {"PY-MAINT-003": 5, "PY-SEC-002": 2},
+            "by_source": {
+                "override:tests/**/*_test.py": 5,
+                "override:vendor/**": 1,
+                "project": 1,
+            },
+            "security": 2,
+        },
+    }
+
+    payload = anonymizer.scan_health(health)
+    dropped = payload["policy_dropped"]
+
+    assert dropped["count"] == 7
+    assert dropped["by_rule"] == {"PY-MAINT-003": 5, "PY-SEC-002": 2}
+    assert dropped["security"] == 2
+    assert dropped["by_source"] == {
+        "override:file-0001": 5,
+        "override:file-0002": 1,
+        "project": 1,
+    }
+    assert payload["suppressed"] == {"count": 1, "by_rule": {"PY-SEC-002": 1}}
+    assert "tests/**" not in str(payload) and "vendor" not in str(payload)
+    # Input is not mutated.
+    assert "override:vendor/**" in health["policy_dropped"]["by_source"]
+
+
+def test_scan_health_source_tokens_share_the_report_file_map():
+    anonymizer = ReportAnonymizer()
+    # A finding already tokenized ``pkg/generated.py``; a glob equal to that
+    # path must land on the same token, not mint a second one.
+    anonymizer.file("pkg/generated.py")
+    health = {"policy_dropped": {"count": 3, "by_rule": {}, "by_source": {
+        "override:pkg/generated.py": 2,
+        "project": 1,
+    }, "security": 0}}
+
+    dropped = anonymizer.scan_health(health)["policy_dropped"]
+
+    assert dropped["by_source"] == {"override:file-0001": 2, "project": 1}
+    assert sum(dropped["by_source"].values()) == dropped["count"]
+    assert anonymizer.file("pkg/generated.py") == "file-0001"
+
+
+def test_scan_health_without_policy_dropped_is_unchanged():
+    anonymizer = ReportAnonymizer()
+    health = {
+        "skipped_examples": {"too_large": ["top/a.py"]},
+        "unparsed_examples": [],
+        "excluded_generated_examples": {},
+        "suppressed": {"count": 0, "by_rule": {}},
+    }
+
+    payload = anonymizer.scan_health(health)
+
+    assert "policy_dropped" not in payload
+    assert payload["skipped_examples"] == {"too_large": ["file-0001"]}
+    assert payload["suppressed"] == {"count": 0, "by_rule": {}}
+
+
+def test_scan_health_leaves_a_malformed_policy_dropped_block_alone():
+    anonymizer = ReportAnonymizer()
+    health = {"policy_dropped": {"count": 0, "by_rule": {}, "security": 0}}
+
+    payload = anonymizer.scan_health(health)
+
+    assert payload["policy_dropped"] == {"count": 0, "by_rule": {}, "security": 0}
