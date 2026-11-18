@@ -21,12 +21,14 @@ i 1 finding(s) suppressed by in-source directives (PY-COR-002=1); listed under s
 │ Circular import groups: 0 │
 └───────────────────────────┘
 
-┌─ Finding Baseline ───┐
-│ Loaded: False        │
-│ Written: True        │
-│ Current findings: 5  │
-│ New findings: 5      │
-└──────────────────────┘
+┌─ Finding Baseline ──────────────┐
+│ Loaded: False                   │
+│ Written: True                   │
+│ Current findings: 5             │
+│ New findings: 5                 │
+│ Unmatched (prune candidates): 0 │
+│ Hidden by policy: 0             │
+└─────────────────────────────────┘
 
 Actionable Findings
 Rule          Severity  Location                Message                                                                   Remediation

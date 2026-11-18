@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import argparse
 import os
@@ -16,7 +16,7 @@ from . import (
     SCORING_POLICY_VERSION,
     __version__,
 )
-from .anonymize import ANONYMIZED_PROJECT, ReportAnonymizer
+from .anonymize import ANONYMIZED_PROJECT, POLICY_SOURCE_OVERRIDE_PREFIX, ReportAnonymizer
 from .baseline import (
     BaselineError,
     fingerprints_for,
@@ -517,6 +517,10 @@ def _run_analysis(
         scanner.findings,
         known_fingerprints,
         written=baseline_written,
+        # ADR 005, decision 5: debt a directive or a path policy hides is
+        # accounted for beside the unmatched count, never read as fixed.
+        suppressed=[entry.finding for entry in scanner.suppressions.entries],
+        policy_dropped=scanner.policy_ledger.dropped_findings(),
     )
     baseline_selected_findings = (
         list(comparison.new_findings) if options.new_findings_only else scanner.findings
@@ -529,8 +533,15 @@ def _run_analysis(
             reported_findings = list(changed_line_selection.select(baseline_selected_findings))
         except ChangedLinesError as error:
             raise CliError(str(error)) from error
+        source_extensions = scanner.registry.source_extensions()
+        # A manifest file the pinned project configuration excludes is a
+        # declared choice, not a coverage gap (ADR 005, decision 7): it is
+        # counted, not listed, and never fails --strict.
         not_analyzed = changed_line_selection.not_analyzed(
-            scanner.analyzed_paths, scanner.registry.source_extensions()
+            scanner.analyzed_paths, source_extensions, analysis=configuration.analysis
+        )
+        config_excluded = changed_line_selection.config_excluded(
+            configuration.analysis, source_extensions
         )
         if anonymizer is not None:
             # Manifest paths are as sensitive as source paths (review 5, R2).
@@ -539,6 +550,7 @@ def _run_analysis(
             input_findings=len(baseline_selected_findings),
             selected_findings=len(reported_findings),
             not_analyzed=not_analyzed,
+            config_excluded=len(config_excluded),
         )
     baseline_summary = (
         comparison.as_dict()
@@ -617,6 +629,85 @@ def _suppressed_payload(scanner: CodeScanner, anonymizer) -> list[dict]:
         key=lambda item: (item["location"]["path"], item["location"]["line"], item["rule_id"])
     )
     return payload
+
+
+def _redacted_policy_source(source: str) -> str:
+    """Reduce an ``override:<glob>`` source the way ``display_path`` reduces a
+    path under ``--redact-paths``: only the glob's last segment survives
+    (ADR 005, decision 4). ``project`` is a constant and passes through."""
+    if not source.startswith(POLICY_SOURCE_OVERRIDE_PREFIX):
+        return source
+    glob = source[len(POLICY_SOURCE_OVERRIDE_PREFIX) :]
+    parts = PurePosixPath(glob).parts
+    return POLICY_SOURCE_OVERRIDE_PREFIX + (parts[-1] if parts else glob)
+
+
+def _project_policy_source(source: str, anonymizer: ReportAnonymizer | None, redact: bool) -> str:
+    if anonymizer is not None:
+        return anonymizer.policy_source(source)
+    return _redacted_policy_source(source) if redact else source
+
+
+def _scan_health_payload(results: AnalysisResults, options: AnalysisOptions) -> dict:
+    """Project ``scan_health`` for the report's privacy mode.
+
+    The anonymizer tokenizes every path-bearing example and the
+    ``policy_dropped.by_source`` globs; ``--redact-paths`` keeps only each
+    glob's last segment (the scanner already redacted the path examples).
+    Plain mode returns the scanner's health as is."""
+    health = results.scan_health
+    if results.anonymizer is not None:
+        return results.anonymizer.scan_health(health)
+    if not options.redact_paths:
+        return health
+    payload = dict(health)
+    dropped = dict(payload["policy_dropped"])
+    by_source: dict[str, int] = {}
+    for source, count in dropped["by_source"].items():
+        key = _redacted_policy_source(source)
+        by_source[key] = by_source.get(key, 0) + count
+    dropped["by_source"] = dict(sorted(by_source.items()))
+    payload["policy_dropped"] = dropped
+    return payload
+
+
+def _attach_policy_sources(
+    payloads: list[dict],
+    reported: list[Finding] | tuple[Finding, ...],
+    results: AnalysisResults,
+    options: AnalysisOptions,
+) -> list[dict]:
+    """Add ``policy_source`` to each reported finding payload (ADR 005, decision 4).
+
+    Read from the scanner's per-scan side table, like ``fingerprint``, so
+    ``Finding`` and the plugin API are unchanged. The raw glob is projected
+    here, at the output sink, for the report's privacy mode."""
+    ledger = results.scanner.policy_ledger
+    for payload, finding in zip(payloads, reported, strict=True):
+        source = ledger.source_for(finding)
+        if source is not None:
+            payload["policy_source"] = _project_policy_source(
+                source, results.anonymizer, options.redact_paths
+            )
+    return payloads
+
+
+def _finding_payloads(results: AnalysisResults, options: AnalysisOptions) -> list[dict]:
+    """Reported findings as report dicts: fingerprint (plain and redacted
+    modes only) and policy_source, each projected for the privacy mode."""
+    scanner = results.scanner
+    reported_findings = results.reported_findings
+    if results.anonymizer is None:
+        payloads = _attach_fingerprints(
+            [finding.as_dict() for finding in reported_findings],
+            reported_findings,
+            scanner.findings,
+        )
+    else:
+        # Fingerprints hash the real path and line text; an anonymized report
+        # must not carry a value that lets a reader confirm either by guessing.
+        payloads = [results.anonymizer.finding(finding) for finding in reported_findings]
+    return _attach_policy_sources(payloads, reported_findings, results, options)
 
 
 def _exit_code(
@@ -734,17 +825,9 @@ def _build_sarif_run(results: AnalysisResults, options: AnalysisOptions) -> Sari
     scanner = results.scanner
     anonymizer = results.anonymizer
     reported_findings = results.reported_findings
-    if anonymizer is None:
-        findings = tuple(
-            _attach_fingerprints(
-                [finding.as_dict() for finding in reported_findings],
-                reported_findings,
-                scanner.findings,
-            )
-        )
-    else:
-        # Fingerprints hash the real path and line text; an anonymized report
-        # must not carry a value that lets a reader confirm either by guessing.
+    if anonymizer is not None:
+        # Assign file tokens in sorted identity order first, so the SARIF
+        # artifact numbering stays stable whatever order findings arrive in.
         identities = sorted(
             {
                 finding.location.identity_path or finding.location.path
@@ -753,7 +836,7 @@ def _build_sarif_run(results: AnalysisResults, options: AnalysisOptions) -> Sari
         )
         for identity in identities:
             anonymizer.file(identity)
-        findings = tuple(anonymizer.finding(finding) for finding in reported_findings)
+    findings = tuple(_finding_payloads(results, options))
 
     baseline_selection = {"newFindingsOnly": options.new_findings_only}
     if results.baseline_summary is not None:
@@ -772,6 +855,7 @@ def _build_sarif_run(results: AnalysisResults, options: AnalysisOptions) -> Sari
         changed_line_selection=results.changed_lines_summary,
         findings=findings,
         suppressed=tuple(_suppressed_payload(scanner, anonymizer)),
+        policy_dropped=_scan_health_payload(results, options)["policy_dropped"],
     )
 
 
@@ -800,19 +884,13 @@ def _build_json_report(
     scanner = results.scanner
     anonymizer = results.anonymizer
     reported_findings = results.reported_findings
+    health_payload = _scan_health_payload(results, options)
+    finding_payload = _finding_payloads(results, options)
     if anonymizer is None:
-        health_payload = results.scan_health
         package_payload = scanner.package_intelligence.as_dict()
-        finding_payload = _attach_fingerprints(
-            [finding.as_dict() for finding in reported_findings],
-            reported_findings,
-            scanner.findings,
-        )
         complexity_payload = results.complexity_data
     else:
-        health_payload = anonymizer.scan_health(results.scan_health)
         package_payload = anonymizer.package(scanner.package_intelligence)
-        finding_payload = [anonymizer.finding(finding) for finding in reported_findings]
         complexity_payload = anonymizer.complexity(results.complexity_data)
 
     score_applicable = results.signal_scope["applicable"]
@@ -960,12 +1038,10 @@ def _emit_text(
 
     for warning in breakdown.get("warnings", []):
         console.print(f"[yellow]![/yellow] {warning}")
-    health_payload = (
-        anonymizer.scan_health(results.scan_health)
-        if anonymizer is not None
-        else results.scan_health
-    )
+    health_payload = _scan_health_payload(results, options)
     _print_scan_health(health_payload, scanner)
+    if options.strict:
+        _print_policy_disabled_security(health_payload)
     if breakdown.get("warnings") or scanner.has_coverage_gaps:
         console.print()
 
@@ -1049,20 +1125,48 @@ def _print_scan_health(scan_health, scanner):
         )
     _print_excluded_generated(scan_health)
     _print_suppressed(scan_health)
+    _print_policy_dropped(scan_health)
 
 
 def _print_not_analyzed(changed_lines_summary):
     summary = changed_lines_summary or {}
     count = summary.get("files_not_analyzed", 0)
+    if count:
+        console.print(
+            f"[yellow]![/yellow] {count} changed file(s) in the manifest were not analyzed "
+            "(unsupported, excluded or unparsed) - they are unchecked, not clean; "
+            "--strict treats this as a coverage gap"
+        )
+        for path in summary.get("files_not_analyzed_examples", []):
+            console.print(f"    - {_safe(path)}")
+    excluded = summary.get("files_config_excluded", 0)
+    if excluded:
+        console.print(
+            f"[dim]i[/dim] {excluded} changed file(s) in the manifest are excluded by the "
+            "project configuration (a pinned policy choice, not a coverage gap)"
+        )
+
+
+def _print_policy_dropped(scan_health):
+    dropped = scan_health.get("policy_dropped") or {}
+    count = dropped.get("count", 0)
     if not count:
         return
+    by_rule = ", ".join(f"{rule}={n}" for rule, n in dropped.get("by_rule", {}).items())
     console.print(
-        f"[yellow]![/yellow] {count} changed file(s) in the manifest were not analyzed "
-        "(unsupported, excluded or unparsed) - they are unchecked, not clean; "
-        "--strict treats this as a coverage gap"
+        f"[dim]i[/dim] {count} finding(s) dropped by rule policy "
+        f"({_safe(by_rule)}); counts under scan_health.policy_dropped in JSON/SARIF"
     )
-    for path in summary.get("files_not_analyzed_examples", []):
-        console.print(f"    - {_safe(path)}")
+
+
+def _print_policy_disabled_security(scan_health):
+    """``--strict`` names policy-disabled security findings (ADR 005, decision 3).
+
+    One line, counts only; the exit code does not change, because a
+    fingerprinted, declared policy is a decision, not a coverage gap."""
+    security = (scan_health.get("policy_dropped") or {}).get("security", 0)
+    if security:
+        console.print(f"[yellow]![/yellow] Policy-disabled security findings: {security}")
 
 
 def _print_suppressed(scan_health):
@@ -1100,7 +1204,9 @@ def _print_baseline_summary(summary):
             f"[bold]Loaded:[/bold] {summary['loaded']}\n"
             f"[bold]Written:[/bold] {summary['written']}\n"
             f"[bold]Current findings:[/bold] {summary['current_findings']}\n"
-            f"[bold]New findings:[/bold] {summary['new_findings']}",
+            f"[bold]New findings:[/bold] {summary['new_findings']}\n"
+            f"[bold]Unmatched (prune candidates):[/bold] {summary['unmatched_count']}\n"
+            f"[bold]Hidden by policy:[/bold] {summary['matched']['policy_dropped']}",
             title="[bold]Finding Baseline[/bold]",
             expand=False,
         )

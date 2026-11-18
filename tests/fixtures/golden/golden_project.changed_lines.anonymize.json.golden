@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.14.0",
+  "schema_version": "1.15.0",
   "analyzer_version": "3.5.0",
   "ruleset_version": "2.27.0",
   "scoring_policy_version": "2.1.0",
@@ -99,6 +99,12 @@
         "PY-COR-002": 1
       }
     },
+    "policy_dropped": {
+      "count": 0,
+      "by_rule": {},
+      "by_source": {},
+      "security": 0
+    },
     "package_analysis": {
       "errors": 0,
       "complete": true
@@ -177,7 +183,8 @@
         "end_line": 38,
         "end_column": 26
       },
-      "remediation": "Review the local rule documentation for remediation guidance."
+      "remediation": "Review the local rule documentation for remediation guidance.",
+      "policy_source": "project"
     },
     {
       "rule_id": "PY-SEC-002",
@@ -192,7 +199,8 @@
         "end_line": 42,
         "end_column": 73
       },
-      "remediation": "Review the local rule documentation for remediation guidance."
+      "remediation": "Review the local rule documentation for remediation guidance.",
+      "policy_source": "project"
     }
   ],
   "suppressed_findings": [
@@ -254,6 +262,7 @@
     "files_not_analyzed": 1,
     "files_not_analyzed_examples": [
       "file-0001"
-    ]
+    ],
+    "files_config_excluded": 0
   }
 }

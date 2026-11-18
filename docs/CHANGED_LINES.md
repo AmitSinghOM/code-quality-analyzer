@@ -72,6 +72,24 @@ findings otherwise follow each format's normal or anonymized path contract.
 JSON uses `changed_lines`; SARIF uses the run property
 `changedLineSelection`.
 
+Two counts say what happened to manifest files the analyzer did not see:
+
+- `files_not_analyzed` (with up to five `files_not_analyzed_examples`,
+  tokenized under `--anonymize`): source files, by registered suffix, that
+  were in the manifest but not analyzed -- missing, unparsed or skipped.
+  They are unchecked, not clean; `--strict` treats them as a coverage gap
+  and exits 3.
+- `files_config_excluded` (3.6.0, report schema 1.15.0; a count only): source
+  files the project configuration's `analysis.include` / `analysis.exclude`
+  / `.gitignore` selection rejects. Leaving a tree out of analysis is a
+  declared choice, and the selection is part of the configuration
+  fingerprint that `--expect-config-fingerprint` pins, so these are not a
+  gap and do not fail `--strict`. The rule applies to whichever
+  configuration the run loaded, the project's `.code-quality.toml` or a
+  `--config` file; both are what the fingerprint covers. Before 3.6.0 a
+  config-excluded manifest file counted as not analyzed and a docs-only or
+  generated-tree pull request could exit 3.
+
 The manifest is bounded to 5 MB, 20,000 files, 100,000 input ranges, and 4,096
 characters per path. It must be a regular file; symbolic links, directories,
 malformed JSON, invalid UTF-8, and out-of-range values fail before analysis.

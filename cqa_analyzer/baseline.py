@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import tempfile
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -32,7 +33,14 @@ class Baseline:
 
 @dataclass(frozen=True, slots=True)
 class BaselineComparison:
-    """Current findings compared with known privacy-safe fingerprints."""
+    """Current findings compared with known privacy-safe fingerprints.
+
+    ``unmatched_count`` is the number of baseline entries matched by no active,
+    suppressed or policy-dropped finding: the prune candidates. The three
+    ``matched_*`` counts say where the rest of the baseline went, so debt a
+    directive or a path policy hides is reported beside the count and can never
+    be read as fixed (ADR 005, decision 5).
+    """
 
     loaded: bool
     known_count: int
@@ -40,6 +48,10 @@ class BaselineComparison:
     new_findings: tuple[Finding, ...]
     written: bool = False
     schema_version: str = BASELINE_SCHEMA_VERSION
+    unmatched_count: int = 0
+    matched_active: int = 0
+    matched_suppressed: int = 0
+    matched_policy_dropped: int = 0
 
     def as_dict(self) -> dict:
         return {
@@ -49,6 +61,12 @@ class BaselineComparison:
             "known_fingerprints": self.known_count,
             "current_findings": self.current_count,
             "new_findings": len(self.new_findings),
+            "unmatched_count": self.unmatched_count,
+            "matched": {
+                "active": self.matched_active,
+                "suppressed": self.matched_suppressed,
+                "policy_dropped": self.matched_policy_dropped,
+            },
         }
 
 
@@ -146,12 +164,22 @@ def compare_findings(
     known_fingerprints: Baseline | set[str] | frozenset[str] | None,
     *,
     written: bool = False,
+    suppressed: Sequence[Finding] = (),
+    policy_dropped: Sequence[Finding] = (),
 ) -> BaselineComparison:
     """Report the findings whose fingerprint the baseline does not know.
 
     A ``Baseline`` is compared with the hashing its own schema used, so a
     1.0.0 file written by an earlier release keeps working unchanged; a bare
     set is treated as current-schema fingerprints.
+
+    ``suppressed`` (findings removed by an in-source directive) and
+    ``policy_dropped`` (findings removed by project or path policy) are
+    fingerprinted separately, each with the baseline's own schema, so a
+    policy that drops a whole (rule, path) keeps the ordinals those findings
+    had when active. They only decide how baseline entries are accounted
+    for; ``new_findings`` is about ``findings`` alone. Both default to empty,
+    which leaves every existing caller's result identical.
     """
     if isinstance(known_fingerprints, Baseline):
         known: frozenset[str] = known_fingerprints.fingerprints
@@ -165,6 +193,10 @@ def compare_findings(
         for finding, fingerprint in zip(findings, current, strict=True)
         if fingerprint not in known
     )
+    # A finding is counted once, in the first set it appears in.
+    active = set(current)
+    hidden = set(fingerprints_for(list(suppressed), schema_version)) - active
+    dropped = set(fingerprints_for(list(policy_dropped), schema_version)) - active - hidden
     return BaselineComparison(
         loaded=known_fingerprints is not None,
         known_count=len(known),
@@ -172,6 +204,10 @@ def compare_findings(
         new_findings=new_findings,
         written=written,
         schema_version=schema_version,
+        unmatched_count=len(known - active - hidden - dropped),
+        matched_active=len(known & active),
+        matched_suppressed=len(known & hidden),
+        matched_policy_dropped=len(known & dropped),
     )
 
 

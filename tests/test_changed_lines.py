@@ -12,6 +12,7 @@ from cqa_analyzer.changed_lines import (
     load_changed_lines,
     parse_changed_lines,
 )
+from cqa_analyzer.config import AnalysisConfig
 from cqa_analyzer.findings import Finding, Location
 
 
@@ -274,6 +275,7 @@ def test_cli_filters_json_and_gate_to_changed_lines(project, tmp_path):
         "selected_findings": 1,
         "files_not_analyzed": 0,
         "files_not_analyzed_examples": [],
+        "files_config_excluded": 0,
     }
     assert "private-selection.json" not in result.output
 
@@ -413,6 +415,7 @@ def test_cli_sarif_changed_selection_is_aggregate_and_deterministic(
         "selected_findings": 2,
         "files_not_analyzed": 0,
         "files_not_analyzed_examples": [],
+        "files_config_excluded": 0,
     }
     for sensitive in (
         "private/a.py",
@@ -722,3 +725,119 @@ def test_anonymized_not_analyzed_examples_are_tokenized(tmp_path):
     assert summary["files_not_analyzed_examples"] == ["file-0001"]
     for output in (as_json.output, as_sarif.output):
         assert "customer_list" not in output and "private/" not in output
+
+
+# ---- ADR 005 (3.6.0): a file the project's selection policy excludes is a ----
+# declared choice, not a coverage gap. The policy is part of the pinned
+# configuration fingerprint; only files the analyzer promised to check and then
+# dropped (size, minified, unparsed) stay in ``not_analyzed``.
+
+_SOURCE_EXTENSIONS = (".py", ".js")
+
+
+def _policy_selection():
+    return parse_changed_lines(
+        {
+            "schema_version": "1.0.0",
+            "files": [
+                _file("src/app.py", (1, 1)),
+                _file("src/bundle.min.js", (1, 1)),
+                _file("vendor/lib.py", (1, 1)),
+                _file("build/out.py", (1, 1)),
+                _file("vendor/README.md", (1, 1)),
+                _file("docs/guide.md", (1, 1)),
+            ],
+        }
+    )
+
+
+def test_config_excluded_manifest_files_are_not_a_coverage_gap():
+    selection = _policy_selection()
+    analysis = AnalysisConfig(exclude=("vendor/**",), gitignore=("build/",))
+
+    gap = selection.not_analyzed(
+        analyzed_paths={"src/app.py"},
+        source_extensions=_SOURCE_EXTENSIONS,
+        analysis=analysis,
+    )
+    excluded = selection.config_excluded(analysis, _SOURCE_EXTENSIONS)
+
+    # Dropped by discovery, not by policy: still a gap (negative control).
+    assert gap == ("src/bundle.min.js",)
+    # ``analysis.exclude`` and a ``.gitignore`` rule are both declared policy.
+    assert excluded == ("build/out.py", "vendor/lib.py")
+    # A suffix no adapter claims is in neither list, whatever the policy says.
+    assert "vendor/README.md" not in gap and "vendor/README.md" not in excluded
+    assert "docs/guide.md" not in gap and "docs/guide.md" not in excluded
+
+
+def test_include_policy_also_counts_as_config_excluded():
+    selection = _policy_selection()
+    analysis = AnalysisConfig(include=("src/**",))
+
+    assert selection.not_analyzed(
+        analyzed_paths={"src/app.py"},
+        source_extensions=_SOURCE_EXTENSIONS,
+        analysis=analysis,
+    ) == ("src/bundle.min.js",)
+    assert selection.config_excluded(analysis, _SOURCE_EXTENSIONS) == (
+        "build/out.py",
+        "vendor/lib.py",
+    )
+
+
+def test_not_analyzed_without_analysis_is_unchanged():
+    """Existing callers pass no policy and must see today's result exactly."""
+    selection = _policy_selection()
+    permissive = AnalysisConfig()
+
+    today = selection.not_analyzed({"src/app.py"}, _SOURCE_EXTENSIONS)
+    unbounded = selection.not_analyzed({"src/app.py"})
+
+    assert today == ("build/out.py", "src/bundle.min.js", "vendor/lib.py")
+    assert unbounded == (
+        "build/out.py",
+        "docs/guide.md",
+        "src/bundle.min.js",
+        "vendor/README.md",
+        "vendor/lib.py",
+    )
+    # An empty policy selects everything: passing it changes nothing either.
+    assert selection.not_analyzed({"src/app.py"}, _SOURCE_EXTENSIONS, analysis=permissive) == today
+    assert selection.config_excluded(permissive, _SOURCE_EXTENSIONS) == ()
+
+
+def test_config_excluded_without_extension_bound_counts_every_rejected_path():
+    selection = _policy_selection()
+    analysis = AnalysisConfig(exclude=("vendor/**",))
+
+    assert selection.config_excluded(analysis) == ("vendor/README.md", "vendor/lib.py")
+    assert selection.config_excluded(analysis, _SOURCE_EXTENSIONS) == ("vendor/lib.py",)
+
+
+def test_summary_carries_the_config_excluded_count_only():
+    """Paths are sensitive: the summary reports a count, never examples."""
+    selection = _policy_selection()
+    analysis = AnalysisConfig(exclude=("vendor/**",))
+    excluded = selection.config_excluded(analysis, _SOURCE_EXTENSIONS)
+
+    with_policy = selection.summary(
+        6, 2, not_analyzed=("src/bundle.min.js",), config_excluded=len(excluded)
+    )
+    without_policy = selection.summary(6, 2, not_analyzed=("src/bundle.min.js",))
+
+    assert list(with_policy) == [
+        "schema_version",
+        "file_count",
+        "range_count",
+        "input_findings",
+        "selected_findings",
+        "files_not_analyzed",
+        "files_not_analyzed_examples",
+        "files_config_excluded",
+    ]
+    assert with_policy["files_config_excluded"] == 1
+    assert "vendor" not in json.dumps(with_policy)
+    # Callers that do not pass the count get today's seven keys, byte for byte.
+    assert "files_config_excluded" not in without_policy
+    assert without_policy == {k: v for k, v in with_policy.items() if k != "files_config_excluded"}

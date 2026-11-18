@@ -16,12 +16,24 @@
           "current_findings": 6,
           "known_fingerprints": 5,
           "loaded": true,
+          "matched": {
+            "active": 5,
+            "policy_dropped": 0,
+            "suppressed": 0
+          },
           "newFindingsOnly": true,
           "new_findings": 1,
           "schema_version": "2.0.0",
+          "unmatched_count": 0,
           "written": false
         },
         "configurationFingerprint": "7f2042db6205d44e3ce413ff9080011ffc8edd6904b18c87b1268e1331ccdf62",
+        "policyDropped": {
+          "by_rule": {},
+          "by_source": {},
+          "count": 0,
+          "security": 0
+        },
         "privacy": {
           "anonymized": false,
           "cache_enabled": false,
@@ -56,6 +68,7 @@
           "properties": {
             "category": "security",
             "confidence": "medium",
+            "policySource": "project",
             "remediation": "Generate tokens, passwords and nonces with the secrets module (secrets.token_urlsafe, secrets.choice)."
           },
           "ruleId": "PY-SEC-005",

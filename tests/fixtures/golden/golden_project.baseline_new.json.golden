@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.14.0",
+  "schema_version": "1.15.0",
   "analyzer_version": "3.5.0",
   "ruleset_version": "2.27.0",
   "scoring_policy_version": "2.1.0",
@@ -98,6 +98,12 @@
       "by_rule": {
         "PY-COR-002": 1
       }
+    },
+    "policy_dropped": {
+      "count": 0,
+      "by_rule": {},
+      "by_source": {},
+      "security": 0
     },
     "package_analysis": {
       "errors": 0,
@@ -198,7 +204,8 @@
         "end_column": 68
       },
       "remediation": "Generate tokens, passwords and nonces with the secrets module (secrets.token_urlsafe, secrets.choice).",
-      "fingerprint": "441010de4c822cd92a8fd82a32315b3fb00eba23943712976f787c295b5f2412"
+      "fingerprint": "441010de4c822cd92a8fd82a32315b3fb00eba23943712976f787c295b5f2412",
+      "policy_source": "project"
     }
   ],
   "suppressed_findings": [
@@ -257,6 +264,12 @@
     "written": false,
     "known_fingerprints": 5,
     "current_findings": 6,
-    "new_findings": 1
+    "new_findings": 1,
+    "unmatched_count": 0,
+    "matched": {
+      "active": 5,
+      "suppressed": 0,
+      "policy_dropped": 0
+    }
   }
 }

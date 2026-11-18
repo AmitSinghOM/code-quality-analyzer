@@ -92,7 +92,7 @@ def test_respect_gitignore_can_be_disabled(project):
         ("[analysis]\nunknown = true\n", "Unknown analysis key"),
         (
             "[rules.\"PY-COR-001\"]\nseverity = 'critical'\n",
-            "must be 'warning' or 'error'",
+            "must be 'note', 'warning' or 'error'",
         ),
         ("[rules.bad]\nenabled = false\n", "Invalid rule ID"),
     ],

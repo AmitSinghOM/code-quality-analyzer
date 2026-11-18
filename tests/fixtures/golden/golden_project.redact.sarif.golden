@@ -16,6 +16,12 @@
           "newFindingsOnly": false
         },
         "configurationFingerprint": "7f2042db6205d44e3ce413ff9080011ffc8edd6904b18c87b1268e1331ccdf62",
+        "policyDropped": {
+          "by_rule": {},
+          "by_source": {},
+          "count": 0,
+          "security": 0
+        },
         "privacy": {
           "anonymized": false,
           "cache_enabled": false,
@@ -50,6 +56,7 @@
           "properties": {
             "category": "correctness",
             "confidence": "high",
+            "policySource": "project",
             "remediation": "Use None as the default and create a new value inside the function."
           },
           "ruleId": "PY-COR-001",
@@ -81,6 +88,7 @@
           "properties": {
             "category": "security",
             "confidence": "high",
+            "policySource": "project",
             "remediation": "Use ast.literal_eval for data, a dispatch table for behaviour, or importlib for module names; never evaluate runtime strings."
           },
           "ruleId": "PY-SEC-003",
@@ -112,6 +120,7 @@
           "properties": {
             "category": "security",
             "confidence": "medium",
+            "policySource": "project",
             "remediation": "Pass the command as an argument list without shell=True; quote with shlex.quote if a shell is unavoidable."
           },
           "ruleId": "PY-SEC-002",
@@ -141,6 +150,7 @@
           "properties": {
             "category": "maintainability",
             "confidence": "high",
+            "policySource": "project",
             "remediation": "Group related inputs in a cohesive value object or split the responsibility."
           },
           "ruleId": "PY-MAINT-004",
@@ -172,6 +182,7 @@
           "properties": {
             "category": "security",
             "confidence": "medium",
+            "policySource": "project",
             "remediation": "Generate tokens, passwords and nonces with the secrets module (secrets.token_urlsafe, secrets.choice)."
           },
           "ruleId": "PY-SEC-005",
@@ -203,6 +214,7 @@
           "properties": {
             "category": "correctness",
             "confidence": "high",
+            "policySource": "project",
             "remediation": "Use a context manager or guarantee cleanup with try/finally."
           },
           "ruleId": "PY-COR-006",
