@@ -297,9 +297,10 @@ def test_without_overrides_behaviour_and_scan_health_are_unchanged(project):
     assert {plain.policy_ledger.source_for(f) for f in plain.findings} == {"project"}
     assert {ruled.policy_ledger.source_for(f) for f in ruled.findings} == {"project"}
     assert _hits(ruled, "PY-COR-001") == [("a.py", "error", "project")]
-    # The report shape is integration's to change (schema 1.15.0), not the scanner's.
-    assert "policy_dropped" not in plain.scan_health()
-    assert "policy_dropped" not in ruled.scan_health()
+    # Report schema 1.15.0: the counts sit beside ``suppressed``, empty when
+    # nothing was dropped, so a clean tree reads as clean, not as unpoliced.
+    assert plain.scan_health()["policy_dropped"] == EMPTY_HEALTH
+    assert ruled.scan_health()["policy_dropped"] == EMPTY_HEALTH
 
 
 def test_independent_scans_keep_independent_ledgers(project, tmp_path):

@@ -16,6 +16,12 @@
           "newFindingsOnly": false
         },
         "configurationFingerprint": "7f2042db6205d44e3ce413ff9080011ffc8edd6904b18c87b1268e1331ccdf62",
+        "policyDropped": {
+          "by_rule": {},
+          "by_source": {},
+          "count": 0,
+          "security": 0
+        },
         "privacy": {
           "anonymized": false,
           "cache_enabled": false,
@@ -50,6 +56,7 @@
           "properties": {
             "category": "correctness",
             "confidence": "high",
+            "policySource": "project",
             "remediation": "Use a context manager or guarantee cleanup with try/finally."
           },
           "ruleId": "PY-COR-006",
@@ -81,6 +88,7 @@
           "properties": {
             "category": "security",
             "confidence": "high",
+            "policySource": "project",
             "remediation": "Keep certificate verification on; pin a CA bundle (verify=<path>) or use a trust store for private CAs."
           },
           "ruleId": "PY-SEC-004",
@@ -112,6 +120,7 @@
           "properties": {
             "category": "correctness",
             "confidence": "high",
+            "policySource": "project",
             "remediation": "Catch the narrow exception types the operation can recover from."
           },
           "ruleId": "PY-COR-002",

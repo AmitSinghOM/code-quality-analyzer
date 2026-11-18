@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.14.0",
+  "schema_version": "1.15.0",
   "analyzer_version": "3.5.0",
   "ruleset_version": "2.27.0",
   "scoring_policy_version": "2.1.0",
@@ -98,6 +98,12 @@
       "by_rule": {
         "PY-COR-002": 1
       }
+    },
+    "policy_dropped": {
+      "count": 0,
+      "by_rule": {},
+      "by_source": {},
+      "security": 0
     },
     "package_analysis": {
       "errors": 0,
@@ -202,7 +208,8 @@
         "end_column": 46
       },
       "remediation": "Use None as the default and create a new value inside the function.",
-      "fingerprint": "a2a52f13d353bc847e861803a491789c19ab0ea93ace433fc1378bd9ee609c5d"
+      "fingerprint": "a2a52f13d353bc847e861803a491789c19ab0ea93ace433fc1378bd9ee609c5d",
+      "policy_source": "project"
     },
     {
       "rule_id": "PY-SEC-003",
@@ -218,7 +225,8 @@
         "end_column": 26
       },
       "remediation": "Use ast.literal_eval for data, a dispatch table for behaviour, or importlib for module names; never evaluate runtime strings.",
-      "fingerprint": "31d06f00f5e36f5b3e0bb326f79ee6b73984ac5236f72795a5e3b7096e51ba5b"
+      "fingerprint": "31d06f00f5e36f5b3e0bb326f79ee6b73984ac5236f72795a5e3b7096e51ba5b",
+      "policy_source": "project"
     },
     {
       "rule_id": "PY-SEC-002",
@@ -234,7 +242,8 @@
         "end_column": 73
       },
       "remediation": "Pass the command as an argument list without shell=True; quote with shlex.quote if a shell is unavoidable.",
-      "fingerprint": "4ca0c1e56ccd422887c5e8392a1bdd330ba88b281a8aadba264e13c27f1330f7"
+      "fingerprint": "4ca0c1e56ccd422887c5e8392a1bdd330ba88b281a8aadba264e13c27f1330f7",
+      "policy_source": "project"
     },
     {
       "rule_id": "PY-MAINT-004",
@@ -248,7 +257,8 @@
         "column": 1
       },
       "remediation": "Group related inputs in a cohesive value object or split the responsibility.",
-      "fingerprint": "57cd5f848d2114ef6fcae7357c86ded4d08c554b5d2dd643cc293ef998a3281f"
+      "fingerprint": "57cd5f848d2114ef6fcae7357c86ded4d08c554b5d2dd643cc293ef998a3281f",
+      "policy_source": "project"
     },
     {
       "rule_id": "PY-COR-006",
@@ -264,7 +274,8 @@
         "end_column": 24
       },
       "remediation": "Use a context manager or guarantee cleanup with try/finally.",
-      "fingerprint": "368bec6500f2b69cf4398ebf18704b2b77880e372b9fe9090e45a34cfe96b36d"
+      "fingerprint": "368bec6500f2b69cf4398ebf18704b2b77880e372b9fe9090e45a34cfe96b36d",
+      "policy_source": "project"
     },
     {
       "rule_id": "PY-SEC-005",
@@ -280,7 +291,8 @@
         "end_column": 68
       },
       "remediation": "Generate tokens, passwords and nonces with the secrets module (secrets.token_urlsafe, secrets.choice).",
-      "fingerprint": "441010de4c822cd92a8fd82a32315b3fb00eba23943712976f787c295b5f2412"
+      "fingerprint": "441010de4c822cd92a8fd82a32315b3fb00eba23943712976f787c295b5f2412",
+      "policy_source": "project"
     }
   ],
   "suppressed_findings": [

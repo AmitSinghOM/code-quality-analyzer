@@ -16,6 +16,12 @@
           "newFindingsOnly": false
         },
         "configurationFingerprint": "7f2042db6205d44e3ce413ff9080011ffc8edd6904b18c87b1268e1331ccdf62",
+        "policyDropped": {
+          "by_rule": {},
+          "by_source": {},
+          "count": 0,
+          "security": 0
+        },
         "privacy": {
           "anonymized": true,
           "cache_enabled": false,
@@ -47,6 +53,7 @@
           "properties": {
             "category": "correctness",
             "confidence": "high",
+            "policySource": "project",
             "remediation": "Review the local rule documentation for remediation guidance."
           },
           "ruleId": "PY-COR-001",
@@ -75,6 +82,7 @@
           "properties": {
             "category": "security",
             "confidence": "high",
+            "policySource": "project",
             "remediation": "Review the local rule documentation for remediation guidance."
           },
           "ruleId": "PY-SEC-003",
@@ -103,6 +111,7 @@
           "properties": {
             "category": "security",
             "confidence": "medium",
+            "policySource": "project",
             "remediation": "Review the local rule documentation for remediation guidance."
           },
           "ruleId": "PY-SEC-002",
@@ -129,6 +138,7 @@
           "properties": {
             "category": "maintainability",
             "confidence": "high",
+            "policySource": "project",
             "remediation": "Review the local rule documentation for remediation guidance."
           },
           "ruleId": "PY-MAINT-004",
@@ -157,6 +167,7 @@
           "properties": {
             "category": "correctness",
             "confidence": "high",
+            "policySource": "project",
             "remediation": "Review the local rule documentation for remediation guidance."
           },
           "ruleId": "PY-COR-006",
@@ -185,6 +196,7 @@
           "properties": {
             "category": "security",
             "confidence": "medium",
+            "policySource": "project",
             "remediation": "Review the local rule documentation for remediation guidance."
           },
           "ruleId": "PY-SEC-005",

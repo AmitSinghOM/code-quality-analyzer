@@ -374,6 +374,9 @@ class CodeScanner:
         health["unparsed_examples"] = list(self.unparsed_examples)
         health["languages"] = dict(sorted(self.language_counts.items()))
         health["suppressed"] = self.suppressions.health()
+        # Counts only; ``by_source`` keys hold raw globs that the report
+        # layer reduces (--redact-paths) or tokenizes (--anonymize).
+        health["policy_dropped"] = self.policy_ledger.health()
         health["package_analysis"] = self.package_health
         health["project_analysis"] = {
             f"{language_id}:{capability}": dict(result.health)

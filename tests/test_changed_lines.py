@@ -275,6 +275,7 @@ def test_cli_filters_json_and_gate_to_changed_lines(project, tmp_path):
         "selected_findings": 1,
         "files_not_analyzed": 0,
         "files_not_analyzed_examples": [],
+        "files_config_excluded": 0,
     }
     assert "private-selection.json" not in result.output
 
@@ -414,6 +415,7 @@ def test_cli_sarif_changed_selection_is_aggregate_and_deterministic(
         "selected_findings": 2,
         "files_not_analyzed": 0,
         "files_not_analyzed_examples": [],
+        "files_config_excluded": 0,
     }
     for sensitive in (
         "private/a.py",

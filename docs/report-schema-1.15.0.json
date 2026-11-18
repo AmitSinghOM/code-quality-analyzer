@@ -1,0 +1,307 @@
+{
+  "title": "Code Quality Analyzer report 1.15.0",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "analyzer_version",
+    "ruleset_version",
+    "scoring_policy_version",
+    "configuration_fingerprint",
+    "project",
+    "privacy",
+    "architecture_signal_score",
+    "architecture_signal_scope",
+    "rating",
+    "analysis_health",
+    "scan_health",
+    "findings",
+    "suppressed_findings"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.15.0"
+    },
+    "analyzer_version": {
+      "type": "string"
+    },
+    "ruleset_version": {
+      "type": "string"
+    },
+    "scoring_policy_version": {
+      "type": "string"
+    },
+    "configuration_fingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "project": {
+      "type": "string"
+    },
+    "architecture_signal_score": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 1,
+      "maximum": 10
+    },
+    "architecture_signal_scope": {
+      "type": "object",
+      "required": [
+        "languages",
+        "applicable",
+        "by_language"
+      ],
+      "properties": {
+        "languages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "applicable": {
+          "type": "boolean"
+        },
+        "by_language": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "files",
+              "dsa_patterns",
+              "design_patterns"
+            ],
+            "properties": {
+              "files": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "dsa_patterns": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "design_patterns": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "rating": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 1,
+      "maximum": 10
+    },
+    "privacy": {
+      "type": "object",
+      "required": [
+        "anonymized",
+        "paths_redacted",
+        "offline_enforced",
+        "cache_enabled"
+      ],
+      "properties": {
+        "anonymized": {
+          "type": "boolean"
+        },
+        "paths_redacted": {
+          "type": "boolean"
+        },
+        "offline_enforced": {
+          "type": "boolean"
+        },
+        "cache_enabled": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "analysis_health": {
+      "type": "object",
+      "required": [
+        "complete",
+        "authoritative",
+        "source_candidates",
+        "files_read",
+        "files_successfully_analyzed",
+        "completeness_ratio",
+        "reasons"
+      ]
+    },
+    "scan_health": {
+      "type": "object",
+      "description": "What was and was not analyzed. Since 1.15.0 carries `policy_dropped`: {count, by_rule, by_source, security} -- counts of findings a disabled rule removed, by rule id and by policy source (`project` or `override:<glob>`, projected for the privacy mode like `policy_source`), and how many of them belong to a rule with a CWE. Dropped findings are never listed and never counted by the score or the exit code; `--strict` prints `Policy-disabled security findings: N` when `security` > 0 without changing the exit code.",
+      "properties": {
+        "policy_dropped": {
+          "type": "object",
+          "required": [
+            "count",
+            "by_rule",
+            "by_source",
+            "security"
+          ],
+          "properties": {
+            "count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "by_rule": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "by_source": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "security": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "description": "Reported findings. Since 1.14.0 each carries `fingerprint`: the baseline schema 2.0.0 SHA-256 over rule id, project-relative path, whitespace-collapsed text of the reported line and an ordinal among identical lines -- stable across line shifts and re-indentation, so it equals the entry `--write-baseline` stores and the SARIF `partialFingerprints[\"cqaFingerprint/v2\"]` value. Omitted under `--anonymize` because it is derived from the real path and text. Since 1.15.0 each also carries `policy_source`: `\"project\"` when the rule default or `[rules]` decided its severity, or `\"override:<glob>\"` naming the `[overrides]` table that set it. The glob is author-written and path-shaped: under `--redact-paths` only its last segment survives, under `--anonymize` it is tokenized through the same file map as artifact paths (`override:file-NNNN`)."
+    },
+    "changed_lines": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "file_count",
+        "range_count",
+        "input_findings",
+        "selected_findings",
+        "files_not_analyzed",
+        "files_not_analyzed_examples",
+        "files_config_excluded"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "file_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "range_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "input_findings": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "selected_findings": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "files_not_analyzed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "files_not_analyzed_examples": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "files_config_excluded": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Since 1.15.0: manifest files in scope by suffix that the project configuration's `include` / `exclude` / `.gitignore` selection rejects. A pinned, fingerprinted policy choice, so they are counted here instead of in `files_not_analyzed` and never fail `--strict`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "baseline": {
+      "type": "object",
+      "description": "Present when `--baseline` or `--write-baseline` was given. Since 1.15.0 carries `unmatched_count` (baseline fingerprints matched by no active, suppressed or policy-dropped finding: the prune candidates; re-writing the baseline is the prune) and `matched` (where the rest of the baseline went). Debt a directive or a path policy hides is `matched.suppressed` / `matched.policy_dropped`, never part of `unmatched_count`, so it is never read as fixed. The baseline file format itself (schema 2.0.0) is unchanged.",
+      "required": [
+        "loaded",
+        "written",
+        "schema_version",
+        "known_fingerprints",
+        "current_findings",
+        "new_findings",
+        "unmatched_count",
+        "matched"
+      ],
+      "properties": {
+        "loaded": {
+          "type": "boolean"
+        },
+        "written": {
+          "type": "boolean"
+        },
+        "schema_version": {
+          "type": "string"
+        },
+        "known_fingerprints": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "current_findings": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "new_findings": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unmatched_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "matched": {
+          "type": "object",
+          "required": [
+            "active",
+            "suppressed",
+            "policy_dropped"
+          ],
+          "properties": {
+            "active": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "suppressed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "policy_dropped": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "suppressed_findings": {
+      "type": "array",
+      "description": "Findings removed by a same-line `cqa: ignore=RULE reason=\"...\"` directive, each a finding object plus `suppression_reason`. Never counted by the score or the exit code; reported so a silenced finding is visible evidence rather than an absence. SARIF emits each as a result with suppressions[{kind: inSource, justification}]. `scan_health.suppressed` carries the matching {count, by_rule} totals."
+    }
+  },
+  "additionalProperties": true
+}
