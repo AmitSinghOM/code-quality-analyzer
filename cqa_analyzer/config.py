@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import functools
 import hashlib
+import itertools
 import json
 import re
 from dataclasses import dataclass, field, replace
@@ -420,15 +421,26 @@ def _validate_pattern(pattern: str, name: str, *, allow_rooted: bool) -> None:
 
 def _glob_matches(pattern: str, path: str) -> bool:
     compiled = _compile_glob(pattern)
-    return compiled is not None and compiled.match(path) is not None
+    return compiled is not None and compiled.matches(path)
+
+
+# A glob is matched by ``re`` only while its wildcard count keeps the
+# backtracking polynomial: each ``*`` / ``**`` / ``**/`` multiplies the
+# failing-match work by the path length, and so does the implicit
+# ``(?:^|.*/)`` prefix of a pattern with no ``/``. Three or more make the
+# work exponential in practice (``a*a*a*a*a*b`` against ``aaaa...c`` took
+# minutes), so those patterns run on ``_GlobAutomaton`` instead.
+_REGEX_WILDCARD_BUDGET = 2
 
 
 @functools.lru_cache(maxsize=_GLOB_CACHE_SIZE)
-def _compile_glob(pattern: str) -> re.Pattern[str] | None:
-    """Translate one glob to an anchored regex, once per distinct pattern.
+def _compile_glob(pattern: str) -> _RegexGlob | _GlobAutomaton | None:
+    """Compile one glob into an anchored matcher, once per distinct pattern.
 
     Per-finding policy resolution asks the same patterns thousands of times;
-    without this cache every call would rebuild and recompile the regex.
+    without this cache every call would rebuild the matcher. Both engines
+    read the same token stream (:func:`_glob_tokens`), so they agree on every
+    pattern; ``tests/test_glob_engine.py`` checks that on random input.
     """
     pattern = pattern.replace("\\", "/")
     rooted = pattern.startswith("/")
@@ -437,13 +449,209 @@ def _compile_glob(pattern: str) -> re.Pattern[str] | None:
     if not pattern:
         return None
 
-    body = _translate_glob(pattern)
-    if rooted or "/" in pattern:
-        prefix = "^"
-    else:
-        prefix = r"(?:^|.*/)"
+    anchored = rooted or "/" in pattern
+    tokens = _glob_tokens(pattern)
+    wildcards = sum(1 for kind, _ in tokens if kind in _WILDCARD_KINDS) + (0 if anchored else 1)
+    if wildcards > _REGEX_WILDCARD_BUDGET:
+        return _GlobAutomaton(tokens, anchored)
+    prefix = "^" if anchored else r"(?:^|.*/)"
     suffix = r"(?:/.*)?$"
-    return re.compile(prefix + body + suffix)
+    return _RegexGlob(re.compile(prefix + _translate_tokens(tokens) + suffix))
+
+
+class _RegexGlob:
+    """The ``re``-backed matcher, for patterns within the wildcard budget."""
+
+    __slots__ = ("_regex",)
+
+    def __init__(self, regex: re.Pattern[str]) -> None:
+        self._regex = regex
+
+    def matches(self, path: str) -> bool:
+        return self._regex.match(path) is not None
+
+
+# Glob token kinds. ``LIT`` carries one character, ``CLASS`` a one-character
+# regex such as ``[^a-z]``; the wildcards carry nothing.
+_LIT, _ANY, _CLASS, _STAR, _DSTAR, _SEGMENTS = "lit", "any", "class", "star", "dstar", "segments"
+_WILDCARD_KINDS = frozenset({_STAR, _DSTAR, _SEGMENTS})
+
+
+def _glob_tokens(pattern: str) -> tuple[tuple[str, str], ...]:
+    """Tokenize a glob body once, for both matching engines.
+
+    ``*`` is ``_STAR`` (any run without ``/``), ``**`` followed by ``/`` is
+    ``_SEGMENTS`` (zero or more whole directories), any other ``**`` is
+    ``_DSTAR`` (any run, ``/`` included), ``?`` is ``_ANY`` (one character
+    other than ``/``) and ``[...]`` is ``_CLASS`` (one character the class
+    admits, ``/`` included, exactly as the regex form always matched). A
+    ``[`` with no closing ``]`` is a literal.
+    """
+    tokens: list[tuple[str, str]] = []
+    index = 0
+    while index < len(pattern):
+        character = pattern[index]
+        if character == "*":
+            token, index = _star_token(pattern, index)
+        elif character == "?":
+            token, index = (_ANY, ""), index + 1
+        elif character == "[":
+            token, index = _class_token(pattern, index)
+        else:
+            token, index = (_LIT, character), index + 1
+        tokens.append(token)
+    return tuple(tokens)
+
+
+def _star_token(pattern: str, index: int) -> tuple[tuple[str, str], int]:
+    """Token for the ``*`` at ``index`` and the index after it."""
+    if pattern[index + 1 : index + 2] != "*":
+        return (_STAR, ""), index + 1
+    if pattern[index + 2 : index + 3] == "/":
+        return (_SEGMENTS, ""), index + 3
+    return (_DSTAR, ""), index + 2
+
+
+def _class_token(pattern: str, index: int) -> tuple[tuple[str, str], int]:
+    """Token for the ``[`` at ``index`` and the index after it.
+
+    Character class (round 2, C5): ``[abc]``, ``[a-z]``, ``[!x]`` / ``[^x]``.
+    A ``]`` right after the opening (or after the negation, ``[!]x]``) is a
+    member, so the class ends at the next ``]``; with no closing ``]`` the
+    ``[`` is a literal.
+    """
+    close = pattern.find("]", index + 2)
+    body = pattern[index + 1 : close] if close != -1 else ""
+    negate = body[:1] in {"!", "^"}
+    if negate:
+        body = body[1:]
+        if not body:
+            close = pattern.find("]", close + 1)
+            body = pattern[index + 2 : close] if close != -1 else ""
+    if close == -1:
+        return (_LIT, "["), index + 1
+    return (_CLASS, "[" + ("^" if negate else "") + _class_body(body) + "]"), close + 1
+
+
+def _translate_tokens(tokens: tuple[tuple[str, str], ...]) -> str:
+    """Render a token stream as the regex body ``_translate_glob`` always produced."""
+    pieces = {
+        _ANY: "[^/]",
+        _STAR: "[^/]*",
+        _DSTAR: ".*",
+        _SEGMENTS: r"(?:.*/)?",
+    }
+    return "".join(
+        re.escape(value) if kind == _LIT else value if kind == _CLASS else pieces[kind]
+        for kind, value in tokens
+    )
+
+
+class _GlobAutomaton:
+    """Backtracking-free glob matcher: one pass over the path, bounded work.
+
+    The token stream is a chain of NFA states and the active set is a bit
+    mask, so a match costs ``len(path)`` steps of a handful of integer
+    operations plus one epsilon sweep per step: polynomial in the pattern and
+    linear in the path, whatever the pattern says. State ``i`` is "about to
+    consume token ``i``"; ``_SEGMENTS`` takes two states (at a directory
+    boundary, inside a directory). After the last token comes the end state,
+    which accepts and also admits ``/`` followed by anything (the regex
+    suffix ``(?:/.*)?$``); an unanchored pattern starts with an implicit
+    ``_SEGMENTS`` (the regex prefix ``(?:^|.*/)``).
+    """
+
+    __slots__ = (
+        "_any",
+        "_classes",
+        "_dstar",
+        "_end",
+        "_eps1",
+        "_eps2",
+        "_literal",
+        "_prefix",
+        "_seg_boundary",
+        "_seg_inside",
+        "_star",
+        "_start",
+        "_tail",
+    )
+
+    def __init__(self, tokens: tuple[tuple[str, str], ...], anchored: bool) -> None:
+        # An anchored pattern's leading literals reject most paths in one
+        # ``startswith``, the way the regex engine fails fast on them.
+        leading = itertools.takewhile(lambda token: token[0] == _LIT, tokens)
+        self._prefix = "".join(value for _, value in leading) if anchored else ""
+        if not anchored:
+            tokens = ((_SEGMENTS, ""), *tokens)
+        # One bit per state; a kind's mask is the OR of its states' bits.
+        masks = {kind: 0 for kind in (_ANY, _STAR, _DSTAR, _SEGMENTS)}
+        literal: dict[str, int] = {}
+        classes: list[tuple[int, re.Pattern[str]]] = []
+        state = 0
+        for kind, value in tokens:
+            bit = 1 << state
+            if kind == _LIT:
+                literal[value] = literal.get(value, 0) | bit
+            elif kind == _CLASS:
+                classes.append((bit, re.compile(value)))
+            else:
+                masks[kind] |= bit
+            # _SEGMENTS owns two states: at a boundary, then inside a directory.
+            state += 2 if kind == _SEGMENTS else 1
+        self._literal = literal
+        self._classes = tuple(classes)
+        self._any = masks[_ANY]
+        self._star = masks[_STAR]
+        self._dstar = masks[_DSTAR]
+        self._seg_boundary = masks[_SEGMENTS]
+        self._seg_inside = masks[_SEGMENTS] << 1
+        # Wildcards may consume nothing: epsilon edges to the next token.
+        self._eps1 = masks[_STAR] | masks[_DSTAR]
+        self._eps2 = masks[_SEGMENTS]
+        self._end = 1 << state
+        self._tail = 1 << (state + 1)
+        self._start = self._closure(1)
+
+    def _closure(self, states: int) -> int:
+        """Follow the forward epsilon edges (wildcards may consume nothing)."""
+        while True:
+            grown = states | ((states & self._eps1) << 1) | ((states & self._eps2) << 2)
+            if grown == states:
+                return states
+            states = grown
+
+    def matches(self, path: str) -> bool:
+        if not path.startswith(self._prefix):
+            return False
+        states = self._start
+        literal = self._literal
+        for character in path:
+            following = (
+                ((states & literal.get(character, 0)) << 1)
+                | (states & self._dstar)
+                | (states & self._tail)
+            )
+            if character == "/":
+                following |= (
+                    (states & self._seg_boundary)
+                    | ((states & self._seg_inside) >> 1)
+                    | ((states & self._end) << 1)
+                )
+            else:
+                following |= (
+                    ((states & self._any) << 1)
+                    | (states & self._star)
+                    | ((states & self._seg_boundary) << 1)
+                    | (states & self._seg_inside)
+                )
+            for bit, single in self._classes:
+                if states & bit and single.match(character) is not None:
+                    following |= bit << 1
+            if not following:
+                return False
+            states = self._closure(following)
+        return bool(states & (self._end | self._tail))
 
 
 @functools.lru_cache(maxsize=_GLOB_CACHE_SIZE)
@@ -493,38 +701,9 @@ def _override_level(override: OverridePolicy, rule_id: str) -> str | None:
 
 
 def _translate_glob(pattern: str) -> str:
-    output = []
-    index = 0
-    while index < len(pattern):
-        character = pattern[index]
-        if character == "*":
-            if index + 1 < len(pattern) and pattern[index + 1] == "*":
-                index += 2
-                if index < len(pattern) and pattern[index] == "/":
-                    output.append(r"(?:.*/)?")
-                    index += 1
-                else:
-                    output.append(".*")
-                continue
-            output.append("[^/]*")
-        elif character == "?":
-            output.append("[^/]")
-        elif character == "[":
-            # Character class (round 2, C5): `[abc]`, `[a-z]`, `[!x]`/`[^x]`.
-            close = pattern.find("]", index + 2)
-            if close == -1:
-                output.append(re.escape(character))
-            else:
-                body = pattern[index + 1 : close]
-                negate = body[:1] in {"!", "^"}
-                if negate:
-                    body = body[1:]
-                output.append("[" + ("^" if negate else "") + _class_body(body) + "]")
-                index = close
-        else:
-            output.append(re.escape(character))
-        index += 1
-    return "".join(output)
+    """Regex body for a glob (unanchored, no prefix or suffix); kept for callers
+    and fuzz tests that check the translation is always a valid regex."""
+    return _translate_tokens(_glob_tokens(pattern))
 
 
 def _directory_names(value: object, label: str) -> tuple[str, ...]:
