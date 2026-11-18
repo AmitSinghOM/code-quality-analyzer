@@ -1,6 +1,6 @@
 # ADR 005: Path-scoped rule policy and baseline unmatched count
 
-**Status:** Proposed (target 3.6.0; design only — no code ships in 3.5.0)
+**Status:** Accepted (3.6.0; implemented under report schema 1.15.0)
 
 ## Context
 
@@ -318,6 +318,30 @@ attach, delegate per-path grouping, SARIF properties): 6–8 h. E6 (comparison
 arguments, `as_dict`, text panel, schema 1.15.0): 3–4 h. Docs
 (`CONFIGURATION.md`, `BASELINES.md`, `PRIVACY.md`, `SARIF.md`, CHANGELOG):
 ~2 h. Total 11–14 h across two PRs.
+
+## Implementation notes (3.6.0)
+
+- Report schema `1.15.0` ships every key above; `baseline` and
+  `changed_lines` are now fully declared in `docs/report-schema-1.15.0.json`.
+- Decision 7 of the planning spec (a changed-lines manifest file excluded by
+  the project configuration) landed as `changed_lines.files_config_excluded`:
+  a count beside `files_not_analyzed`, never an exit 3. See
+  `docs/CHANGED_LINES.md`.
+- `scan_health.policy_dropped` is always present, like `suppressed`, so a
+  clean tree reads as clean rather than as unpoliced.
+- Implementing per-finding glob matching surfaced that `_translate_glob`
+  produced regexes with exponential backtracking (`a*a*a*a*a*b` against a
+  long run of `a`s). Patterns with more than two wildcards now run on a
+  one-pass automaton that shares the regex engine's tokenizer; the matching
+  semantics are unchanged and both engines are cross-checked on random
+  input (`tests/test_glob_engine.py`). See `docs/CONFIGURATION.md`, "Glob
+  matching cost".
+- Known limit, as stated above: a schema `2.0.0` baseline keys identity on
+  the line's text, so a same-line directive added after the baseline was
+  written changes the entry, which is then reported as unmatched (its old
+  text is gone) rather than as `matched.suppressed`. A `1.0.0` file, keyed on
+  line, column and message, matches it. `matched.suppressed` is exact
+  whenever the baselined line text is unchanged.
 
 ## Consequences
 

@@ -97,6 +97,38 @@ by rule and by source, and the configuration fingerprint covers the overrides
 table, so a pinned gate (`--expect-config-fingerprint`) fails when the policy
 changes.
 
+### What the report shows (schema 1.15.0)
+
+- Every reported finding carries `policy_source`: `"project"` when the rule
+  default or `[rules]` decided its severity, `"override:<glob>"` naming the
+  table that set it. SARIF carries the same value in
+  `result.properties.policySource`.
+- `scan_health.policy_dropped` is `{count, by_rule, by_source, security}`:
+  how many findings a disabled rule removed, by rule ID and by policy source,
+  and how many of those belong to a rule with a CWE. Dropped findings are
+  counted, never listed, and never counted by the score or the exit code.
+  SARIF carries the block in `run.properties.policyDropped`.
+- `--strict` prints `Policy-disabled security findings: N` in the text report
+  when `security` is above zero. The exit code does not change: a declared,
+  fingerprinted policy is a decision, not a coverage gap.
+- Under `--redact-paths` a glob keeps only its last segment
+  (`override:tests/**/*_test.py` becomes `override:*_test.py`); under
+  `--anonymize` it is tokenized through the same map as file paths
+  (`override:file-0003`). See [PRIVACY.md](PRIVACY.md).
+- Baseline comparisons count policy-dropped findings as matched debt, not as
+  fixed; see [BASELINES.md](BASELINES.md).
+
+### Glob matching cost
+
+Every glob (`include`, `exclude`, `.gitignore`, overrides) is matched with
+bounded work. A pattern with at most two wildcards (`*`, `**`, `**/`; a
+pattern with no `/` spends one on its implicit any-depth prefix) runs on a
+compiled regular expression. A pattern with more runs on a one-pass matcher
+whose cost is linear in the path length, so a pattern such as
+`a*a*a*a*a*a*b` against a long name of `a`s completes in microseconds
+instead of backtracking for minutes. Both engines implement the same
+semantics; which one runs is never visible in a result.
+
 ## Inline suppressions
 
 Source findings support explicit, same-line suppressions. Python has had them
